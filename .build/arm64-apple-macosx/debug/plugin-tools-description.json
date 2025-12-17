@@ -1,0 +1,469 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.GrammarCorrection-arm64-apple-macosx15.0-debug.module" : {
+      "executable" : "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "fileList" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/sources",
+      "importPath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/CorrectionController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/CorrectorFactory.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/FeedbackPresenter.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GeminiCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GrammarCorrectionMain.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GrammarCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/HotKeyManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/KeyboardController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/Keychain.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/LanguageToolCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/PasteboardController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/Settings.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "GrammarCorrection",
+      "moduleOutputPath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/Modules/GrammarCorrection.swiftmodule",
+      "objects" : [
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/AppDelegate.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectionController.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectorFactory.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/FeedbackPresenter.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GeminiCorrector.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrectionMain.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrector.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/HotKeyManager.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/KeyboardController.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Keychain.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/LanguageToolCorrector.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/PasteboardController.swift.o",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Settings.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "GrammarCorrection_main",
+        "-swift-version",
+        "5",
+        "-I",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-L",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-plugin-path",
+        "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-g",
+        "-warnings-as-errors",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "grammar_correction"
+      ],
+      "outputFileMapPath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectionController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectorFactory.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/FeedbackPresenter.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GeminiCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrectionMain.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/HotKeyManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/KeyboardController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Keychain.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/LanguageToolCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/PasteboardController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Settings.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/Modules/GrammarCorrection.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/ilham/Developer/grammar-correction/src/AppDelegate.swift",
+        "/Users/ilham/Developer/grammar-correction/src/CorrectionController.swift",
+        "/Users/ilham/Developer/grammar-correction/src/CorrectorFactory.swift",
+        "/Users/ilham/Developer/grammar-correction/src/FeedbackPresenter.swift",
+        "/Users/ilham/Developer/grammar-correction/src/GeminiCorrector.swift",
+        "/Users/ilham/Developer/grammar-correction/src/GrammarCorrectionMain.swift",
+        "/Users/ilham/Developer/grammar-correction/src/GrammarCorrector.swift",
+        "/Users/ilham/Developer/grammar-correction/src/HotKeyManager.swift",
+        "/Users/ilham/Developer/grammar-correction/src/KeyboardController.swift",
+        "/Users/ilham/Developer/grammar-correction/src/Keychain.swift",
+        "/Users/ilham/Developer/grammar-correction/src/LanguageToolCorrector.swift",
+        "/Users/ilham/Developer/grammar-correction/src/PasteboardController.swift",
+        "/Users/ilham/Developer/grammar-correction/src/Settings.swift"
+      ],
+      "tempsPath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "GrammarCorrection" : [
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "-module-name",
+      "GrammarCorrection",
+      "-package-name",
+      "grammar_correction",
+      "-c",
+      "/Users/ilham/Developer/grammar-correction/src/AppDelegate.swift",
+      "/Users/ilham/Developer/grammar-correction/src/CorrectionController.swift",
+      "/Users/ilham/Developer/grammar-correction/src/CorrectorFactory.swift",
+      "/Users/ilham/Developer/grammar-correction/src/FeedbackPresenter.swift",
+      "/Users/ilham/Developer/grammar-correction/src/GeminiCorrector.swift",
+      "/Users/ilham/Developer/grammar-correction/src/GrammarCorrectionMain.swift",
+      "/Users/ilham/Developer/grammar-correction/src/GrammarCorrector.swift",
+      "/Users/ilham/Developer/grammar-correction/src/HotKeyManager.swift",
+      "/Users/ilham/Developer/grammar-correction/src/KeyboardController.swift",
+      "/Users/ilham/Developer/grammar-correction/src/Keychain.swift",
+      "/Users/ilham/Developer/grammar-correction/src/LanguageToolCorrector.swift",
+      "/Users/ilham/Developer/grammar-correction/src/PasteboardController.swift",
+      "/Users/ilham/Developer/grammar-correction/src/Settings.swift",
+      "-I",
+      "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "GrammarCorrection_main",
+      "-swift-version",
+      "5",
+      "-I",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-L",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-plugin-path",
+      "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-g",
+      "-warnings-as-errors",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "grammar_correction",
+      "-driver-use-frontend-path",
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "GrammarCorrection" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection-entitlement.plist" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<entitlement-plist>"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<com.apple.security.get-task-allow>"
+        }
+      ],
+      "outputFilePath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection-entitlement.plist"
+    },
+    "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/CorrectionController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/CorrectorFactory.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/FeedbackPresenter.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GeminiCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GrammarCorrectionMain.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/GrammarCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/HotKeyManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/KeyboardController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/Keychain.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/LanguageToolCorrector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/PasteboardController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/src/Settings.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/sources"
+    },
+    "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectionController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/CorrectorFactory.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/FeedbackPresenter.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GeminiCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrectionMain.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/GrammarCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/HotKeyManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/KeyboardController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Keychain.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/LanguageToolCorrector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/PasteboardController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.build/Settings.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/GrammarCorrection.product/Objects.LinkFileList"
+    },
+    "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/ilham/Developer/grammar-correction/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+    }
+  }
+}
