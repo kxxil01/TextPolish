@@ -240,7 +240,7 @@ final class GeminiCorrector: GrammarCorrector {
   private func makePrompt(text: String, attempt: Int) -> String {
     var lines: [String] = [
       "You are a grammar and typo corrector.",
-      "Make the smallest possible edits to fix spelling, typos, grammar, and obvious punctuation mistakes.",
+      "Make the smallest possible edits to fix spelling, typos, grammar, and obvious punctuation mistakes. Do NOT introduce em dashes (—), double hyphens (--), or semicolons (;) unless they already appear in the original text.",
       "Do NOT rewrite, rephrase, translate, or change tone/voice. Keep the writing natural and human.",
       "Do NOT expand slang/abbreviations, and do NOT make it more formal.",
       "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
