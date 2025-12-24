@@ -2,6 +2,18 @@
 
 Small, fast menu bar app for macOS that fixes grammar and typos in any app (Discord, etc). It keeps your formatting and tone and restores your clipboard.
 
+[![CI](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml)
+[![Release](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml)
+
+## Why TextPolish
+
+Discord and other apps do not have fast, reliable grammar correction everywhere. I wanted a small menu bar app that works in any text box, runs on hotkeys, and preserves your voice.
+
+Key goals:
+- Fast, minimal UI and instant hotkeys
+- Smallest possible edits, no AI rewrite tone
+- Clipboard safe and reliable across apps
+
 ## Download
 
 Latest release:
@@ -31,6 +43,20 @@ Choose:
 - Pastes the corrected text back.
 - Restores your clipboard.
 
+## Architecture
+
+Text correction flow:
+
+```
+Select text -> Copy (Cmd+C) -> Provider (Gemini/OpenRouter) -> Paste (Cmd+V) -> Restore clipboard
+```
+
+Update flow:
+
+```
+GitHub Release -> appcast.xml -> Sparkle -> TextPolish
+```
+
 ## Menu
 
 - Correct Selection / Correct All
@@ -45,6 +71,13 @@ Choose:
 
 Updates are delivered through GitHub Releases. The app checks automatically about every 6 hours and you can run Check for Updates from the menu.
 The menu also shows update status and the last check time.
+Use Check for Updates -> Check to run it manually.
+
+## CI/CD and Release
+
+- Pushes to `main` run CI on GitHub Actions to build and validate the app.
+- Release workflow builds the app, generates the Sparkle appcast, and uploads release assets.
+- Builds are created in CI to avoid storing artifacts in the repo.
 
 ## Advanced settings (optional)
 
@@ -79,12 +112,14 @@ Force the correction language:
 }
 ```
 
-## Privacy
+## Security and Privacy
 
 - Sends only the text you selected or the current input.
 - No analytics or telemetry.
 - API keys are stored in macOS Keychain.
 - Your clipboard is restored after each correction.
+- Language choice only guides the correction and does not translate your text.
+- Updates are delivered via GitHub Releases and Sparkle.
 
 ## Troubleshooting
 
@@ -103,6 +138,16 @@ Force the correction language:
 
 Developer notes live in docs/development.md.
 
+## Contributing and Security
+
+- Contributing guide: CONTRIBUTING.md
+- Security policy: SECURITY.md
+
+## License
+
+MIT. See LICENSE.
+
 ## Credits
 
-Creator: Kurniadi Ilham (github.com/kxxil01)
+Creator: Kurniadi Ilham (https://github.com/kxxil01)
+LinkedIn: https://linkedin.com/in/kurniadi-ilham

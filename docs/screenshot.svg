@@ -13,18 +13,23 @@
   <rect x="730" y="8" width="28" height="28" rx="6" fill="#2f5d50" />
   <text x="739" y="28" class="label" fill="#ffffff">TP</text>
 
-  <rect x="620" y="54" width="300" height="360" rx="10" fill="#ffffff" stroke="#cfc8bb" />
-  <text x="640" y="86" class="label">Correct Selection</text>
-  <text x="640" y="114" class="label">Correct All</text>
-  <text x="640" y="142" class="label">Cancel Correction</text>
-  <line x1="632" y1="162" x2="908" y2="162" stroke="#ece6db" />
+  <rect x="430" y="54" width="300" height="360" rx="10" fill="#ffffff" stroke="#cfc8bb" />
+  <text x="450" y="86" class="label">Correct Selection</text>
+  <text x="450" y="114" class="label">Correct All</text>
+  <text x="450" y="142" class="label">Cancel Correction</text>
+  <line x1="442" y1="162" x2="718" y2="162" stroke="#ece6db" />
 
-  <text x="640" y="190" class="label">Hotkeys ▶</text>
-  <text x="640" y="218" class="label">Provider ▶</text>
-  <text x="640" y="246" class="label">Preferences ▶</text>
-  <text x="640" y="274" class="label">About &amp; Privacy</text>
-  <text x="640" y="302" class="label">Check for Updates ▶</text>
-  <line x1="632" y1="322" x2="908" y2="322" stroke="#ece6db" />
+  <text x="450" y="190" class="label">Hotkeys ▶</text>
+  <text x="450" y="218" class="label">Provider ▶</text>
+  <text x="450" y="246" class="label">Preferences ▶</text>
+  <text x="450" y="274" class="label">About &amp; Privacy</text>
+  <text x="450" y="302" class="label">Check for Updates ▶</text>
+  <line x1="442" y1="322" x2="718" y2="322" stroke="#ece6db" />
 
-  <text x="640" y="350" class="label">Quit</text>
+  <text x="450" y="350" class="label">Quit</text>
+
+  <rect x="735" y="262" width="210" height="96" rx="8" fill="#ffffff" stroke="#cfc8bb" />
+  <text x="748" y="286" class="muted">Check</text>
+  <text x="748" y="312" class="muted">Update status: Up to date</text>
+  <text x="748" y="338" class="muted">Last checked: Never</text>
 </svg>

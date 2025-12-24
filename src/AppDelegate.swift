@@ -1635,6 +1635,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "• Model: \(providerModel)",
         "• URL: \(providerURL)",
         "",
+        "Updates:",
+        "• Delivered via GitHub Releases",
+        "• Check from the menu: Check for Updates > Check",
+        "",
+        "Security:",
+        "• API keys stored in macOS Keychain",
+        "• No analytics or telemetry",
+        "",
         "Privacy:",
         "• Copies selected text or Select All to the clipboard temporarily",
         "• Sends only that text to the provider over HTTPS",
@@ -1648,7 +1656,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "Requires Accessibility permission to send ⌘C, ⌘V, and ⌘A.",
         "",
         "Creator: Kurniadi Ilham",
-        "GitHub: github.com/kxxil01",
+        "GitHub: https://github.com/kxxil01",
+        "LinkedIn: https://linkedin.com/in/kurniadi-ilham",
       ].joined(separator: "\n")
 
       self.showSimpleAlert(title: header, message: message)
