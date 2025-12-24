@@ -16,12 +16,20 @@ Key goals:
 
 ## Download
 
-Latest release:
-https://github.com/kxxil01/TextPolish/releases
+**Homebrew (recommended):**
 
-Choose:
-- TextPolish.app.zip for drag and drop install (move to /Applications)
-- TextPolish.pkg for a guided installer
+```bash
+brew install --cask kxxil01/tap/textpolish
+```
+
+**Manual download:**
+
+Latest release: https://github.com/kxxil01/TextPolish/releases
+
+- TextPolish.app.zip — drag and drop to /Applications
+- TextPolish.pkg — guided installer
+
+**Landing page:** https://textpolish.pages.dev
 
 ## Quick Start
 

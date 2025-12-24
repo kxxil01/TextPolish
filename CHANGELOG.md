@@ -5,6 +5,16 @@ This project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.0.6] - 2025-12-24
+
+### Added
+- Homebrew Cask support: `brew install --cask kxxil01/tap/textpolish`
+- Landing page redesigned with CodexBar-inspired style
+- Automatic Homebrew tap update on release
+
+### Changed
+- Release workflow now auto-updates homebrew-tap with SHA256
+
 ## [0.0.5] - 2025-12-24
 
 ### Added
