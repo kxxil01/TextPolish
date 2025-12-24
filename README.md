@@ -3,7 +3,7 @@
 Small, fast menu bar app for macOS that fixes grammar and typos in any app (Discord, etc). It keeps your formatting and tone and restores your clipboard.
 
 [![CI](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml)
-[![Release](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml)
+[![Release](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml/badge.svg?event=release)](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml)
 
 ## Why TextPolish
 
