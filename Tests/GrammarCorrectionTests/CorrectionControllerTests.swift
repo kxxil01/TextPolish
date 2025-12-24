@@ -2,7 +2,6 @@ import XCTest
 
 @testable import GrammarCorrection
 
-@MainActor
 final class CorrectionControllerTests: XCTestCase {
   @MainActor
   private final class StubFeedback: FeedbackPresenter {
@@ -63,6 +62,7 @@ final class CorrectionControllerTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testBusyFeedbackThrottlesOnRepeatedHotkeys() async {
     let feedback = StubFeedback()
     let controller = CorrectionController(
