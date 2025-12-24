@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <style>
+      .title { font: 18px Helvetica, Arial, sans-serif; fill: #2c2c2c; }
+      .label { font: 14px Helvetica, Arial, sans-serif; fill: #1f1f1f; }
+      .muted { font: 12px Helvetica, Arial, sans-serif; fill: #5a5a5a; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="960" height="540" fill="#f4f1e8" />
+  <rect x="0" y="0" width="960" height="44" fill="#e6e2d9" />
+  <text x="24" y="28" class="title">TextPolish menu bar preview</text>
+
+  <rect x="730" y="8" width="28" height="28" rx="6" fill="#2f5d50" />
+  <text x="739" y="28" class="label" fill="#ffffff">TP</text>
+
+  <rect x="620" y="54" width="300" height="420" rx="10" fill="#ffffff" stroke="#cfc8bb" />
+  <text x="640" y="86" class="label">Correct Selection</text>
+  <text x="640" y="116" class="label">Correct All</text>
+  <line x1="632" y1="136" x2="908" y2="136" stroke="#ece6db" />
+
+  <text x="640" y="164" class="label">Hotkeys</text>
+  <text x="640" y="190" class="muted">Set Correct Selection Hotkey...</text>
+  <text x="640" y="212" class="muted">Set Correct All Hotkey...</text>
+  <text x="640" y="234" class="muted">Reset to Defaults</text>
+  <line x1="632" y1="252" x2="908" y2="252" stroke="#ece6db" />
+
+  <text x="640" y="280" class="label">Backend</text>
+  <text x="640" y="306" class="muted">Gemini</text>
+  <text x="640" y="328" class="muted">OpenRouter</text>
+  <line x1="632" y1="346" x2="908" y2="346" stroke="#ece6db" />
+
+  <text x="640" y="374" class="label">Check for Updates...</text>
+  <text x="640" y="402" class="label">Start at Login</text>
+  <line x1="632" y1="420" x2="908" y2="420" stroke="#ece6db" />
+
+  <text x="640" y="450" class="label">Quit</text>
+</svg>

@@ -8,6 +8,8 @@ Small, fast menu bar app that fixes grammar/typos in any app (e.g. Discord) via 
 - Backends: **Gemini** (default) + **OpenRouter** (optional).
 - API keys are entered in-app and stored in **macOS Keychain** (service: `com.kxxil01.TextPolish`, with legacy read/migration from `com.ilham.GrammarCorrection`).
 - “Start at Login” toggle (most reliable when installed in `/Applications`).
+- Sparkle-based auto updates via GitHub Releases.
+- Hotkeys configurable from the menu (with conflict checks).
 - `.pkg` installer builds and installs to `/Applications/TextPolish.app` and auto-launches after install.
 
 Shortcuts:
@@ -16,6 +18,30 @@ Shortcuts:
 - **Correct All:** `⌃⌥⌘⇧G` (does `⌘A` first — put your cursor in the input box)
 
 It works by copying your text, sending it to the selected backend (Gemini or OpenRouter), pasting the corrected result back, then restoring your original clipboard.
+
+## Download (Recommended)
+
+Get the latest release from:
+
+https://github.com/kxxil01/TextPolish/releases
+
+Choose:
+
+- `TextPolish.app.zip` for drag-and-drop install (unzip and move to `/Applications`).
+- `TextPolish.pkg` for a guided installer.
+
+## Quick Start
+
+1. Download the latest release and move `TextPolish.app` to `/Applications`.
+2. Open the app from `/Applications`. The menu bar icon appears.
+3. Grant Accessibility permission: System Settings -> Privacy & Security -> Accessibility -> TextPolish.
+4. Set your API key from the menu: Backend -> Set Gemini API Key...
+5. Use `Ctrl+Option+Command+G` for selection or `Ctrl+Option+Command+Shift+G` for all.
+6. Use the menu bar icon to switch backends, adjust hotkeys, and check for updates.
+
+## Screenshot
+
+![TextPolish menu bar preview](docs/screenshot.svg)
 
 ## Build
 
@@ -46,16 +72,20 @@ The installer will also launch the app after installation (menu bar icon appears
 
 ## Updates (Sparkle)
 
-The app can check GitHub Releases and install updates without a separate server.
+The app checks GitHub Releases for updates and can install them without a separate server.
+Automatic checks run about every 6 hours, and there is a menu item for manual checks.
 
-Setup:
+Updates use the `TextPolish.app.zip` asset. The `.pkg` remains for manual installs.
+
+Local/dev builds without Sparkle keys keep updates disabled.
+
+Maintainer setup:
 
 - Run `./scripts/sparkle_generate_keys.sh` to generate Sparkle keys (Keychain prompt). The public key prints to stdout, and the private key is saved to `.sparkle/private_key`.
 - Add `SPARKLE_PUBLIC_KEY` as a GitHub repository variable.
 - Add `SPARKLE_PRIVATE_KEY` as a GitHub Actions secret (the contents of `.sparkle/private_key`).
 - Create a GitHub Release. CI uploads `appcast.xml` and the app uses it for periodic checks.
 
-Sparkle uses the `.app.zip` asset for updates. The `.pkg` remains for manual install.
 Manual checks are available from the menu item "Check for Updates...".
 
 ## Permissions
@@ -79,6 +109,8 @@ API keys are entered in-app and stored in **Keychain**:
 - Backend → Set OpenRouter API Key…
 - Backend → Set OpenRouter Model…
 - Backend → Detect OpenRouter Model…
+- Hotkeys → Set Correct Selection Hotkey… / Set Correct All Hotkey… / Reset to Defaults
+- Check for Updates…
 - Start at Login (toggles launch on startup)
 - Privacy… (explains what is sent and what is stored)
 - About TextPolish…
@@ -91,6 +123,17 @@ Advanced settings (timeouts, tuning) are optional and stored in:
 Useful fields:
 
 - `provider`: `"gemini"` (default) or `"openRouter"`
+
+### Timing (Optional)
+
+These are in milliseconds, for slower or faster target apps:
+
+- `activationDelayMilliseconds`: delay after activation before typing
+- `selectAllDelayMilliseconds`: delay after `⌘A`
+- `copySettleDelayMilliseconds`: delay after `⌘C` before reading clipboard
+- `copyTimeoutMilliseconds`: max wait for clipboard change
+- `pasteSettleDelayMilliseconds`: delay after writing clipboard before `⌘V`
+- `postPasteDelayMilliseconds`: delay after `⌘V` before restore
 
 ### Gemini
 
@@ -124,10 +167,9 @@ To use OpenRouter:
 - Gemini 404 “model not found”: use Backend → Detect Gemini Model… (or set a different model).
 - Gemini 429 quota exceeded: switch Backend → OpenRouter (or use a billed Gemini key).
 - Key doesn’t “save”: macOS may show a Keychain prompt; allow it (the app is brought to front to make the prompt visible).
+- Check for Updates is disabled: local builds without Sparkle keys keep updates off.
 
 ## Roadmap (Recommended Next Features)
-
-- Hotkey customization + conflict detection UI.
 - Optional preview popover (“apply” / “cancel”) for safety.
 - Request throttling/debounce + cancellation (avoid stacked corrections).
 - Smarter clipboard/copy detection + per-app timing profiles (Discord vs others).
