@@ -96,3 +96,40 @@ jobs:
             build/appcast.xml
             build/sbom.spdx.json
             build/checksums.txt
+      - name: Update Homebrew Tap
+        if: github.event_name == 'release'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256=$(shasum -a 256 build/TextPolish.app.zip | awk '{print $1}')
+
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kxxil01/homebrew-tap.git /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
+
+          cat > Casks/textpolish.rb << EOF
+          cask "textpolish" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/kxxil01/TextPolish/releases/download/v#{version}/TextPolish.app.zip"
+            name "TextPolish"
+            desc "Grammar correction anywhere on macOS"
+            homepage "https://github.com/kxxil01/TextPolish"
+
+            depends_on macos: ">= :sonoma"
+
+            app "TextPolish.app"
+
+            zap trash: [
+              "~/Library/Application Support/TextPolish",
+              "~/Library/Preferences/com.kxxil01.TextPolish.plist",
+            ]
+          end
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/textpolish.rb
+          git commit -m "Update TextPolish to v${VERSION}"
+          git push

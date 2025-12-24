@@ -1,5 +1,7 @@
 # TextPolish — Agent Notes
 
+codex resume 019b4e5f-e637-7a22-b68c-58fe1cf05019
+
 Scope: entire repo.
 
 ## Product Goal
@@ -133,8 +135,10 @@ OpenRouter fields:
 ### Next (Reliability + UX)
 
 - Add a small debounce/throttle so rapid hotkey presses don’t stack requests.
+- Add a hotkey configuration UI with conflict detection.
 - Add a “dry run” / preview popover option (optional) without heavy UI.
 - Add Esc-to-cancel (menu cancel exists).
+- Add a small diagnostics panel (last error, provider, last update check).
 - Add local-only option: offline model (stretch).
 
 ### Packaging / Distribution

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TextPolish — Grammar correction anywhere on macOS</title>
+    <meta name="description" content="A fast, lightweight macOS menu bar app for instant grammar and typo correction in any application using AI.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="#" class="nav-logo">
+                <div class="nav-icon-box">✏️</div>
+                <div class="nav-text">
+                    <span class="nav-title">TextPolish</span>
+                    <span class="nav-subtitle">Grammar correction, always available.</span>
+                </div>
+            </a>
+            <div class="nav-buttons">
+                <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.app.zip" class="nav-btn nav-btn-primary" target="_blank" rel="noopener">Download</a>
+                <a href="https://github.com/kxxil01/TextPolish" class="nav-btn nav-btn-secondary" target="_blank" rel="noopener">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <section class="hero">
+            <!-- Left Content -->
+            <div class="hero-content">
+                <!-- Badges -->
+                <div class="badges">
+                    <span class="badge">macOS 14+</span>
+                    <span class="badge">Free & open source</span>
+                    <span class="badge">No data stored</span>
+                </div>
+
+                <!-- Title -->
+                <h1 class="hero-title">Fix grammar instantly.</h1>
+                
+                <!-- Description -->
+                <p class="hero-description">
+                    TextPolish corrects your grammar and typos with a global hotkey, 
+                    so you never have to worry about embarrassing mistakes in Discord, 
+                    Slack, or any app.
+                </p>
+
+                <!-- Buttons -->
+                <div class="hero-actions">
+                    <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.app.zip" class="btn btn-primary" target="_blank" rel="noopener">Download latest</a>
+                    <a href="https://github.com/kxxil01/TextPolish" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                </div>
+
+                <!-- Homebrew -->
+                <div class="homebrew-section">
+                    <span class="homebrew-label">Homebrew:</span>
+                    <div class="homebrew-code">
+                        <code>brew install --cask kxxil01/tap/textpolish</code>
+                        <button class="copy-btn" onclick="navigator.clipboard.writeText('brew install --cask kxxil01/tap/textpolish')">📋</button>
+                    </div>
+                </div>
+
+                <!-- Feature List -->
+                <ul class="feature-list">
+                    <li>Global hotkeys: <kbd>⌃⌥⌘G</kbd> for selection, <kbd>⌃⌥⌘⇧G</kbd> for all.</li>
+                    <li>Preserves formatting and clipboard contents.</li>
+                    <li>Powered by Gemini or OpenRouter (configurable).</li>
+                    <li>Lives in the menu bar only — no Dock icon, no windows.</li>
+                </ul>
+            </div>
+
+            <!-- Right Demo -->
+            <div class="hero-visual">
+                <div class="demo-window">
+                    <div class="demo-header">
+                        <div class="demo-dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <span class="demo-title">Discord</span>
+                    </div>
+                    <div class="demo-content">
+                        <div class="demo-message">
+                            <div class="demo-avatar">👤</div>
+                            <div class="demo-text">
+                                <span class="demo-username">You</span>
+                                <p class="demo-wrong">Hey guys, i just wanted to let you know that the meeting is been rescheduled to tommorow at 3pm. We should definately prepare the presentation beforehand and make sure everyones on the same page. Also dont forget to bring your laptops and chargers becuase its going to be a long session. Let me know if you have any questions or conserns about the agenda.</p>
+                            </div>
+                        </div>
+                        <div class="demo-arrow">
+                            <span>↓</span>
+                            <kbd>⌃⌥⌘G</kbd>
+                        </div>
+                        <div class="demo-message">
+                            <div class="demo-avatar">👤</div>
+                            <div class="demo-text">
+                                <span class="demo-username">You</span>
+                                <p class="demo-correct">Hey guys, I just wanted to let you know that the meeting has been rescheduled to tomorrow at 3pm. We should definitely prepare the presentation beforehand and make sure everyone's on the same page. Also don't forget to bring your laptops and chargers because it's going to be a long session. Let me know if you have any questions or concerns about the agenda.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bottom Cards -->
+        <section class="cards">
+            <div class="card">
+                <h3>GEMINI</h3>
+                <p>Uses Google's Gemini 2.0 Flash for fast, accurate corrections. Free tier available with your own API key.</p>
+            </div>
+            <div class="card">
+                <h3>OPENROUTER</h3>
+                <p>Alternative provider with access to multiple models. Configure as fallback or primary provider.</p>
+            </div>
+            <div class="card">
+                <h3>PRIVACY</h3>
+                <p>Text is sent only to your configured AI provider. API keys stored in macOS Keychain. No analytics.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <span>Built by <a href="https://github.com/kxxil01" target="_blank" rel="noopener">Kurniadi Ilham</a></span>
+        <span>•</span>
+        <span><a href="https://github.com/kxxil01/TextPolish/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></span>
+        <span>•</span>
+        <span><a href="https://github.com/kxxil01/TextPolish/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a></span>
+    </footer>
+</body>
+</html>
