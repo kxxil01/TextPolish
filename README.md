@@ -44,6 +44,20 @@ This installs to: `/Applications/TextPolish.app`
 
 The installer will also launch the app after installation (menu bar icon appears).
 
+## Updates (Sparkle)
+
+The app can check GitHub Releases and install updates without a separate server.
+
+Setup:
+
+- Run `./scripts/sparkle_generate_keys.sh` to generate Sparkle keys (Keychain prompt). The public key prints to stdout, and the private key is saved to `.sparkle/private_key`.
+- Add `SPARKLE_PUBLIC_KEY` as a GitHub repository variable.
+- Add `SPARKLE_PRIVATE_KEY` as a GitHub Actions secret (the contents of `.sparkle/private_key`).
+- Create a GitHub Release. CI uploads `appcast.xml` and the app uses it for periodic checks.
+
+Sparkle uses the `.app.zip` asset for updates. The `.pkg` remains for manual install.
+Manual checks are available from the menu item "Check for Updates...".
+
 ## Permissions
 
 The app needs **Accessibility** permission to trigger `⌘C/⌘V/⌘A` in Discord:

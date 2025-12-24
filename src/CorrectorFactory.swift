@@ -20,7 +20,7 @@ enum CorrectorFactory {
   }
 }
 
-struct FailingCorrector: GrammarCorrector {
+struct FailingCorrector: GrammarCorrector, @unchecked Sendable {
   let underlyingError: Error
 
   func correct(_ text: String) async throws -> String {

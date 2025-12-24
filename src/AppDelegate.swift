@@ -1,5 +1,7 @@
 import AppKit
 import ServiceManagement
+import Carbon
+import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -15,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var workspaceActivationObserver: Any?
   private var isMenuOpen = false
   private var pendingAfterMenuAction: (@MainActor () async -> Void)?
+  private lazy var updaterController = SPUStandardUpdaterController(
+    startingUpdater: true,
+    updaterDelegate: nil,
+    userDriverDelegate: nil
+  )
 
   private var backendGeminiItem: NSMenuItem?
   private var backendOpenRouterItem: NSMenuItem?
@@ -25,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var setOpenRouterModelItem: NSMenuItem?
   private var detectOpenRouterModelItem: NSMenuItem?
   private var launchAtLoginItem: NSMenuItem?
+  private var selectionItem: NSMenuItem?
+  private var allItem: NSMenuItem?
+  private var checkForUpdatesItem: NSMenuItem?
 
   private let keychainAccountGemini = "geminiApiKey"
   private let keychainAccountOpenRouter = "openRouterApiKey"
@@ -46,6 +56,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return trimmed.isEmpty ? expectedAppName : trimmed
   }
 
+  private var isUpdaterAvailable: Bool {
+    let feedURL = (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String) ?? ""
+    let publicKey = (Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String) ?? ""
+    return !feedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+      !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
 
@@ -61,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     correctionController = CorrectionController(
       corrector: CorrectorFactory.make(settings: settings),
       feedback: feedback,
+      timings: .init(settings: settings),
       recoverer: { [weak self] error in
         guard let self else { return nil }
         return await self.recoverFromError(error)
@@ -81,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     setupMenu()
     setupHotKeys()
+    _ = updaterController
+    if !isUpdaterAvailable {
+      updaterController.updater.automaticallyChecksForUpdates = false
+    }
     maybeShowWelcome()
   }
 
@@ -91,6 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     button.highlight(true)
     statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
     button.highlight(false)
+  }
+
+  @objc private func checkForUpdates(_ sender: Any?) {
+    NSApp.activate(ignoringOtherApps: true)
+    updaterController.checkForUpdates(sender)
   }
 
   private func captureFrontmostApplication() {
@@ -106,21 +133,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let selectionItem = NSMenuItem(
       title: "Correct Selection",
       action: #selector(correctSelection),
-      keyEquivalent: "g"
+      keyEquivalent: ""
     )
     selectionItem.target = self
-    selectionItem.keyEquivalentModifierMask = [.control, .option, .command]
 
     let allItem = NSMenuItem(
       title: "Correct All",
       action: #selector(correctAll),
-      keyEquivalent: "g"
+      keyEquivalent: ""
     )
     allItem.target = self
-    allItem.keyEquivalentModifierMask = [.control, .option, .command, .shift]
+
+    self.selectionItem = selectionItem
+    self.allItem = allItem
 
     menu.addItem(selectionItem)
     menu.addItem(allItem)
+    menu.addItem(.separator())
+
+    let hotKeysItem = NSMenuItem(title: "Hotkeys", action: nil, keyEquivalent: "")
+    let hotKeysMenu = NSMenu()
+
+    let setSelectionHotKeyItem = NSMenuItem(
+      title: "Set Correct Selection Hotkey…",
+      action: #selector(setCorrectSelectionHotKey),
+      keyEquivalent: ""
+    )
+    setSelectionHotKeyItem.target = self
+
+    let setAllHotKeyItem = NSMenuItem(
+      title: "Set Correct All Hotkey…",
+      action: #selector(setCorrectAllHotKey),
+      keyEquivalent: ""
+    )
+    setAllHotKeyItem.target = self
+
+    let resetHotKeysItem = NSMenuItem(
+      title: "Reset to Defaults",
+      action: #selector(resetHotKeys),
+      keyEquivalent: ""
+    )
+    resetHotKeysItem.target = self
+
+    hotKeysMenu.addItem(setSelectionHotKeyItem)
+    hotKeysMenu.addItem(setAllHotKeyItem)
+    hotKeysMenu.addItem(.separator())
+    hotKeysMenu.addItem(resetHotKeysItem)
+
+    hotKeysItem.submenu = hotKeysMenu
+    menu.addItem(hotKeysItem)
     menu.addItem(.separator())
 
     let backendItem = NSMenuItem(title: "Backend", action: nil, keyEquivalent: "")
@@ -256,6 +317,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     aboutItem.target = self
     menu.addItem(aboutItem)
 
+    let checkForUpdatesItem = NSMenuItem(
+      title: "Check for Updates…",
+      action: #selector(checkForUpdates),
+      keyEquivalent: ""
+    )
+    checkForUpdatesItem.target = self
+    checkForUpdatesItem.isEnabled = isUpdaterAvailable
+    if !isUpdaterAvailable {
+      checkForUpdatesItem.toolTip = "Updates are not configured for this build."
+    }
+    self.checkForUpdatesItem = checkForUpdatesItem
+    menu.addItem(checkForUpdatesItem)
+
     menu.addItem(.separator())
 
     let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -266,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     statusMenu = menu
     syncLaunchAtLoginMenuState()
     syncBackendMenuStates()
+    syncHotKeyMenuItems()
   }
 
   func menuWillOpen(_ menu: NSMenu) {
@@ -371,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func refreshCorrector() {
     correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
+    correctionController?.updateTimings(.init(settings: settings))
   }
 
   private func runAfterMenuDismissed(_ action: @escaping @MainActor () async -> Void) {
@@ -458,7 +534,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     do {
-      try hotKeyManager.registerDefaultHotKeys()
+      try hotKeyManager.registerHotKeys(
+        correctSelection: settings.hotKeyCorrectSelection,
+        correctAll: settings.hotKeyCorrectAll
+      )
     } catch {
       NSLog("[TextPolish] Failed to register hotkeys: \(error)")
     }
@@ -716,8 +795,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "2) Set an API key: Backend → Set Gemini API Key… or Set OpenRouter API Key…",
       "",
       "Shortcuts:",
-      "• Correct Selection: ⌃⌥⌘G",
-      "• Correct All: ⌃⌥⌘⇧G",
+      "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
+      "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
     ].joined(separator: "\n")
 
     alert.addButton(withTitle: "Open Accessibility Settings")
@@ -1344,8 +1423,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "Small, fast menu bar grammar/typo corrector (minimal edits, preserves formatting).",
         "",
         "Shortcuts:",
-        "• Correct Selection: ⌃⌥⌘G",
-        "• Correct All: ⌃⌥⌘⇧G",
+        "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
+        "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
         "",
         "Backends: Gemini + OpenRouter",
         "Requires: Accessibility permission (to send ⌘C/⌘V/⌘A).",
@@ -1361,5 +1440,218 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @objc private func quit() {
     NSApp.terminate(nil)
+  }
+
+  @objc private func setCorrectSelectionHotKey() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let title = "Set Correct Selection Hotkey"
+      let message = "Current: \(self.settings.hotKeyCorrectSelection.displayString)\n\nPress a key combination to change it."
+      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctSelectionDefault) {
+        if newHotKey == self.settings.hotKeyCorrectSelection {
+          return
+        }
+        if newHotKey == self.settings.hotKeyCorrectAll {
+          let oldSelection = self.settings.hotKeyCorrectSelection
+          let oldAll = self.settings.hotKeyCorrectAll
+          self.settings.hotKeyCorrectSelection = oldAll
+          self.settings.hotKeyCorrectAll = oldSelection
+          self.persistSettings()
+          do {
+            try self.hotKeyManager.registerHotKeys(
+              correctSelection: self.settings.hotKeyCorrectSelection,
+              correctAll: self.settings.hotKeyCorrectAll
+            )
+            self.syncHotKeyMenuItems()
+          } catch {
+            self.settings.hotKeyCorrectSelection = oldSelection
+            self.settings.hotKeyCorrectAll = oldAll
+            self.persistSettings()
+            self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+          }
+          return
+        }
+        if HotKeyManager.checkHotKeyInUse(keyCode: newHotKey.keyCode, modifiers: newHotKey.modifiers) {
+          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+          return
+        }
+        let oldHotKey = self.settings.hotKeyCorrectSelection
+        self.settings.hotKeyCorrectSelection = newHotKey
+        self.persistSettings()
+        do {
+          try self.hotKeyManager.registerHotKeys(
+            correctSelection: self.settings.hotKeyCorrectSelection,
+            correctAll: self.settings.hotKeyCorrectAll
+          )
+          self.syncHotKeyMenuItems()
+        } catch {
+          self.settings.hotKeyCorrectSelection = oldHotKey
+          self.persistSettings()
+          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+        }
+      }
+    }
+  }
+
+  @objc private func setCorrectAllHotKey() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let title = "Set Correct All Hotkey"
+      let message = "Current: \(self.settings.hotKeyCorrectAll.displayString)\n\nPress a key combination to change it."
+      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctAllDefault) {
+        if newHotKey == self.settings.hotKeyCorrectAll {
+          return
+        }
+        if newHotKey == self.settings.hotKeyCorrectSelection {
+          let oldSelection = self.settings.hotKeyCorrectSelection
+          let oldAll = self.settings.hotKeyCorrectAll
+          self.settings.hotKeyCorrectSelection = oldAll
+          self.settings.hotKeyCorrectAll = oldSelection
+          self.persistSettings()
+          do {
+            try self.hotKeyManager.registerHotKeys(
+              correctSelection: self.settings.hotKeyCorrectSelection,
+              correctAll: self.settings.hotKeyCorrectAll
+            )
+            self.syncHotKeyMenuItems()
+          } catch {
+            self.settings.hotKeyCorrectSelection = oldSelection
+            self.settings.hotKeyCorrectAll = oldAll
+            self.persistSettings()
+            self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+          }
+          return
+        }
+        if HotKeyManager.checkHotKeyInUse(keyCode: newHotKey.keyCode, modifiers: newHotKey.modifiers) {
+          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+          return
+        }
+        let oldHotKey = self.settings.hotKeyCorrectAll
+        self.settings.hotKeyCorrectAll = newHotKey
+        self.persistSettings()
+        do {
+          try self.hotKeyManager.registerHotKeys(
+            correctSelection: self.settings.hotKeyCorrectSelection,
+            correctAll: self.settings.hotKeyCorrectAll
+          )
+          self.syncHotKeyMenuItems()
+        } catch {
+          self.settings.hotKeyCorrectAll = oldHotKey
+          self.persistSettings()
+          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+        }
+      }
+    }
+  }
+
+  @objc private func resetHotKeys() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      self.settings.hotKeyCorrectSelection = .correctSelectionDefault
+      self.settings.hotKeyCorrectAll = .correctAllDefault
+      self.persistSettings()
+      do {
+        try self.hotKeyManager.registerHotKeys(
+          correctSelection: self.settings.hotKeyCorrectSelection,
+          correctAll: self.settings.hotKeyCorrectAll
+        )
+        self.syncHotKeyMenuItems()
+        self.showSimpleAlert(title: "Hotkeys Reset", message: "Hotkeys have been reset to defaults.")
+      } catch {
+        self.showSimpleAlert(title: "Failed to Reset Hotkeys", message: "\(error)")
+      }
+    }
+  }
+
+  private func syncHotKeyMenuItems() {
+    let selectionHotKey = settings.hotKeyCorrectSelection
+    let allHotKey = settings.hotKeyCorrectAll
+
+    selectionItem?.title = "Correct Selection"
+    selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)
+    selectionItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: selectionHotKey.modifiers)
+
+    allItem?.title = "Correct All"
+    allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
+    allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
+  }
+
+  private func promptForHotKey(title: String, message: String, defaultHotKey: Settings.HotKey) -> Settings.HotKey? {
+    NSApp.activate(ignoringOtherApps: true)
+
+    let alert = NSAlert()
+    alert.messageText = title
+    alert.informativeText = message
+    alert.alertStyle = .informational
+
+    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+    textField.isEditable = false
+    textField.isSelectable = false
+    textField.alignment = .center
+    textField.font = NSFont.systemFont(ofSize: 14)
+    textField.placeholderString = "Press a key combination"
+    alert.accessoryView = textField
+
+    alert.addButton(withTitle: "Cancel")
+    alert.addButton(withTitle: "Reset")
+    alert.addButton(withTitle: "Record")
+
+    let window = alert.window
+    window.level = .floating
+
+    DispatchQueue.main.async { [weak textField] in
+      guard let textField, let window = textField.window, window.isVisible else { return }
+      textField.stringValue = "Press keys..."
+    }
+
+    var capturedHotKey: Settings.HotKey? = nil
+    let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak textField] event in
+      let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+
+      let keyCode = event.keyCode
+
+      if event.type == .flagsChanged {
+        return event
+      }
+
+      if keyCode == 53 {
+        NSApp.stopModal(withCode: .alertFirstButtonReturn)
+        return nil
+      }
+
+      if keyCode == 48 {
+        NSApp.stopModal(withCode: .alertSecondButtonReturn)
+        return nil
+      }
+
+      if modifiers.isEmpty {
+        textField?.stringValue = "Add a modifier (Command/Option/Control/Shift)"
+        NSSound.beep()
+        return nil
+      }
+
+      var carbonModifiers: UInt32 = 0
+      if modifiers.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
+      if modifiers.contains(.control) { carbonModifiers |= UInt32(controlKey) }
+      if modifiers.contains(.option) { carbonModifiers |= UInt32(optionKey) }
+      if modifiers.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
+
+      capturedHotKey = Settings.HotKey(keyCode: UInt32(keyCode), modifiers: carbonModifiers)
+      NSApp.stopModal(withCode: .alertThirdButtonReturn)
+      return nil
+    }
+
+    let response = alert.runModal()
+    window.orderOut(nil)
+    if let monitor { NSEvent.removeMonitor(monitor) }
+
+    switch response {
+    case .alertThirdButtonReturn:
+      return capturedHotKey
+    case .alertSecondButtonReturn:
+      return defaultHotKey
+    default:
+      return nil
+    }
   }
 }

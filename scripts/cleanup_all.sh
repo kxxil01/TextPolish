@@ -47,7 +47,7 @@ if [[ "$YES" != "true" ]]; then
   echo "- Keychain items (${LEGACY_SERVICE} / geminiApiKey, openRouterApiKey)"
   echo "- Package receipt (${PKG_ID}) if possible"
   echo "- Package receipt (${LEGACY_PKG_ID}) if possible"
-  echo "- Repo build artifacts (.build/, build/) if run inside the repo"
+  echo "- Repo build artifacts (.build/, build/, .sparkle/) if run inside the repo"
   echo
   read -r -p "Type YES to continue: " CONFIRM
   if [[ "$CONFIRM" != "YES" ]]; then
@@ -112,7 +112,7 @@ fi
 if [[ "$KEEP_BUILDS" != "true" ]]; then
   if [[ -f "Package.swift" && -d "src" ]]; then
     echo "Removing repo build artifacts…"
-    /bin/rm -rf .build build >/dev/null 2>&1 || true
+    /bin/rm -rf .build build .sparkle >/dev/null 2>&1 || true
   fi
 fi
 

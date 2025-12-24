@@ -1,6 +1,7 @@
 @preconcurrency import ApplicationServices
 @preconcurrency import Carbon
 
+@MainActor
 final class KeyboardController {
   func isAccessibilityTrusted(prompt: Bool) -> Bool {
     if prompt {

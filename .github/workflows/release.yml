@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Swift Version
+        run: swift --version
+      - name: Run Tests
+        run: swift test
+      - name: Resolve Version
+        id: version
+        if: github.event_name == 'release'
+        run: |
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          VERSION="${RAW_TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build Package
+        run: ./scripts/build_pkg.sh
+        env:
+          TEXT_POLISH_VERSION: ${{ steps.version.outputs.version }}
+          TEXT_POLISH_BUILD: ${{ github.run_number }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          SPARKLE_REQUIRE_PUBLIC_KEY: 1
+          SPARKLE_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml
+      - name: Package App Bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent build/TextPolish.app build/TextPolish.app.zip
+      - name: Prepare Update Archive
+        run: |
+          mkdir -p build/updates
+          /bin/cp build/TextPolish.app.zip build/updates/TextPolish.app.zip
+      - name: Generate Appcast
+        run: ./scripts/sparkle_generate_appcast.sh build/updates build/appcast.xml
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_DOWNLOAD_URL_PREFIX: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/
+      - name: Generate SBOM
+        uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a
+        with:
+          path: .
+          format: spdx-json
+          output-file: build/sbom.spdx.json
+      - name: Generate Checksums
+        run: |
+          shasum -a 256 build/TextPolish.app.zip build/TextPolish.pkg build/appcast.xml build/sbom.spdx.json > build/checksums.txt
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          files: |
+            build/TextPolish.app.zip
+            build/TextPolish.pkg
+            build/appcast.xml
+            build/sbom.spdx.json
+            build/checksums.txt

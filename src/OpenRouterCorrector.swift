@@ -1,6 +1,5 @@
 import Foundation
 
-@MainActor
 final class OpenRouterCorrector: GrammarCorrector {
   enum OpenRouterError: Error, LocalizedError {
     case missingApiKey
@@ -195,31 +194,33 @@ final class OpenRouterCorrector: GrammarCorrector {
   }
 
   private func makePrompt(text: String, attempt: Int) -> String {
-    var lines: [String] = [
+    var instructions: [String] = [
       "You are a grammar and typo corrector.",
-      "Make the smallest possible edits to fix spelling, typos, grammar, and obvious punctuation mistakes. Do NOT introduce em dashes (—), double hyphens (--), or semicolons (;) unless they already appear in the original text.",
-      "Do NOT rewrite, rephrase, translate, or change tone/voice. Keep the writing natural and human.",
-      "Do NOT expand slang/abbreviations, and do NOT make it more formal.",
+      "Fix only spelling, typos, grammar, and clear punctuation mistakes. Only change what is clearly wrong.",
+      "Make the smallest possible edits. Do not rewrite, rephrase, translate, or change meaning, context, or tone.",
+      "Match the original voice. If it is casual, keep it casual; if formal, keep it formal.",
+      "Keep it human and natural; it should sound like the same person wrote it, not AI.",
+      "Keep slang and abbreviations as-is. Do not make it more formal.",
+      "Do not add or remove words unless required to fix an error.",
+      "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons unless they already appear in the original text.",
       "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
       "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
-      "Return ONLY the corrected text. No explanations, no quotes, no code fences.",
-      "",
-      "TEXT:",
-      text,
     ]
 
-    if let extraInstruction, !extraInstruction.isEmpty {
-      lines.insert("Extra instruction: \(extraInstruction)", at: 7)
-    }
-
     if attempt > 1 {
-      lines.insert(
+      instructions.insert(
         "IMPORTANT: Your previous output changed the text too much. This time, keep everything identical except for the minimal characters needed to correct errors.",
         at: 2
       )
     }
 
-    return lines.joined(separator: "\n")
+    if let extraInstruction, !extraInstruction.isEmpty {
+      instructions.append("Extra instruction: \(extraInstruction)")
+    }
+
+    instructions.append("Return only the corrected text. No explanations, no quotes, no code fences.")
+
+    return (instructions + ["", "TEXT:", text]).joined(separator: "\n")
   }
 
   private func isAcceptable(original: String, candidate: String) -> Bool {
@@ -295,9 +296,215 @@ final class OpenRouterCorrector: GrammarCorrector {
       cleanedCore = String(cleanedCore.dropFirst().dropLast())
     }
 
+    cleanedCore = enforcePunctuationPolicy(cleanedCore, original: origCore)
+
     if origCore.isEmpty { return cleanedCore }
     return origPrefix + cleanedCore + origSuffix
   }
+
+  private func enforcePunctuationPolicy(_ text: String, original: String) -> String {
+    var result = text
+    if !original.contains(";") {
+      result = result.replacingOccurrences(of: ";", with: ",")
+    }
+    if !original.contains("--") {
+      result = result.replacingOccurrences(of: "--", with: "-")
+    }
+    if !original.contains("—") {
+      result = result.replacingOccurrences(of: "—", with: "-")
+    }
+    return result
+  }
+
+  private func applyInlineCodeFormatting(_ text: String) -> String {
+    let protected = protect(text)
+    let formatted = formatInlineCode(in: protected.text)
+    return restore(formatted, placeholders: protected.placeholders)
+  }
+
+  private func formatInlineCode(in text: String) -> String {
+    var result = ""
+    var buffer = ""
+    var bufferIsWhitespace: Bool? = nil
+    var inDatasourceList = false
+    var allowNextDatasourceName = false
+
+    func processToken(_ token: String) -> String {
+      let (prefix, core, suffix) = splitToken(token)
+      if core.isEmpty {
+        if inDatasourceList, token.contains(",") {
+          allowNextDatasourceName = true
+        }
+        if inDatasourceList, containsSentenceEnd(token) {
+          inDatasourceList = false
+          allowNextDatasourceName = false
+        }
+        return token
+      }
+
+      let lower = core.lowercased()
+      if lower == "datasource" || lower == "datasources" {
+        inDatasourceList = true
+        allowNextDatasourceName = true
+        return token
+      }
+
+      if inDatasourceList {
+        if isConnectorToken(lower) {
+          allowNextDatasourceName = true
+          if containsSentenceEnd(suffix) {
+            inDatasourceList = false
+            allowNextDatasourceName = false
+          }
+          return token
+        }
+
+        if allowNextDatasourceName {
+          if isDatasourceName(core) {
+            let wrapped = prefix + "`" + core + "`" + suffix
+            allowNextDatasourceName = suffix.contains(",")
+            if containsSentenceEnd(suffix) {
+              inDatasourceList = false
+              allowNextDatasourceName = false
+            }
+            return wrapped
+          }
+          inDatasourceList = false
+          allowNextDatasourceName = false
+        } else {
+          inDatasourceList = false
+        }
+      }
+
+      if shouldWrapToken(core) {
+        return prefix + "`" + core + "`" + suffix
+      }
+      return token
+    }
+
+    func flushBuffer() {
+      guard let isWhitespace = bufferIsWhitespace else { return }
+      if isWhitespace {
+        result.append(buffer)
+      } else {
+        result.append(processToken(buffer))
+      }
+      buffer = ""
+    }
+
+    for ch in text {
+      let isWhitespace = ch.isWhitespace
+      if bufferIsWhitespace == nil {
+        bufferIsWhitespace = isWhitespace
+        buffer.append(ch)
+        continue
+      }
+      if isWhitespace == bufferIsWhitespace {
+        buffer.append(ch)
+      } else {
+        flushBuffer()
+        bufferIsWhitespace = isWhitespace
+        buffer = String(ch)
+      }
+    }
+    if !buffer.isEmpty {
+      flushBuffer()
+    }
+
+    return result
+  }
+
+  private func isConnectorToken(_ lower: String) -> Bool {
+    lower == "and" || lower == "or" || lower == "&"
+  }
+
+  private func isDatasourceName(_ core: String) -> Bool {
+    if core.contains("`") || core.contains("GC_PROTECT_") { return false }
+    let lower = core.lowercased()
+    if Self.datasourceStopwords.contains(lower) { return false }
+    return matches(core, pattern: "^[A-Za-z0-9_.:-]+$")
+  }
+
+  private func shouldWrapToken(_ core: String) -> Bool {
+    if core.contains("`") || core.contains("GC_PROTECT_") { return false }
+    if matches(core, pattern: "^[A-Za-z0-9_.:-]+=[A-Za-z0-9_.:/-]+$") { return true }
+    if core.contains("-") {
+      if matches(core, pattern: "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}$") { return true }
+      if core.range(of: "[0-9]", options: .regularExpression) != nil { return true }
+    }
+    return false
+  }
+
+  private func splitToken(_ token: String) -> (prefix: String, core: String, suffix: String) {
+    var start = token.startIndex
+    var end = token.endIndex
+
+    while start < end, isTrimPunctuation(token[start]) {
+      start = token.index(after: start)
+    }
+
+    while end > start {
+      let before = token.index(before: end)
+      if isTrimPunctuation(token[before]) {
+        end = before
+      } else {
+        break
+      }
+    }
+
+    let prefix = String(token[..<start])
+    let core = String(token[start..<end])
+    let suffix = String(token[end...])
+    return (prefix, core, suffix)
+  }
+
+  private func containsSentenceEnd(_ value: String) -> Bool {
+    value.contains(".") || value.contains("!") || value.contains("?") || value.contains(":") || value.contains(";")
+  }
+
+  private func matches(_ text: String, pattern: String) -> Bool {
+    text.range(of: pattern, options: .regularExpression) != nil
+  }
+
+  private func isTrimPunctuation(_ ch: Character) -> Bool {
+    for scalar in ch.unicodeScalars {
+      if Self.tokenTrimSet.contains(scalar) { return true }
+    }
+    return false
+  }
+
+  private static let tokenTrimSet = CharacterSet(charactersIn: "\"'()[]{}.,!?;:")
+  private static let datasourceStopwords: Set<String> = [
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "but",
+    "by",
+    "for",
+    "from",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "these",
+    "this",
+    "those",
+    "to",
+    "was",
+    "were",
+    "with",
+    "you",
+    "we",
+    "i",
+  ]
 
   private func splitOuterWhitespace(_ string: String) -> (prefix: String, core: String, suffix: String) {
     var start = string.startIndex
@@ -423,3 +630,5 @@ private struct OpenRouterChatCompletionsResponse: Decodable {
 
   let choices: [Choice]?
 }
+
+extension OpenRouterCorrector: @unchecked Sendable {}

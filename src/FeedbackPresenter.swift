@@ -9,12 +9,25 @@ protocol FeedbackPresenter {
 
 @MainActor
 final class StatusItemFeedback: FeedbackPresenter {
+  typealias SleepHandler = (Duration) async -> Void
+
   private let statusItem: NSStatusItem
   private let baseImage: NSImage?
+  private let baseToolTip: String?
+  private let baseTitle: String?
+  private let sleepHandler: SleepHandler
+  private var resetTask: Task<Void, Never>?
 
-  init(statusItem: NSStatusItem, baseImage: NSImage?) {
+  init(
+    statusItem: NSStatusItem,
+    baseImage: NSImage?,
+    sleepHandler: @escaping SleepHandler = StatusItemFeedback.defaultSleep
+  ) {
     self.statusItem = statusItem
     self.baseImage = baseImage
+    self.baseToolTip = statusItem.button?.toolTip
+    self.baseTitle = statusItem.button?.title
+    self.sleepHandler = sleepHandler
   }
 
   func showSuccess() {
@@ -32,17 +45,24 @@ final class StatusItemFeedback: FeedbackPresenter {
 
   private func flash(symbolName: String, title: String?, toolTip: String?, seconds: TimeInterval) {
     let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-    let previousToolTip = statusItem.button?.toolTip
-    let previousTitle = statusItem.button?.title
     statusItem.button?.image = image
     statusItem.button?.title = title ?? ""
     if let toolTip {
       statusItem.button?.toolTip = toolTip
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-      self?.statusItem.button?.image = self?.baseImage
-      self?.statusItem.button?.toolTip = previousToolTip
-      self?.statusItem.button?.title = previousTitle ?? ""
+    resetTask?.cancel()
+    resetTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      let delayMilliseconds = Int64(max(0.0, seconds) * 1000.0)
+      await self.sleepHandler(.milliseconds(delayMilliseconds))
+      guard !Task.isCancelled else { return }
+      self.statusItem.button?.image = self.baseImage
+      self.statusItem.button?.toolTip = self.baseToolTip
+      self.statusItem.button?.title = self.baseTitle ?? ""
     }
+  }
+
+  private static func defaultSleep(_ duration: Duration) async {
+    try? await Task.sleep(for: duration)
   }
 }

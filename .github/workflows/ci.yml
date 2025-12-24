@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Swift Version
+        run: swift --version
+      - name: Run Tests
+        run: swift test
+      - name: Build App Bundle
+        run: ./scripts/build_app.sh
+      - name: Package App Artifact
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent build/TextPolish.app build/TextPolish.app.zip
+      - name: Upload App Artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: TextPolish.app
+          path: build/TextPolish.app.zip
+          if-no-files-found: error
+
+  codeql:
+    runs-on: macos-14
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@c43362b91a940600cde2ebae39ec7a35ad66bdc0
+        with:
+          languages: swift
+          build-mode: manual
+      - name: Build (CodeQL)
+        run: swift build -c release
+      - name: Analyze CodeQL
+        uses: github/codeql-action/analyze@c43362b91a940600cde2ebae39ec7a35ad66bdc0
+        with:
+          category: /language:swift
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        with:
+          args: --verbose --redact
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Dependency Review
+        uses: actions/dependency-review-action@3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261
+        with:
+          fail-on-severity: critical

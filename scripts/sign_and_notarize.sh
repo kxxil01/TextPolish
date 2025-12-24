@@ -28,6 +28,11 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 echo "Signing: $APP_PATH"
+if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
+  while IFS= read -r -d '' framework; do
+    codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" --deep "$framework"
+  done < <(find "$APP_PATH/Contents/Frameworks" -type d -name "*.framework" -print0)
+fi
 codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_PATH/Contents/MacOS/$APP_NAME"
 codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_PATH"
 
