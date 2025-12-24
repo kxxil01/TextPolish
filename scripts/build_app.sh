@@ -16,13 +16,21 @@ BUILD="${TEXT_POLISH_BUILD:-}"
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://github.com/kxxil01/TextPolish/releases/latest/download/appcast.xml}"
 SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}"
 SPARKLE_REQUIRE_PUBLIC_KEY="${SPARKLE_REQUIRE_PUBLIC_KEY:-}"
+CODESIGN_RUNTIME="${CODESIGN_RUNTIME:-}"
 
 if [[ -z "$VERSION" ]]; then
-  if git -C "$ROOT_DIR" describe --tags --abbrev=0 >/dev/null 2>&1; then
+  if [[ "${GITHUB_REF_TYPE:-}" == "tag" && -n "${GITHUB_REF_NAME:-}" ]]; then
+    VERSION="${GITHUB_REF_NAME#v}"
+  elif [[ -n "${GITHUB_REF_NAME:-}" && "${GITHUB_REF_NAME}" =~ ^v?[0-9]+([.][0-9]+)*$ ]]; then
+    VERSION="${GITHUB_REF_NAME#v}"
+  elif git -C "$ROOT_DIR" describe --tags --exact-match >/dev/null 2>&1; then
+    VERSION="$(git -C "$ROOT_DIR" describe --tags --exact-match)"
+    VERSION="${VERSION#v}"
+  elif git -C "$ROOT_DIR" describe --tags --abbrev=0 >/dev/null 2>&1; then
     VERSION="$(git -C "$ROOT_DIR" describe --tags --abbrev=0)"
     VERSION="${VERSION#v}"
   else
-    VERSION="0.1.1"
+    VERSION="0.0.0"
   fi
 fi
 
@@ -43,6 +51,22 @@ if [[ -n "$SPARKLE_PUBLIC_KEY" ]]; then
   SPARKLE_AUTOMATIC_CHECKS="<true/>"
 else
   SPARKLE_AUTOMATIC_CHECKS="<false/>"
+fi
+
+if [[ -n "${CODESIGN_IDENTITY:-}" && -z "$CODESIGN_RUNTIME" ]]; then
+  CERT_TMP="$(mktemp)"
+  if security find-certificate -c "$CODESIGN_IDENTITY" -p 2>/dev/null > "$CERT_TMP"; then
+    CERT_SUBJECT="$(/usr/bin/openssl x509 -in "$CERT_TMP" -noout -subject | sed 's/^subject= //')"
+    CERT_ISSUER="$(/usr/bin/openssl x509 -in "$CERT_TMP" -noout -issuer | sed 's/^issuer= //')"
+    if [[ "$CERT_SUBJECT" == "$CERT_ISSUER" ]]; then
+      CODESIGN_RUNTIME="0"
+    else
+      CODESIGN_RUNTIME="1"
+    fi
+  else
+    CODESIGN_RUNTIME="1"
+  fi
+  rm -f "$CERT_TMP"
 fi
 
 if [[ -e "$APP_DIR" && ! -w "$APP_DIR" ]]; then
@@ -133,14 +157,18 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 EOF
 
 if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+  CODE_SIGN_OPTS=(--force --sign "$CODESIGN_IDENTITY")
+  if [[ "$CODESIGN_RUNTIME" != "0" ]]; then
+    CODE_SIGN_OPTS+=(--options runtime --timestamp)
+  fi
   echo "Signing app bundle..."
   if [[ -d "$FRAMEWORKS_DIR" ]]; then
     while IFS= read -r -d '' framework; do
-      codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" --deep "$framework"
+      codesign "${CODE_SIGN_OPTS[@]}" --deep "$framework"
     done < <(find "$FRAMEWORKS_DIR" -type d -name "*.framework" -print0)
   fi
-  codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$EXEC_DIR/$APP_NAME"
-  codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+  codesign "${CODE_SIGN_OPTS[@]}" "$EXEC_DIR/$APP_NAME"
+  codesign "${CODE_SIGN_OPTS[@]}" "$APP_DIR"
   codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
 

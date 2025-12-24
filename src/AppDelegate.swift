@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var pendingAfterMenuAction: (@MainActor () async -> Void)?
   private lazy var updaterController = SPUStandardUpdaterController(
     startingUpdater: true,
-    updaterDelegate: nil,
+    updaterDelegate: self,
     userDriverDelegate: nil
   )
 
@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var selectionItem: NSMenuItem?
   private var allItem: NSMenuItem?
   private var checkForUpdatesItem: NSMenuItem?
+  private var manualUpdateCheckInProgress = false
+  private var manualUpdateFoundUpdate = false
 
   private let keychainAccountGemini = "geminiApiKey"
   private let keychainAccountOpenRouter = "openRouterApiKey"
@@ -116,8 +118,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func checkForUpdates(_ sender: Any?) {
+    guard isUpdaterAvailable else {
+      feedback?.showError("Updates are not configured for this build.")
+      return
+    }
+    if manualUpdateCheckInProgress {
+      feedback?.showInfo("Update check already running.")
+      return
+    }
+    manualUpdateCheckInProgress = true
+    manualUpdateFoundUpdate = false
+    feedback?.showInfo("Checking for updates...")
     NSApp.activate(ignoringOtherApps: true)
     updaterController.checkForUpdates(sender)
+  }
+
+  private func resetManualUpdateCheckState() {
+    manualUpdateCheckInProgress = false
+    manualUpdateFoundUpdate = false
+  }
+
+  private func finishManualUpdateCheck(with feedback: UpdateCheckFeedback?) {
+    resetManualUpdateCheckState()
+    guard let feedback else { return }
+    switch feedback.kind {
+    case .info:
+      self.feedback?.showInfo(feedback.message)
+    case .error:
+      self.feedback?.showError(feedback.message)
+    }
   }
 
   private func captureFrontmostApplication() {
@@ -1652,6 +1681,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return defaultHotKey
     default:
       return nil
+    }
+  }
+}
+
+extension AppDelegate: SPUUpdaterDelegate {
+  nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      guard self.manualUpdateCheckInProgress else { return }
+      self.manualUpdateFoundUpdate = true
+      self.feedback?.showInfo("Update available.")
+    }
+  }
+
+  nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+    let nsError = error as NSError
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      guard self.manualUpdateCheckInProgress else { return }
+      let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
+      self.finishManualUpdateCheck(with: feedback)
+    }
+  }
+
+  nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+    let nsError = error as NSError?
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      guard updateCheck == .updates, self.manualUpdateCheckInProgress else { return }
+      if self.manualUpdateFoundUpdate {
+        self.resetManualUpdateCheckState()
+        return
+      }
+      if let nsError {
+        let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
+        self.finishManualUpdateCheck(with: feedback)
+        return
+      }
+      self.finishManualUpdateCheck(with: UpdateCheckFeedback(kind: .info, message: "You're up to date."))
     }
   }
 }

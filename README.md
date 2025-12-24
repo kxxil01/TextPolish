@@ -93,6 +93,7 @@ Manual checks are available from the menu item "Check for Updates...".
 ### Free Signing (No Apple Developer Account)
 
 Sparkle only needs a consistent signing identity. You can use a self-signed code signing certificate for free.
+For self-signed certs, the build script disables hardened runtime automatically so Sparkle can load.
 
 Create the certificate:
 
