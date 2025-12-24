@@ -1,35 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="520" viewBox="0 0 480 520">
   <defs>
     <style>
-      .title { font: 18px Helvetica, Arial, sans-serif; fill: #2c2c2c; }
-      .label { font: 14px Helvetica, Arial, sans-serif; fill: #1f1f1f; }
-      .muted { font: 12px Helvetica, Arial, sans-serif; fill: #5a5a5a; }
+      .menu-item { font: 500 15px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #ffffff; }
+      .shortcut { font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #8e8e93; }
+      .arrow { font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #8e8e93; }
     </style>
   </defs>
-  <rect x="0" y="0" width="960" height="540" fill="#f4f1e8" />
-  <rect x="0" y="0" width="960" height="44" fill="#e6e2d9" />
-  <text x="24" y="28" class="title">TextPolish menu bar preview</text>
-
-  <rect x="730" y="8" width="28" height="28" rx="6" fill="#2f5d50" />
-  <text x="739" y="28" class="label" fill="#ffffff">TP</text>
-
-  <rect x="430" y="54" width="300" height="360" rx="10" fill="#ffffff" stroke="#cfc8bb" />
-  <text x="450" y="86" class="label">Correct Selection</text>
-  <text x="450" y="114" class="label">Correct All</text>
-  <text x="450" y="142" class="label">Cancel Correction</text>
-  <line x1="442" y1="162" x2="718" y2="162" stroke="#ece6db" />
-
-  <text x="450" y="190" class="label">Hotkeys ▶</text>
-  <text x="450" y="218" class="label">Provider ▶</text>
-  <text x="450" y="246" class="label">Preferences ▶</text>
-  <text x="450" y="274" class="label">About &amp; Privacy</text>
-  <text x="450" y="302" class="label">Check for Updates ▶</text>
-  <line x1="442" y1="322" x2="718" y2="322" stroke="#ece6db" />
-
-  <text x="450" y="350" class="label">Quit</text>
-
-  <rect x="735" y="262" width="210" height="96" rx="8" fill="#ffffff" stroke="#cfc8bb" />
-  <text x="748" y="286" class="muted">Check</text>
-  <text x="748" y="312" class="muted">Update status: Up to date</text>
-  <text x="748" y="338" class="muted">Last checked: Never</text>
+  
+  <!-- Menu bar background -->
+  <rect x="0" y="0" width="480" height="36" fill="#2d2d2d" />
+  
+  <!-- Menu bar icons (simplified) -->
+  <circle cx="40" cy="18" r="8" fill="#4a4a4a" />
+  <rect x="60" y="10" width="16" height="16" rx="3" fill="#4a4a4a" />
+  <circle cx="100" cy="18" r="8" fill="#4a4a4a" />
+  <circle cx="130" cy="18" r="8" fill="#4a4a4a" />
+  <circle cx="160" cy="18" r="8" fill="#4a4a4a" />
+  <text x="200" y="23" class="shortcut">0KB/s</text>
+  
+  <!-- Dropdown menu -->
+  <rect x="20" y="50" width="440" height="450" rx="12" fill="#3a3a3c" />
+  
+  <!-- Correct Selection -->
+  <text x="40" y="90" class="menu-item">Correct Selection</text>
+  <text x="360" y="90" class="shortcut">⌃⌥⌘G</text>
+  
+  <!-- Correct All -->
+  <text x="40" y="130" class="menu-item">Correct All</text>
+  <text x="348" y="130" class="shortcut">⌃⌥⇧⌘G</text>
+  
+  <!-- Cancel Correction -->
+  <text x="40" y="170" class="menu-item">Cancel Correction</text>
+  
+  <!-- Separator -->
+  <line x1="30" y1="195" x2="450" y2="195" stroke="#545458" stroke-opacity="0.6" />
+  
+  <!-- Hotkeys -->
+  <text x="40" y="230" class="menu-item">Hotkeys</text>
+  <text x="430" y="230" class="arrow">›</text>
+  
+  <!-- Separator -->
+  <line x1="30" y1="255" x2="450" y2="255" stroke="#545458" stroke-opacity="0.6" />
+  
+  <!-- Provider -->
+  <text x="40" y="290" class="menu-item">Provider</text>
+  <text x="430" y="290" class="arrow">›</text>
+  
+  <!-- Preferences -->
+  <text x="40" y="330" class="menu-item">Preferences</text>
+  <text x="430" y="330" class="arrow">›</text>
+  
+  <!-- About & Privacy -->
+  <text x="40" y="370" class="menu-item">About &amp; Privacy</text>
+  
+  <!-- Check for Updates -->
+  <text x="40" y="410" class="menu-item">Check for Updates</text>
+  <text x="430" y="410" class="arrow">›</text>
+  
+  <!-- Separator -->
+  <line x1="30" y1="435" x2="450" y2="435" stroke="#545458" stroke-opacity="0.6" />
+  
+  <!-- Quit -->
+  <text x="40" y="470" class="menu-item">Quit</text>
+  <text x="400" y="470" class="shortcut">⌘Q</text>
 </svg>
