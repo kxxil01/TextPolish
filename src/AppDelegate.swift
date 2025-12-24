@@ -297,6 +297,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     backendItem.submenu = backendMenu
     menu.addItem(backendItem)
 
+    let advancedItem = NSMenuItem(title: "Advanced", action: nil, keyEquivalent: "")
+    let advancedMenu = NSMenu()
+
     let launchAtLoginItem = NSMenuItem(
       title: "Start at Login",
       action: #selector(toggleLaunchAtLogin),
@@ -304,15 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     launchAtLoginItem.target = self
     self.launchAtLoginItem = launchAtLoginItem
-    menu.addItem(launchAtLoginItem)
-
-    let openSettingsItem = NSMenuItem(
-      title: "Advanced: Open Settings File…",
-      action: #selector(openSettingsFile),
-      keyEquivalent: ""
-    )
-    openSettingsItem.target = self
-    menu.addItem(openSettingsItem)
+    advancedMenu.addItem(launchAtLoginItem)
 
     let accessibilityItem = NSMenuItem(
       title: "Open Accessibility Settings…",
@@ -320,27 +315,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       keyEquivalent: ""
     )
     accessibilityItem.target = self
-    menu.addItem(accessibilityItem)
+    advancedMenu.addItem(accessibilityItem)
 
-    let revealItem = NSMenuItem(
-      title: "Reveal App in Finder…",
-      action: #selector(revealAppInFinder),
+    let openSettingsItem = NSMenuItem(
+      title: "Open Settings File…",
+      action: #selector(openSettingsFile),
       keyEquivalent: ""
     )
-    revealItem.target = self
-    menu.addItem(revealItem)
+    openSettingsItem.target = self
+    advancedMenu.addItem(openSettingsItem)
 
-    let privacyItem = NSMenuItem(
-      title: "Privacy…",
-      action: #selector(showPrivacy),
-      keyEquivalent: ""
-    )
-    privacyItem.target = self
-    menu.addItem(privacyItem)
+    advancedItem.submenu = advancedMenu
+    menu.addItem(advancedItem)
 
     let aboutItem = NSMenuItem(
-      title: "About \(expectedAppName)…",
-      action: #selector(showAbout),
+      title: "About & Privacy…",
+      action: #selector(showAboutAndPrivacy),
       keyEquivalent: ""
     )
     aboutItem.target = self
@@ -1399,65 +1389,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func showPrivacy() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let destination: String
-      let destinationURL: String
-      switch self.settings.provider {
-      case .gemini:
-        destination = "Gemini (Google) — \(self.settings.geminiModel)"
-        destinationURL = self.settings.geminiBaseURL
-      case .openRouter:
-        destination = "OpenRouter — \(self.settings.openRouterModel)"
-        destinationURL = self.settings.openRouterBaseURL
-      }
-
-      let settingsPath = Settings.settingsFileURL().path
-
-      let message = [
-        "What happens when you correct text:",
-        "• Copies your selected text (or Select All) to the clipboard temporarily",
-        "• Sends that text to the selected backend to fix grammar/typos",
-        "• Pastes the corrected text back",
-        "• Restores your original clipboard",
-        "",
-        "What gets sent:",
-        "• Only the text you selected / the current input text",
-        "",
-        "Where it is sent (over HTTPS):",
-        "• \(destination)",
-        "• \(destinationURL)",
-        "",
-        "What is stored locally:",
-        "• API keys: macOS Keychain (service: \(self.keychainService))",
-        "• Settings: \(settingsPath)",
-        "",
-        "No analytics/telemetry. Requests are only made when you trigger a correction.",
-        "Note: your provider may log requests per their policy.",
-      ].joined(separator: "\n")
-
-      self.showSimpleAlert(title: "\(appDisplayName) Privacy", message: message)
-    }
-  }
-
-  @objc private func showAbout() {
+  @objc private func showAboutAndPrivacy() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
       let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
       let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
       let header = build.isEmpty ? "\(appDisplayName) \(version)" : "\(appDisplayName) \(version) (\(build))"
 
+      let providerName: String
+      let providerModel: String
+      let providerURL: String
+      switch self.settings.provider {
+      case .gemini:
+        providerName = "Gemini (Google)"
+        providerModel = self.settings.geminiModel
+        providerURL = self.settings.geminiBaseURL
+      case .openRouter:
+        providerName = "OpenRouter"
+        providerModel = self.settings.openRouterModel
+        providerURL = self.settings.openRouterBaseURL
+      }
+
+      let settingsPath = Settings.settingsFileURL().path
+
       let message = [
-        "Small, fast menu bar grammar/typo corrector (minimal edits, preserves formatting).",
+        "Small, fast menu bar grammar and typo corrector. Minimal edits, keeps formatting.",
         "",
         "Shortcuts:",
         "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
         "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
         "",
-        "Backends: Gemini + OpenRouter",
-        "Requires: Accessibility permission (to send ⌘C/⌘V/⌘A).",
-        "Tip: Quit from the menu bar, relaunch from Finder → Applications → \(expectedAppName).",
+        "Backend:",
+        "• Provider: \(providerName)",
+        "• Model: \(providerModel)",
+        "• URL: \(providerURL)",
+        "",
+        "Privacy:",
+        "• Copies selected text or Select All to the clipboard temporarily",
+        "• Sends only that text to the backend over HTTPS",
+        "• Pastes corrected text back",
+        "• Restores your original clipboard",
+        "• Stores API keys in macOS Keychain (service: \(self.keychainService))",
+        "• Stores settings at \(settingsPath)",
+        "• No analytics or telemetry. Requests run only when you trigger a correction.",
+        "• Provider may log requests per their policy.",
+        "",
+        "Requires Accessibility permission to send ⌘C, ⌘V, and ⌘A.",
         "",
         "Creator: Kurniadi Ilham",
         "GitHub: github.com/kxxil01",
