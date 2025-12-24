@@ -84,9 +84,39 @@ Maintainer setup:
 - Run `./scripts/sparkle_generate_keys.sh` to generate Sparkle keys (Keychain prompt). The public key prints to stdout, and the private key is saved to `.sparkle/private_key`.
 - Add `SPARKLE_PUBLIC_KEY` as a GitHub repository variable.
 - Add `SPARKLE_PRIVATE_KEY` as a GitHub Actions secret (the contents of `.sparkle/private_key`).
+- Add signing secrets to GitHub Actions: `MACOS_SIGNING_CERT_P12_BASE64`, `MACOS_SIGNING_CERT_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `CODESIGN_IDENTITY`.
+- Sign releases with a stable Developer ID Application certificate (Sparkle requires consistent code signing across updates).
 - Create a GitHub Release. CI uploads `appcast.xml` and the app uses it for periodic checks.
 
 Manual checks are available from the menu item "Check for Updates...".
+
+### Free Signing (No Apple Developer Account)
+
+Sparkle only needs a consistent signing identity. You can use a self-signed code signing certificate for free.
+
+Create the certificate:
+
+1. Open Keychain Access.
+2. Certificate Assistant -> Create a Certificate.
+3. Name it `TextPolish Local` (any name is fine).
+4. Identity Type: `Self Signed Root`.
+5. Certificate Type: `Code Signing`.
+6. Save to the login keychain.
+
+Export and set secrets:
+
+```bash
+security find-identity -v -p codesigning
+base64 -i /path/to/TextPolish.p12 | tr -d '\n'
+openssl rand -hex 16
+```
+
+Set GitHub Actions secrets:
+
+- `MACOS_SIGNING_CERT_P12_BASE64`: base64 of the exported `.p12`
+- `MACOS_SIGNING_CERT_PASSWORD`: the export password
+- `MACOS_KEYCHAIN_PASSWORD`: any random string
+- `CODESIGN_IDENTITY`: the exact name from `security find-identity`
 
 ## Permissions
 

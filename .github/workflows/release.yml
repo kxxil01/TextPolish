@@ -18,6 +18,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Verify Signing Secrets
+        run: |
+          if [[ -z "${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}" ]]; then
+            echo "Missing MACOS_SIGNING_CERT_P12_BASE64."
+            exit 2
+          fi
+          if [[ -z "${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}" ]]; then
+            echo "Missing MACOS_SIGNING_CERT_PASSWORD."
+            exit 2
+          fi
+          if [[ -z "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" ]]; then
+            echo "Missing MACOS_KEYCHAIN_PASSWORD."
+            exit 2
+          fi
+          if [[ -z "${{ secrets.CODESIGN_IDENTITY }}" ]]; then
+            echo "Missing CODESIGN_IDENTITY."
+            exit 2
+          fi
+      - name: Install Signing Certificate
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/ci-signing.keychain-db"
+          echo "${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/signing-cert.p12"
+          security create-keychain -p "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/signing-cert.p12" -k "$KEYCHAIN_PATH" -P "${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
       - name: Swift Version
         run: swift --version
       - name: Run Tests
@@ -37,6 +65,7 @@ jobs:
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
           SPARKLE_REQUIRE_PUBLIC_KEY: 1
           SPARKLE_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml
+          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
       - name: Package App Bundle
         run: |
           ditto -c -k --sequesterRsrc --keepParent build/TextPolish.app build/TextPolish.app.zip

@@ -132,4 +132,16 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+  echo "Signing app bundle..."
+  if [[ -d "$FRAMEWORKS_DIR" ]]; then
+    while IFS= read -r -d '' framework; do
+      codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" --deep "$framework"
+    done < <(find "$FRAMEWORKS_DIR" -type d -name "*.framework" -print0)
+  fi
+  codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$EXEC_DIR/$APP_NAME"
+  codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+fi
+
 echo "Built: $APP_DIR"
