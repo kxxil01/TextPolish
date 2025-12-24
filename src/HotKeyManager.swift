@@ -172,4 +172,15 @@ final class HotKeyManager {
     }
     return false
   }
+
+  static func isHotKeyInUse(
+    hotKey: Settings.HotKey,
+    ignoring ignored: [Settings.HotKey],
+    checker: (UInt32, UInt32) -> Bool = HotKeyManager.checkHotKeyInUse
+  ) -> Bool {
+    if ignored.contains(hotKey) {
+      return false
+    }
+    return checker(hotKey.keyCode, hotKey.modifiers)
+  }
 }

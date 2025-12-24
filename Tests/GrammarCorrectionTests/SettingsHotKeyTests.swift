@@ -116,6 +116,8 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.copyTimeoutMilliseconds, 900)
     XCTAssertEqual(decoded.pasteSettleDelayMilliseconds, 25)
     XCTAssertEqual(decoded.postPasteDelayMilliseconds, 180)
+    XCTAssertEqual(decoded.timingProfiles, [:])
+    XCTAssertEqual(decoded.fallbackToOpenRouterOnGeminiError, false)
     XCTAssertEqual(decoded.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(decoded.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
     XCTAssertEqual(decoded.hotKeyCorrectSelection, .correctSelectionDefault)
@@ -154,9 +156,52 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(defaults.copyTimeoutMilliseconds, 900)
     XCTAssertEqual(defaults.pasteSettleDelayMilliseconds, 25)
     XCTAssertEqual(defaults.postPasteDelayMilliseconds, 180)
+    XCTAssertEqual(defaults.timingProfiles, [:])
+    XCTAssertEqual(defaults.fallbackToOpenRouterOnGeminiError, false)
     XCTAssertEqual(defaults.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(defaults.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
     XCTAssertEqual(defaults.hotKeyCorrectSelection, .correctSelectionDefault)
     XCTAssertEqual(defaults.hotKeyCorrectAll, .correctAllDefault)
+  }
+
+  func testDecodeTimingProfiles() throws {
+    let json = """
+    {
+      "timingProfiles": {
+        "com.example.app": {
+          "copyTimeoutMilliseconds": 1200,
+          "pasteSettleDelayMilliseconds": 40
+        }
+      }
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    let profile = decoded.timingProfiles["com.example.app"]
+    XCTAssertEqual(profile?.copyTimeoutMilliseconds, 1200)
+    XCTAssertEqual(profile?.pasteSettleDelayMilliseconds, 40)
+  }
+
+  func testTimingProfileLookupPrefersBundleIdentifier() {
+    let bundleProfile = Settings.TimingProfile(copyTimeoutMilliseconds: 1200)
+    let nameProfile = Settings.TimingProfile(copyTimeoutMilliseconds: 800)
+    let settings = Settings(timingProfiles: [
+      "com.example.app": bundleProfile,
+      "ExampleApp": nameProfile
+    ])
+
+    let resolved = settings.timingProfile(bundleIdentifier: "com.example.app", appName: "ExampleApp")
+    XCTAssertEqual(resolved, bundleProfile)
+  }
+
+  func testTimingProfileLookupFallsBackToName() {
+    let nameProfile = Settings.TimingProfile(copyTimeoutMilliseconds: 800)
+    let settings = Settings(timingProfiles: [
+      "ExampleApp": nameProfile
+    ])
+
+    let resolved = settings.timingProfile(bundleIdentifier: nil, appName: "ExampleApp")
+    XCTAssertEqual(resolved, nameProfile)
   }
 }

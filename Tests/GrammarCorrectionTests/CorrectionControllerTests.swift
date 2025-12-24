@@ -6,19 +6,32 @@ final class CorrectionControllerTests: XCTestCase {
   @MainActor
   private final class StubFeedback: FeedbackPresenter {
     private(set) var infoMessages: [String] = []
+    private(set) var errorMessages: [String] = []
+    private(set) var successCount = 0
+    var onSuccess: (() -> Void)?
+    var onInfo: ((String) -> Void)?
 
-    func showSuccess() {}
+    func showSuccess() {
+      successCount += 1
+      onSuccess?()
+    }
 
     func showInfo(_ message: String) {
       infoMessages.append(message)
+      onInfo?(message)
     }
 
-    func showError(_ message: String) {}
+    func showError(_ message: String) {
+      errorMessages.append(message)
+    }
   }
 
   @MainActor
   private final class StubKeyboard: KeyboardControlling {
     var isTrusted: Bool
+    private(set) var commandACount = 0
+    private(set) var commandCCount = 0
+    private(set) var commandVCount = 0
 
     init(isTrusted: Bool) {
       self.isTrusted = isTrusted
@@ -28,23 +41,44 @@ final class CorrectionControllerTests: XCTestCase {
       isTrusted
     }
 
-    func sendCommandA() {}
-    func sendCommandC() {}
-    func sendCommandV() {}
+    func sendCommandA() {
+      commandACount += 1
+    }
+
+    func sendCommandC() {
+      commandCCount += 1
+    }
+
+    func sendCommandV() {
+      commandVCount += 1
+    }
   }
 
   @MainActor
   private final class StubPasteboard: PasteboardControlling {
+    private var waitResults: [Result<String, Error>]
+    private(set) var setStringCalls: [String] = []
+    private(set) var waitCallCount = 0
+    private(set) var lastTimeout: Duration?
+    private var changeCountValue = 0
+
+    init(waitResults: [Result<String, Error>] = []) {
+      self.waitResults = waitResults
+    }
+
     func snapshot() -> PasteboardController.Snapshot {
       PasteboardController.Snapshot(items: [])
     }
 
     func restore(_ snapshot: PasteboardController.Snapshot) {}
 
-    func setString(_ string: String) {}
+    func setString(_ string: String) {
+      setStringCalls.append(string)
+      changeCountValue += 1
+    }
 
     var changeCount: Int {
-      0
+      changeCountValue
     }
 
     func waitForCopiedString(
@@ -52,7 +86,18 @@ final class CorrectionControllerTests: XCTestCase {
       excluding excluded: String?,
       timeout: Duration
     ) async throws -> String {
-      ""
+      waitCallCount += 1
+      lastTimeout = timeout
+      guard !waitResults.isEmpty else {
+        return ""
+      }
+      let result = waitResults.removeFirst()
+      switch result {
+      case .success(let value):
+        return value
+      case .failure(let error):
+        throw error
+      }
     }
   }
 
@@ -62,12 +107,47 @@ final class CorrectionControllerTests: XCTestCase {
     }
   }
 
+  private struct AppendCorrector: GrammarCorrector, Sendable {
+    func correct(_ text: String) async throws -> String {
+      text + "!"
+    }
+  }
+
+  private struct ThrowingCorrector: GrammarCorrector, Sendable {
+    let error: Error
+
+    func correct(_ text: String) async throws -> String {
+      throw error
+    }
+  }
+
+  private struct TestError: Error {}
+
+  private struct SlowCorrector: GrammarCorrector, Sendable {
+    let delay: Duration
+
+    func correct(_ text: String) async throws -> String {
+      try await Task.sleep(for: delay)
+      return text + "!"
+    }
+  }
+
+  private static let fastTimings = CorrectionController.Timings(
+    activationDelay: .zero,
+    selectAllDelay: .zero,
+    copySettleDelay: .zero,
+    copyTimeout: .milliseconds(10),
+    pasteSettleDelay: .zero,
+    postPasteDelay: .zero
+  )
+
   @MainActor
   func testBusyFeedbackThrottlesOnRepeatedHotkeys() async {
     let feedback = StubFeedback()
     let controller = CorrectionController(
       corrector: NoopCorrector(),
       feedback: feedback,
+      timings: Self.fastTimings,
       keyboard: StubKeyboard(isTrusted: false),
       pasteboard: StubPasteboard()
     )
@@ -78,6 +158,116 @@ final class CorrectionControllerTests: XCTestCase {
 
     XCTAssertEqual(feedback.infoMessages, ["Correction in progress"])
     await Task.yield()
+  }
+
+  @MainActor
+  func testCopyRetriesOnceAfterNoChange() async {
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [
+      .failure(PasteboardController.PasteboardError.noChange),
+      .success("hello")
+    ])
+
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandCCount, 2)
+    XCTAssertEqual(pasteboard.waitCallCount, 2)
+    XCTAssertEqual(keyboard.commandVCount, 1)
+  }
+
+  @MainActor
+  func testCopyRetriesOnceAfterNoString() async {
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [
+      .failure(PasteboardController.PasteboardError.noString),
+      .success("hello")
+    ])
+
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandCCount, 2)
+    XCTAssertEqual(pasteboard.waitCallCount, 2)
+    XCTAssertEqual(keyboard.commandVCount, 1)
+  }
+
+  @MainActor
+  func testCancelStopsBeforePaste() async {
+    let completion = expectation(description: "canceled")
+    let feedback = StubFeedback()
+    feedback.onInfo = { message in
+      if message == "Canceled" {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: SlowCorrector(delay: .milliseconds(200)),
+      feedback: feedback,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+    try? await Task.sleep(for: .milliseconds(20))
+    XCTAssertTrue(controller.cancelCurrentCorrection())
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 0)
+  }
+
+  @MainActor
+  func testRecovererUsesFallbackCorrector() async {
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: ThrowingCorrector(error: TestError()),
+      feedback: feedback,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      recoverer: { _ in
+        CorrectionController.RecoveryAction(message: "Retrying with fallback", corrector: AppendCorrector())
+      }
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(feedback.infoMessages.first, "Retrying with fallback")
+    XCTAssertEqual(keyboard.commandVCount, 1)
   }
 
   func testFeedbackCooldownAllowsAfterInterval() {
@@ -127,5 +317,36 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertEqual(timings.copyTimeout, .milliseconds(0))
     XCTAssertEqual(timings.pasteSettleDelay, .milliseconds(0))
     XCTAssertEqual(timings.postPasteDelay, .milliseconds(0))
+  }
+
+  @MainActor
+  func testTimingsOverrideUsesOverride() async {
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    let overrideTimings = CorrectionController.Timings(
+      activationDelay: .zero,
+      selectAllDelay: .zero,
+      copySettleDelay: .zero,
+      copyTimeout: .milliseconds(321),
+      pasteSettleDelay: .zero,
+      postPasteDelay: .zero
+    )
+
+    controller.correctSelection(timingsOverride: overrideTimings)
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(pasteboard.lastTimeout, .milliseconds(321))
   }
 }

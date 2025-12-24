@@ -32,11 +32,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var setOpenRouterModelItem: NSMenuItem?
   private var detectOpenRouterModelItem: NSMenuItem?
   private var launchAtLoginItem: NSMenuItem?
+  private var fallbackToOpenRouterItem: NSMenuItem?
   private var selectionItem: NSMenuItem?
   private var allItem: NSMenuItem?
+  private var cancelCorrectionItem: NSMenuItem?
   private var checkForUpdatesItem: NSMenuItem?
+  private var updateStatusItem: NSMenuItem?
+  private var updateLastCheckedItem: NSMenuItem?
   private var manualUpdateCheckInProgress = false
-  private var manualUpdateFoundUpdate = false
+  private var updateFoundInCycle = false
+  private var updateStatus: UpdateStatus = .unknown
+  private let lastUpdateCheckKey = "lastUpdateCheckDate"
+  private lazy var updateDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter
+  }()
 
   private let keychainAccountGemini = "geminiApiKey"
   private let keychainAccountOpenRouter = "openRouterApiKey"
@@ -111,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @objc private func statusItemClicked(_ sender: Any?) {
     captureFrontmostApplication()
     syncLaunchAtLoginMenuState()
+    syncUpdateMenuItems()
     guard let statusMenu, let button = statusItem.button else { return }
     button.highlight(true)
     statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
@@ -127,7 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return
     }
     manualUpdateCheckInProgress = true
-    manualUpdateFoundUpdate = false
+    updateFoundInCycle = false
+    updateStatus = .checking
+    syncUpdateMenuItems()
     feedback?.showInfo("Checking for updates...")
     NSApp.activate(ignoringOtherApps: true)
     updaterController.checkForUpdates(sender)
@@ -135,11 +150,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func resetManualUpdateCheckState() {
     manualUpdateCheckInProgress = false
-    manualUpdateFoundUpdate = false
+    updateFoundInCycle = false
   }
 
   private func finishManualUpdateCheck(with feedback: UpdateCheckFeedback?) {
     resetManualUpdateCheckState()
+    syncUpdateMenuItems()
     guard let feedback else { return }
     switch feedback.kind {
     case .info:
@@ -178,6 +194,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     menu.addItem(selectionItem)
     menu.addItem(allItem)
+
+    let cancelItem = NSMenuItem(
+      title: "Cancel Correction",
+      action: #selector(cancelCorrection),
+      keyEquivalent: ""
+    )
+    cancelItem.target = self
+    self.cancelCorrectionItem = cancelItem
+    menu.addItem(cancelItem)
     menu.addItem(.separator())
 
     let hotKeysItem = NSMenuItem(title: "Hotkeys", action: nil, keyEquivalent: "")
@@ -309,6 +334,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     self.launchAtLoginItem = launchAtLoginItem
     advancedMenu.addItem(launchAtLoginItem)
 
+    let fallbackToOpenRouterItem = NSMenuItem(
+      title: "Fallback to OpenRouter on Gemini errors",
+      action: #selector(toggleFallbackToOpenRouter),
+      keyEquivalent: ""
+    )
+    fallbackToOpenRouterItem.target = self
+    self.fallbackToOpenRouterItem = fallbackToOpenRouterItem
+    advancedMenu.addItem(fallbackToOpenRouterItem)
+
     let accessibilityItem = NSMenuItem(
       title: "Open Accessibility Settings…",
       action: #selector(openAccessibilitySettings),
@@ -349,6 +383,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     self.checkForUpdatesItem = checkForUpdatesItem
     menu.addItem(checkForUpdatesItem)
 
+    let updateStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    updateStatusItem.isEnabled = false
+    self.updateStatusItem = updateStatusItem
+    menu.addItem(updateStatusItem)
+
+    let updateLastCheckedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    updateLastCheckedItem.isEnabled = false
+    self.updateLastCheckedItem = updateLastCheckedItem
+    menu.addItem(updateLastCheckedItem)
+
     menu.addItem(.separator())
 
     let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -358,12 +402,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     statusMenu = menu
     syncLaunchAtLoginMenuState()
+    syncFallbackMenuState()
     syncBackendMenuStates()
     syncHotKeyMenuItems()
+    syncCancelMenuState()
+    syncUpdateMenuItems()
   }
 
   func menuWillOpen(_ menu: NSMenu) {
     isMenuOpen = true
+    syncCancelMenuState()
   }
 
   func menuDidClose(_ menu: NSMenu) {
@@ -407,6 +455,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       launchAtLoginItem.state = .off
       launchAtLoginItem.toolTip = isRunningFromApplicationsFolder() ? nil : "Move the app to /Applications to enable Start at Login reliably"
     }
+  }
+
+  private func syncFallbackMenuState() {
+    fallbackToOpenRouterItem?.state = settings.fallbackToOpenRouterOnGeminiError ? .on : .off
+  }
+
+  private func syncUpdateMenuItems() {
+    let effectiveStatus: UpdateStatus = isUpdaterAvailable ? updateStatus : .message("Updates not configured")
+    updateStatusItem?.title = effectiveStatus.menuTitle
+    updateLastCheckedItem?.title = updateLastCheckedTitle()
+    if !isUpdaterAvailable {
+      checkForUpdatesItem?.isEnabled = false
+      checkForUpdatesItem?.toolTip = "Updates are not configured for this build."
+    } else if manualUpdateCheckInProgress {
+      checkForUpdatesItem?.isEnabled = false
+      checkForUpdatesItem?.toolTip = "Update check in progress."
+    } else {
+      checkForUpdatesItem?.isEnabled = true
+      checkForUpdatesItem?.toolTip = nil
+    }
+  }
+
+  private func updateLastCheckedTitle() -> String {
+    guard isUpdaterAvailable else { return "Last checked: Not available" }
+    guard let date = lastUpdateCheckDate() else { return "Last checked: Never" }
+    return "Last checked: \(updateDateFormatter.string(from: date))"
+  }
+
+  private func lastUpdateCheckDate() -> Date? {
+    UserDefaults.standard.object(forKey: lastUpdateCheckKey) as? Date
+  }
+
+  private func recordLastUpdateCheck(_ date: Date = Date()) {
+    UserDefaults.standard.set(date, forKey: lastUpdateCheckKey)
   }
 
   private func persistSettings() {
@@ -468,6 +550,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     correctionController?.updateTimings(.init(settings: settings))
   }
 
+  private func timingsOverride(for app: NSRunningApplication?) -> CorrectionController.Timings? {
+    guard let profile = settings.timingProfile(
+      bundleIdentifier: app?.bundleIdentifier,
+      appName: app?.localizedName
+    ) else {
+      return nil
+    }
+    let baseTimings = CorrectionController.Timings(settings: settings)
+    return baseTimings.applying(profile)
+  }
+
   private func runAfterMenuDismissed(_ action: @escaping @MainActor () async -> Void) {
     if isMenuOpen {
       pendingAfterMenuAction = action
@@ -486,29 +579,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return trimmed
   }
 
-  private func recoverFromError(_ error: Error) async -> String? {
+  private func recoverFromError(_ error: Error) async -> CorrectionController.RecoveryAction? {
     switch settings.provider {
     case .gemini:
       guard let geminiError = error as? GeminiCorrector.GeminiError else { return nil }
-      guard case .requestFailed(let status, _) = geminiError, status == 404 else { return nil }
-      guard let apiKey = currentGeminiApiKey() else { return nil }
+      if case .requestFailed(let status, _) = geminiError, status == 404 {
+        guard let apiKey = currentGeminiApiKey() else { return nil }
+        do {
+          let models = try await fetchGeminiModels(apiKey: apiKey)
+          guard let chosenRaw = chooseGeminiModel(from: models) else { return nil }
+          let chosen = normalizeGeminiModel(chosenRaw)
+          let current = normalizeGeminiModel(settings.geminiModel)
+          guard !chosen.isEmpty, chosen != current else { return nil }
 
-      do {
-        let models = try await fetchGeminiModels(apiKey: apiKey)
-        guard let chosenRaw = chooseGeminiModel(from: models) else { return nil }
-        let chosen = normalizeGeminiModel(chosenRaw)
-        let current = normalizeGeminiModel(settings.geminiModel)
-        guard !chosen.isEmpty, chosen != current else { return nil }
-
-        settings.geminiModel = chosen
-        persistSettings()
-        syncBackendMenuStates()
-        refreshCorrector()
-        return "Gemini model auto-detected: \(chosen)"
-      } catch {
-        NSLog("[TextPolish] Auto-detect Gemini model failed: \(error)")
-        return nil
+          settings.geminiModel = chosen
+          persistSettings()
+          syncBackendMenuStates()
+          refreshCorrector()
+          return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
+        } catch {
+          NSLog("[TextPolish] Auto-detect Gemini model failed: \(error)")
+        }
       }
+
+      if settings.fallbackToOpenRouterOnGeminiError,
+         shouldFallbackFromGeminiError(geminiError),
+         currentOpenRouterApiKey() != nil
+      {
+        do {
+          let fallback = try OpenRouterCorrector(settings: settings)
+          return CorrectionController.RecoveryAction(
+            message: "Gemini error. Retrying with OpenRouter.",
+            corrector: fallback
+          )
+        } catch {
+          NSLog("[TextPolish] OpenRouter fallback unavailable: \(error)")
+          return nil
+        }
+      }
+      return nil
     case .openRouter:
       guard let openRouterError = error as? OpenRouterCorrector.OpenRouterError else { return nil }
 
@@ -530,7 +639,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         persistSettings()
         syncBackendMenuStates()
         refreshCorrector()
-        return preferFree ? "OpenRouter switched to a working free model: \(chosen)" : "OpenRouter model auto-detected: \(chosen)"
+        let message = preferFree
+          ? "OpenRouter switched to a working free model: \(chosen)"
+          : "OpenRouter model auto-detected: \(chosen)"
+        return CorrectionController.RecoveryAction(message: message, corrector: nil)
       } catch {
         NSLog("[TextPolish] Auto-detect OpenRouter model failed: \(error)")
         return nil
@@ -538,15 +650,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  private func shouldFallbackFromGeminiError(_ error: GeminiCorrector.GeminiError) -> Bool {
+    guard case .requestFailed(let status, _) = error else { return false }
+    if status == 429 {
+      return true
+    }
+    if status <= 0 {
+      return true
+    }
+    return (500...599).contains(status)
+  }
+
   private func setupHotKeys() {
     hotKeyManager.onHotKey = { [weak self] id in
       guard let self else { return }
       self.captureFrontmostApplication()
+      let target = self.lastTargetApplication
+      let timings = self.timingsOverride(for: target)
       switch id {
       case HotKeyManager.HotKeyID.correctSelection.rawValue:
-        self.correctionController?.correctSelection(targetApplication: self.lastTargetApplication)
+        self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
       case HotKeyManager.HotKeyID.correctAll.rawValue:
-        self.correctionController?.correctAll(targetApplication: self.lastTargetApplication)
+        self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
       default:
         break
       }
@@ -565,14 +690,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @objc private func correctSelection() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
-      self.correctionController?.correctSelection(targetApplication: self.lastTargetApplication)
+      let target = self.lastTargetApplication
+      let timings = self.timingsOverride(for: target)
+      self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
     }
   }
 
   @objc private func correctAll() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
-      self.correctionController?.correctAll(targetApplication: self.lastTargetApplication)
+      let target = self.lastTargetApplication
+      let timings = self.timingsOverride(for: target)
+      self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
+    }
+  }
+
+  @objc private func cancelCorrection() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      if self.correctionController?.cancelCurrentCorrection() == true {
+        self.feedback?.showInfo("Canceling...")
+      } else {
+        self.feedback?.showInfo("No correction in progress")
+      }
     }
   }
 
@@ -789,6 +929,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.showSimpleAlert(title: "Start at Login Failed", message: message)
         self.syncLaunchAtLoginMenuState()
       }
+    }
+  }
+
+  @objc private func toggleFallbackToOpenRouter() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      self.settings.fallbackToOpenRouterOnGeminiError.toggle()
+      self.persistSettings()
+      self.syncFallbackMenuState()
     }
   }
 
@@ -1477,7 +1626,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           }
           return
         }
-        if HotKeyManager.checkHotKeyInUse(keyCode: newHotKey.keyCode, modifiers: newHotKey.modifiers) {
+        if HotKeyManager.isHotKeyInUse(
+          hotKey: newHotKey,
+          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll]
+        ) {
           self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
           return
         }
@@ -1528,7 +1680,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           }
           return
         }
-        if HotKeyManager.checkHotKeyInUse(keyCode: newHotKey.keyCode, modifiers: newHotKey.modifiers) {
+        if HotKeyManager.isHotKeyInUse(
+          hotKey: newHotKey,
+          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll]
+        ) {
           self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
           return
         }
@@ -1580,6 +1735,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     allItem?.title = "Correct All"
     allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
     allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
+  }
+
+  private func syncCancelMenuState() {
+    cancelCorrectionItem?.isEnabled = correctionController?.isBusy == true
   }
 
   private func promptForHotKey(title: String, message: String, defaultHotKey: Settings.HotKey) -> Settings.HotKey? {
@@ -1666,9 +1825,13 @@ extension AppDelegate: SPUUpdaterDelegate {
   nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
     Task { @MainActor [weak self] in
       guard let self else { return }
-      guard self.manualUpdateCheckInProgress else { return }
-      self.manualUpdateFoundUpdate = true
-      self.feedback?.showInfo("Update available.")
+      self.updateFoundInCycle = true
+      self.updateStatus = .available
+      self.recordLastUpdateCheck()
+      self.syncUpdateMenuItems()
+      if self.manualUpdateCheckInProgress {
+        self.feedback?.showInfo("Update available.")
+      }
     }
   }
 
@@ -1676,9 +1839,14 @@ extension AppDelegate: SPUUpdaterDelegate {
     let nsError = error as NSError
     Task { @MainActor [weak self] in
       guard let self else { return }
-      guard self.manualUpdateCheckInProgress else { return }
       let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
-      self.finishManualUpdateCheck(with: feedback)
+      self.updateFoundInCycle = false
+      self.updateStatus = .message(feedback.message)
+      self.recordLastUpdateCheck()
+      self.syncUpdateMenuItems()
+      if self.manualUpdateCheckInProgress {
+        self.finishManualUpdateCheck(with: feedback)
+      }
     }
   }
 
@@ -1686,17 +1854,37 @@ extension AppDelegate: SPUUpdaterDelegate {
     let nsError = error as NSError?
     Task { @MainActor [weak self] in
       guard let self else { return }
-      guard updateCheck == .updates, self.manualUpdateCheckInProgress else { return }
-      if self.manualUpdateFoundUpdate {
-        self.resetManualUpdateCheckState()
+      guard updateCheck == .updates else { return }
+
+      let foundUpdate = self.updateFoundInCycle
+      self.updateFoundInCycle = false
+      if foundUpdate {
+        self.updateStatus = .available
+        self.recordLastUpdateCheck()
+        self.syncUpdateMenuItems()
+        if self.manualUpdateCheckInProgress {
+          self.finishManualUpdateCheck(with: nil)
+        }
         return
       }
+
       if let nsError {
         let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
-        self.finishManualUpdateCheck(with: feedback)
+        self.updateStatus = .message(feedback.message)
+        self.recordLastUpdateCheck()
+        self.syncUpdateMenuItems()
+        if self.manualUpdateCheckInProgress {
+          self.finishManualUpdateCheck(with: feedback)
+        }
         return
       }
-      self.finishManualUpdateCheck(with: UpdateCheckFeedback(kind: .info, message: "You're up to date."))
+
+      self.updateStatus = .upToDate
+      self.recordLastUpdateCheck()
+      self.syncUpdateMenuItems()
+      if self.manualUpdateCheckInProgress {
+        self.finishManualUpdateCheck(with: UpdateCheckFeedback(kind: .info, message: "You're up to date."))
+      }
     }
   }
 }

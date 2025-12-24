@@ -19,6 +19,11 @@ struct FeedbackCooldown: Sendable {
 
 @MainActor
 final class CorrectionController {
+  struct RecoveryAction: Sendable {
+    let message: String
+    let corrector: GrammarCorrector?
+  }
+
   struct Timings: Sendable {
     let activationDelay: Duration
     let selectAllDelay: Duration
@@ -61,8 +66,19 @@ final class CorrectionController {
       postPasteDelay = Timings.duration(milliseconds: settings.postPasteDelayMilliseconds)
     }
 
-    private static func duration(milliseconds value: Int) -> Duration {
+    static func duration(milliseconds value: Int) -> Duration {
       .milliseconds(Int64(max(0, value)))
+    }
+
+    func applying(_ profile: Settings.TimingProfile) -> Timings {
+      Timings(
+        activationDelay: profile.activationDelayMilliseconds.map(Timings.duration) ?? activationDelay,
+        selectAllDelay: profile.selectAllDelayMilliseconds.map(Timings.duration) ?? selectAllDelay,
+        copySettleDelay: profile.copySettleDelayMilliseconds.map(Timings.duration) ?? copySettleDelay,
+        copyTimeout: profile.copyTimeoutMilliseconds.map(Timings.duration) ?? copyTimeout,
+        pasteSettleDelay: profile.pasteSettleDelayMilliseconds.map(Timings.duration) ?? pasteSettleDelay,
+        postPasteDelay: profile.postPasteDelayMilliseconds.map(Timings.duration) ?? postPasteDelay
+      )
     }
   }
 
@@ -70,10 +86,11 @@ final class CorrectionController {
   private let feedback: FeedbackPresenter
   private let keyboard: KeyboardControlling
   private let pasteboard: PasteboardControlling
-  private let recoverer: (@MainActor (Error) async -> String?)?
+  private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
 
   private var timings: Timings
   private var isRunning = false
+  private var currentTask: Task<Void, Never>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
 
   init(
@@ -82,7 +99,7 @@ final class CorrectionController {
     timings: Timings = .default,
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
-    recoverer: (@MainActor (Error) async -> String?)? = nil
+    recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil
   ) {
     self.corrector = corrector
     self.feedback = feedback
@@ -100,12 +117,23 @@ final class CorrectionController {
     self.timings = timings
   }
 
-  func correctSelection(targetApplication: NSRunningApplication? = nil) {
-    run(mode: .selection, targetApplication: targetApplication)
+  var isBusy: Bool {
+    isRunning
   }
 
-  func correctAll(targetApplication: NSRunningApplication? = nil) {
-    run(mode: .all, targetApplication: targetApplication)
+  @discardableResult
+  func cancelCurrentCorrection() -> Bool {
+    guard isRunning, let currentTask else { return false }
+    currentTask.cancel()
+    return true
+  }
+
+  func correctSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
+    run(mode: .selection, targetApplication: targetApplication, timingsOverride: timingsOverride)
+  }
+
+  func correctAll(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
+    run(mode: .all, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
   private enum Mode {
@@ -113,20 +141,23 @@ final class CorrectionController {
     case all
   }
 
-  private func run(mode: Mode, targetApplication: NSRunningApplication?) {
+  private func run(mode: Mode, targetApplication: NSRunningApplication?, timingsOverride: Timings?) {
     guard !isRunning else {
       maybeShowBusyFeedback()
       return
     }
     isRunning = true
     let corrector = corrector
-    let timings = timings
+    let timings = timingsOverride ?? timings
+    let task = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer {
+        self.isRunning = false
+        self.currentTask = nil
+      }
 
-    Task { @MainActor in
-      defer { isRunning = false }
-
-      guard keyboard.isAccessibilityTrusted(prompt: true) else {
-        feedback.showError("Enable Accessibility")
+      guard self.keyboard.isAccessibilityTrusted(prompt: true) else {
+        self.feedback.showError("Enable Accessibility")
         return
       }
 
@@ -141,57 +172,60 @@ final class CorrectionController {
         try? await Task.sleep(for: timings.activationDelay)
       }
 
-      let snapshot = pasteboard.snapshot()
-      defer { pasteboard.restore(snapshot) }
+      let snapshot = self.pasteboard.snapshot()
+      defer { self.pasteboard.restore(snapshot) }
+
+      var didPaste = false
 
       do {
         if mode == .all {
-          keyboard.sendCommandA()
+          self.keyboard.sendCommandA()
           try await Task.sleep(for: timings.selectAllDelay)
         }
 
-        let sentinel = "GC_COPY_SENTINEL_" + UUID().uuidString
-        pasteboard.setString(sentinel)
-        try await Task.sleep(for: timings.copySettleDelay)
-
-        let beforeCopyChangeCount = pasteboard.changeCount
-        keyboard.sendCommandC()
-        let inputText = try await pasteboard.waitForCopiedString(
-          after: beforeCopyChangeCount,
-          excluding: sentinel,
-          timeout: timings.copyTimeout
-        )
+        let inputText = try await self.copySelectedText(timings: timings)
+        try Task.checkCancellation()
 
         let corrected: String
         do {
-          corrected = try await runCorrector(corrector, text: inputText)
+          corrected = try await self.runCorrector(corrector, text: inputText)
         } catch {
-          if let recoverer, let message = await recoverer(error) {
-            feedback.showInfo(message)
-            let retryCorrector = self.corrector
-            corrected = try await runCorrector(retryCorrector, text: inputText)
+          if let recoverer, let action = await recoverer(error) {
+            self.feedback.showInfo(action.message)
+            let retryCorrector = action.corrector ?? self.corrector
+            corrected = try await self.runCorrector(retryCorrector, text: inputText)
           } else {
             throw error
           }
         }
         guard corrected != inputText else {
-          feedback.showInfo("No changes")
+          self.feedback.showInfo("No changes")
           return
         }
 
-        pasteboard.setString(corrected)
+        try Task.checkCancellation()
+        self.pasteboard.setString(corrected)
         try await Task.sleep(for: timings.pasteSettleDelay)
-        keyboard.sendCommandV()
+        try Task.checkCancellation()
+        self.keyboard.sendCommandV()
+        didPaste = true
         try await Task.sleep(for: timings.postPasteDelay)
-        feedback.showSuccess()
+        self.feedback.showSuccess()
+      } catch is CancellationError {
+        if didPaste {
+          self.feedback.showSuccess()
+        } else {
+          self.feedback.showInfo("Canceled")
+        }
       } catch {
         let message =
           (error as? LocalizedError)?.errorDescription ??
           (error as NSError).localizedDescription
-        feedback.showError(message)
+        self.feedback.showError(message)
         NSLog("[TextPolish] \(error)")
       }
     }
+    currentTask = task
   }
 
   private func maybeShowBusyFeedback() {
@@ -200,9 +234,56 @@ final class CorrectionController {
     }
   }
 
+  private func copySelectedText(timings: Timings) async throws -> String {
+    do {
+      return try await attemptCopy(excluding: copySentinel(), timings: timings)
+    } catch {
+      if shouldRetryCopy(error) {
+        try Task.checkCancellation()
+        return try await attemptCopy(excluding: copySentinel(), timings: timings)
+      }
+      throw error
+    }
+  }
+
+  private func attemptCopy(excluding sentinel: String, timings: Timings) async throws -> String {
+    pasteboard.setString(sentinel)
+    try await Task.sleep(for: timings.copySettleDelay)
+
+    let beforeCopyChangeCount = pasteboard.changeCount
+    keyboard.sendCommandC()
+    return try await pasteboard.waitForCopiedString(
+      after: beforeCopyChangeCount,
+      excluding: sentinel,
+      timeout: timings.copyTimeout
+    )
+  }
+
+  private func shouldRetryCopy(_ error: Error) -> Bool {
+    if error is CancellationError {
+      return false
+    }
+    if let pasteboardError = error as? PasteboardController.PasteboardError {
+      switch pasteboardError {
+      case .noChange, .noString:
+        return true
+      }
+    }
+    return false
+  }
+
+  private func copySentinel() -> String {
+    "GC_COPY_SENTINEL_" + UUID().uuidString
+  }
+
   private func runCorrector(_ corrector: GrammarCorrector, text: String) async throws -> String {
-    try await Task.detached(priority: .userInitiated) {
+    let task = Task.detached(priority: .userInitiated) {
       try await corrector.correct(text)
-    }.value
+    }
+    return try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
+    }
   }
 }

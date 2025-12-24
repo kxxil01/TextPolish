@@ -53,4 +53,38 @@ final class HotKeyManagerTests: XCTestCase {
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], oldSelection)
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
   }
+
+  func testIsHotKeyInUseIgnoresCurrentHotKeys() {
+    let hotKey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey))
+    var checkerCalled = false
+
+    let inUse = HotKeyManager.isHotKeyInUse(
+      hotKey: hotKey,
+      ignoring: [hotKey],
+      checker: { _, _ in
+        checkerCalled = true
+        return true
+      }
+    )
+
+    XCTAssertFalse(inUse)
+    XCTAssertFalse(checkerCalled)
+  }
+
+  func testIsHotKeyInUseUsesCheckerWhenNotIgnored() {
+    let hotKey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey))
+    var checkerCalled = false
+
+    let inUse = HotKeyManager.isHotKeyInUse(
+      hotKey: hotKey,
+      ignoring: [],
+      checker: { _, _ in
+        checkerCalled = true
+        return true
+      }
+    )
+
+    XCTAssertTrue(inUse)
+    XCTAssertTrue(checkerCalled)
+  }
 }

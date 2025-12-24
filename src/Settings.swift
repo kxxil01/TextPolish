@@ -169,6 +169,31 @@ struct Settings: Codable {
     }
   }
 
+  struct TimingProfile: Codable, Sendable, Equatable {
+    var activationDelayMilliseconds: Int?
+    var selectAllDelayMilliseconds: Int?
+    var copySettleDelayMilliseconds: Int?
+    var copyTimeoutMilliseconds: Int?
+    var pasteSettleDelayMilliseconds: Int?
+    var postPasteDelayMilliseconds: Int?
+
+    init(
+      activationDelayMilliseconds: Int? = nil,
+      selectAllDelayMilliseconds: Int? = nil,
+      copySettleDelayMilliseconds: Int? = nil,
+      copyTimeoutMilliseconds: Int? = nil,
+      pasteSettleDelayMilliseconds: Int? = nil,
+      postPasteDelayMilliseconds: Int? = nil
+    ) {
+      self.activationDelayMilliseconds = activationDelayMilliseconds
+      self.selectAllDelayMilliseconds = selectAllDelayMilliseconds
+      self.copySettleDelayMilliseconds = copySettleDelayMilliseconds
+      self.copyTimeoutMilliseconds = copyTimeoutMilliseconds
+      self.pasteSettleDelayMilliseconds = pasteSettleDelayMilliseconds
+      self.postPasteDelayMilliseconds = postPasteDelayMilliseconds
+    }
+  }
+
   enum Provider: String, Codable {
     case gemini
     case openRouter
@@ -193,8 +218,10 @@ struct Settings: Codable {
   var copyTimeoutMilliseconds: Int
   var pasteSettleDelayMilliseconds: Int
   var postPasteDelayMilliseconds: Int
+  var timingProfiles: [String: TimingProfile]
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
+  var fallbackToOpenRouterOnGeminiError: Bool
   var geminiApiKey: String?
   var geminiModel: String
   var geminiBaseURL: String
@@ -217,8 +244,10 @@ struct Settings: Codable {
     copyTimeoutMilliseconds: Int = 900,
     pasteSettleDelayMilliseconds: Int = 25,
     postPasteDelayMilliseconds: Int = 180,
+    timingProfiles: [String: TimingProfile] = [:],
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
+    fallbackToOpenRouterOnGeminiError: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.0-flash-lite-001",
     geminiBaseURL: String = "https://generativelanguage.googleapis.com",
@@ -240,8 +269,10 @@ struct Settings: Codable {
     self.copyTimeoutMilliseconds = copyTimeoutMilliseconds
     self.pasteSettleDelayMilliseconds = pasteSettleDelayMilliseconds
     self.postPasteDelayMilliseconds = postPasteDelayMilliseconds
+    self.timingProfiles = timingProfiles
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
+    self.fallbackToOpenRouterOnGeminiError = fallbackToOpenRouterOnGeminiError
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
     self.geminiBaseURL = geminiBaseURL
@@ -266,8 +297,11 @@ struct Settings: Codable {
     copyTimeoutMilliseconds = try container.decodeIfPresent(Int.self, forKey: .copyTimeoutMilliseconds) ?? 900
     pasteSettleDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .pasteSettleDelayMilliseconds) ?? 25
     postPasteDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .postPasteDelayMilliseconds) ?? 180
+    timingProfiles = try container.decodeIfPresent([String: TimingProfile].self, forKey: .timingProfiles) ?? [:]
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
+    fallbackToOpenRouterOnGeminiError =
+      try container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError) ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
     geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.0-flash-lite-001"
     geminiBaseURL =
@@ -293,8 +327,10 @@ struct Settings: Codable {
     case copyTimeoutMilliseconds
     case pasteSettleDelayMilliseconds
     case postPasteDelayMilliseconds
+    case timingProfiles
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
+    case fallbackToOpenRouterOnGeminiError
     case geminiApiKey
     case geminiModel
     case geminiBaseURL
@@ -307,6 +343,16 @@ struct Settings: Codable {
     case openRouterMaxAttempts
     case openRouterMinSimilarity
     case openRouterExtraInstruction
+  }
+
+  func timingProfile(bundleIdentifier: String?, appName: String?) -> TimingProfile? {
+    if let bundleIdentifier, let profile = timingProfiles[bundleIdentifier] {
+      return profile
+    }
+    if let appName, let profile = timingProfiles[appName] {
+      return profile
+    }
+    return nil
   }
 
   static func defaults() -> Settings {
