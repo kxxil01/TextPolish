@@ -13,6 +13,7 @@ This project follows Semantic Versioning.
 - Automatic Homebrew tap update on release
 
 ### Changed
+- Landing page download buttons now default to `.pkg` installer
 - Release workflow now auto-updates homebrew-tap with SHA256
 
 ## [0.0.5] - 2025-12-24
