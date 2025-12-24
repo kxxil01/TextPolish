@@ -194,6 +194,54 @@ struct Settings: Codable {
     }
   }
 
+  enum CorrectionLanguage: String, Codable, Sendable {
+    case auto = "auto"
+    case englishUS = "en-US"
+    case indonesian = "id-ID"
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.singleValueContainer()
+      let raw = try container.decode(String.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      switch raw {
+      case "en-us", "en_us", "english", "english-us", "english_us":
+        self = .englishUS
+      case "id-id", "id_id", "indonesian", "bahasa", "bahasa-indonesia", "bahasa_indonesia", "id":
+        self = .indonesian
+      case "auto":
+        fallthrough
+      default:
+        self = .auto
+      }
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.singleValueContainer()
+      try container.encode(rawValue)
+    }
+
+    var displayName: String {
+      switch self {
+      case .auto:
+        return "Auto"
+      case .englishUS:
+        return "English (US)"
+      case .indonesian:
+        return "Indonesian"
+      }
+    }
+
+    var promptInstruction: String? {
+      switch self {
+      case .auto:
+        return nil
+      case .englishUS:
+        return "Language: English (US). Correct in English (US). Do not translate."
+      case .indonesian:
+        return "Language: Indonesian. Correct in Indonesian. Do not translate."
+      }
+    }
+  }
+
   enum Provider: String, Codable {
     case gemini
     case openRouter
@@ -219,6 +267,7 @@ struct Settings: Codable {
   var pasteSettleDelayMilliseconds: Int
   var postPasteDelayMilliseconds: Int
   var timingProfiles: [String: TimingProfile]
+  var correctionLanguage: CorrectionLanguage
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
   var fallbackToOpenRouterOnGeminiError: Bool
@@ -245,6 +294,7 @@ struct Settings: Codable {
     pasteSettleDelayMilliseconds: Int = 25,
     postPasteDelayMilliseconds: Int = 180,
     timingProfiles: [String: TimingProfile] = [:],
+    correctionLanguage: CorrectionLanguage = .auto,
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
     fallbackToOpenRouterOnGeminiError: Bool = false,
@@ -270,6 +320,7 @@ struct Settings: Codable {
     self.pasteSettleDelayMilliseconds = pasteSettleDelayMilliseconds
     self.postPasteDelayMilliseconds = postPasteDelayMilliseconds
     self.timingProfiles = timingProfiles
+    self.correctionLanguage = correctionLanguage
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
     self.fallbackToOpenRouterOnGeminiError = fallbackToOpenRouterOnGeminiError
@@ -298,6 +349,7 @@ struct Settings: Codable {
     pasteSettleDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .pasteSettleDelayMilliseconds) ?? 25
     postPasteDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .postPasteDelayMilliseconds) ?? 180
     timingProfiles = try container.decodeIfPresent([String: TimingProfile].self, forKey: .timingProfiles) ?? [:]
+    correctionLanguage = try container.decodeIfPresent(CorrectionLanguage.self, forKey: .correctionLanguage) ?? .auto
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
     fallbackToOpenRouterOnGeminiError =
@@ -328,6 +380,7 @@ struct Settings: Codable {
     case pasteSettleDelayMilliseconds
     case postPasteDelayMilliseconds
     case timingProfiles
+    case correctionLanguage
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
     case fallbackToOpenRouterOnGeminiError

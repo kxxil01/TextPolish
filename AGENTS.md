@@ -20,10 +20,10 @@ Must-haves:
 - Works in Discord’s message box reliably (requires focus/selection as appropriate).
 - Preserves clipboard even on error/timeouts.
 - Retains original formatting (line breaks/Markdown) and makes minimal edits (no “AI rewrite” tone changes).
-- Uses a configurable backend:
+- Uses a configurable provider:
   - Default: Gemini (`provider: "gemini"`)
   - Optional: OpenRouter (`provider: "openRouter"`)
-- Backend is selectable in-app from the status bar menu.
+- Provider is selectable in-app from the status bar menu.
 - API keys are entered in-app and stored in Keychain (no manual config edits required for secrets).
 - Gemini model can be changed in-app if the default model returns 404.
 - Gemini model can be auto-detected in-app (lists available models for the API key).
@@ -32,8 +32,9 @@ Must-haves:
 Nice-to-haves (still MVP-friendly):
 
 - Basic feedback via status bar icon/tooltip (success/info/error).
-- Configurable backend + model + timeouts via JSON file.
+- Configurable provider + model + timeouts via JSON file.
 - Start at Login toggle in the status bar menu.
+- Language selector (Auto, English (US), Indonesian).
 
 Non-goals for MVP:
 
@@ -47,13 +48,13 @@ Menu bar app (no Dock icon) with hotkeys and menu items:
 
 - `src/AppDelegate.swift`: status item + menu + hotkey hookup.
 - Start at Login toggle (uses `ServiceManagement` / `SMAppService.mainApp`).
-- Menu items: backend select, key/model prompts, Privacy, About, Accessibility shortcut, reveal in Finder.
+- Menu items: Provider select + key/model prompts, Hotkeys, Cancel Correction, Check for Updates submenu (status + last checked), Preferences (Language, Start at Login, fallback, Accessibility, Settings file), About & Privacy.
 - `src/HotKeyManager.swift`: Carbon global hotkeys.
 - `src/CorrectionController.swift`: orchestrates copy/correct/paste with safety guards.
 - `src/KeyboardController.swift`: sends `⌘A/⌘C/⌘V` via CGEvent (needs Accessibility).
 - `src/PasteboardController.swift`: snapshots/restores clipboard; waits for copied text.
-- `src/GeminiCorrector.swift`: Gemini backend (fast LLM grammar correction).
-- `src/OpenRouterCorrector.swift`: OpenRouter backend (OpenAI-compatible chat completions).
+- `src/GeminiCorrector.swift`: Gemini provider (fast LLM grammar correction).
+- `src/OpenRouterCorrector.swift`: OpenRouter provider (OpenAI-compatible chat completions).
 - `src/CorrectorFactory.swift`: selects provider; fails cleanly if misconfigured.
 - `src/Settings.swift`: `~/Library/Application Support/TextPolish/settings.json` (auto-created; migrates from legacy `GrammarCorrection` folder if present).
 - `scripts/build_app.sh`: builds `build/TextPolish.app` via `swiftc`.
@@ -82,7 +83,7 @@ Grant permissions:
 
 - System Settings → Privacy & Security → Accessibility → enable `TextPolish`
 
-## Settings (Backend Selection)
+## Settings (Provider Selection)
 
 Settings file:
 
@@ -93,6 +94,9 @@ Common fields:
 
 - `provider`: `"gemini"` (default) or `"openRouter"`
 - `requestTimeoutSeconds`: e.g. `20`
+- `correctionLanguage`: `"auto"` (default), `"en-US"`, or `"id-ID"`
+- `timingProfiles`: per-app timing overrides (keys are bundle identifiers or app names)
+- `fallbackToOpenRouterOnGeminiError`: `true` to retry with OpenRouter on Gemini 429/5xx/network errors
 
 Gemini fields:
 
@@ -120,18 +124,17 @@ OpenRouter fields:
 
 - If Discord (or another app) doesn’t update the clipboard on `⌘C`, we must avoid using stale clipboard content.
 - “Correct all” assumes focus is in the message input; otherwise `⌘A` may select other content.
-- Network backends can time out; keep sane timeouts and clear error feedback.
-- LLMs can occasionally return quotes/code fences; Gemini backend trims common wrappers.
+- Network providers can time out; keep sane timeouts and clear error feedback.
+- LLMs can occasionally return quotes/code fences; Gemini provider trims common wrappers.
+- Forcing a language can reduce quality on mixed-language text.
 
 ## Roadmap
 
 ### Next (Reliability + UX)
 
-- Harden copy detection (don’t proceed if `⌘C` didn’t change clipboard).
 - Add a small debounce/throttle so rapid hotkey presses don’t stack requests.
-- Make hotkeys configurable (with conflict detection).
 - Add a “dry run” / preview popover option (optional) without heavy UI.
-- Add cancellation (Esc / menu) so you can stop an in-flight correction.
+- Add Esc-to-cancel (menu cancel exists).
 - Add local-only option: offline model (stretch).
 
 ### Packaging / Distribution
@@ -160,11 +163,10 @@ Release helper:
 
 - `scripts/sign_and_notarize.sh` (expects `CODESIGN_IDENTITY` and `NOTARY_PROFILE`)
 
-### Backend Improvements
+### Provider Improvements
 
 - Allow per-provider prompt/model tuning (Gemini).
 - Add streaming/cancellation (Gemini) if needed for responsiveness.
-- Add provider selection in a minimal settings menu (still lightweight).
 
 ## Coding Conventions
 

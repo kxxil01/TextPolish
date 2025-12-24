@@ -118,6 +118,7 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.postPasteDelayMilliseconds, 180)
     XCTAssertEqual(decoded.timingProfiles, [:])
     XCTAssertEqual(decoded.fallbackToOpenRouterOnGeminiError, false)
+    XCTAssertEqual(decoded.correctionLanguage, .auto)
     XCTAssertEqual(decoded.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(decoded.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
     XCTAssertEqual(decoded.hotKeyCorrectSelection, .correctSelectionDefault)
@@ -158,6 +159,7 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(defaults.postPasteDelayMilliseconds, 180)
     XCTAssertEqual(defaults.timingProfiles, [:])
     XCTAssertEqual(defaults.fallbackToOpenRouterOnGeminiError, false)
+    XCTAssertEqual(defaults.correctionLanguage, .auto)
     XCTAssertEqual(defaults.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(defaults.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
     XCTAssertEqual(defaults.hotKeyCorrectSelection, .correctSelectionDefault)
@@ -203,5 +205,41 @@ final class SettingsHotKeyTests: XCTestCase {
 
     let resolved = settings.timingProfile(bundleIdentifier: nil, appName: "ExampleApp")
     XCTAssertEqual(resolved, nameProfile)
+  }
+
+  func testDecodeCorrectionLanguageEnglish() throws {
+    let json = """
+    {
+      "correctionLanguage": "en-US"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.correctionLanguage, .englishUS)
+  }
+
+  func testDecodeCorrectionLanguageIndonesian() throws {
+    let json = """
+    {
+      "correctionLanguage": "id-ID"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.correctionLanguage, .indonesian)
+  }
+
+  func testDecodeCorrectionLanguageUnknownDefaultsToAuto() throws {
+    let json = """
+    {
+      "correctionLanguage": "klingon"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.correctionLanguage, .auto)
   }
 }

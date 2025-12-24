@@ -23,8 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     userDriverDelegate: nil
   )
 
-  private var backendGeminiItem: NSMenuItem?
-  private var backendOpenRouterItem: NSMenuItem?
+  private var providerGeminiItem: NSMenuItem?
+  private var providerOpenRouterItem: NSMenuItem?
   private var setGeminiKeyItem: NSMenuItem?
   private var setGeminiModelItem: NSMenuItem?
   private var detectGeminiModelItem: NSMenuItem?
@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var setOpenRouterModelItem: NSMenuItem?
   private var detectOpenRouterModelItem: NSMenuItem?
   private var launchAtLoginItem: NSMenuItem?
+  private var languageAutoItem: NSMenuItem?
+  private var languageEnglishItem: NSMenuItem?
+  private var languageIndonesianItem: NSMenuItem?
   private var fallbackToOpenRouterItem: NSMenuItem?
   private var selectionItem: NSMenuItem?
   private var allItem: NSMenuItem?
@@ -238,30 +241,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.addItem(hotKeysItem)
     menu.addItem(.separator())
 
-    let backendItem = NSMenuItem(title: "Backend", action: nil, keyEquivalent: "")
-    let backendMenu = NSMenu()
+    let providerItem = NSMenuItem(title: "Provider", action: nil, keyEquivalent: "")
+    let providerMenu = NSMenu()
 
     let geminiItem = NSMenuItem(
       title: "Gemini",
-      action: #selector(selectGeminiBackend),
+      action: #selector(selectGeminiProvider),
       keyEquivalent: ""
     )
     geminiItem.target = self
 
     let openRouterItem = NSMenuItem(
       title: "OpenRouter",
-      action: #selector(selectOpenRouterBackend),
+      action: #selector(selectOpenRouterProvider),
       keyEquivalent: ""
     )
     openRouterItem.target = self
 
-    backendGeminiItem = geminiItem
-    backendOpenRouterItem = openRouterItem
-    syncBackendMenuStates()
+    providerGeminiItem = geminiItem
+    providerOpenRouterItem = openRouterItem
+    syncProviderMenuStates()
 
-    backendMenu.addItem(geminiItem)
-    backendMenu.addItem(openRouterItem)
-    backendMenu.addItem(.separator())
+    providerMenu.addItem(geminiItem)
+    providerMenu.addItem(openRouterItem)
+    providerMenu.addItem(.separator())
 
     let setGeminiKeyItem = NSMenuItem(
       title: "Set Gemini API Key…",
@@ -312,18 +315,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     self.setOpenRouterModelItem = setOpenRouterModelItem
     self.detectOpenRouterModelItem = detectOpenRouterModelItem
 
-    backendMenu.addItem(setGeminiKeyItem)
-    backendMenu.addItem(setGeminiModelItem)
-    backendMenu.addItem(detectGeminiModelItem)
-    backendMenu.addItem(setOpenRouterKeyItem)
-    backendMenu.addItem(setOpenRouterModelItem)
-    backendMenu.addItem(detectOpenRouterModelItem)
+    providerMenu.addItem(setGeminiKeyItem)
+    providerMenu.addItem(setGeminiModelItem)
+    providerMenu.addItem(detectGeminiModelItem)
+    providerMenu.addItem(setOpenRouterKeyItem)
+    providerMenu.addItem(setOpenRouterModelItem)
+    providerMenu.addItem(detectOpenRouterModelItem)
 
-    backendItem.submenu = backendMenu
-    menu.addItem(backendItem)
+    providerItem.submenu = providerMenu
+    menu.addItem(providerItem)
 
-    let advancedItem = NSMenuItem(title: "Advanced", action: nil, keyEquivalent: "")
-    let advancedMenu = NSMenu()
+    let preferencesItem = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
+    let preferencesMenu = NSMenu()
 
     let launchAtLoginItem = NSMenuItem(
       title: "Start at Login",
@@ -332,7 +335,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     launchAtLoginItem.target = self
     self.launchAtLoginItem = launchAtLoginItem
-    advancedMenu.addItem(launchAtLoginItem)
+    preferencesMenu.addItem(launchAtLoginItem)
+
+    let languageItem = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
+    let languageMenu = NSMenu()
+
+    let languageAutoItem = NSMenuItem(
+      title: Settings.CorrectionLanguage.auto.displayName,
+      action: #selector(selectLanguageAuto),
+      keyEquivalent: ""
+    )
+    languageAutoItem.target = self
+
+    let languageEnglishItem = NSMenuItem(
+      title: Settings.CorrectionLanguage.englishUS.displayName,
+      action: #selector(selectLanguageEnglish),
+      keyEquivalent: ""
+    )
+    languageEnglishItem.target = self
+
+    let languageIndonesianItem = NSMenuItem(
+      title: Settings.CorrectionLanguage.indonesian.displayName,
+      action: #selector(selectLanguageIndonesian),
+      keyEquivalent: ""
+    )
+    languageIndonesianItem.target = self
+
+    self.languageAutoItem = languageAutoItem
+    self.languageEnglishItem = languageEnglishItem
+    self.languageIndonesianItem = languageIndonesianItem
+
+    languageMenu.addItem(languageAutoItem)
+    languageMenu.addItem(languageEnglishItem)
+    languageMenu.addItem(languageIndonesianItem)
+
+    languageItem.submenu = languageMenu
+    preferencesMenu.addItem(languageItem)
 
     let fallbackToOpenRouterItem = NSMenuItem(
       title: "Fallback to OpenRouter on Gemini errors",
@@ -341,7 +379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     fallbackToOpenRouterItem.target = self
     self.fallbackToOpenRouterItem = fallbackToOpenRouterItem
-    advancedMenu.addItem(fallbackToOpenRouterItem)
+    preferencesMenu.addItem(fallbackToOpenRouterItem)
 
     let accessibilityItem = NSMenuItem(
       title: "Open Accessibility Settings…",
@@ -349,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       keyEquivalent: ""
     )
     accessibilityItem.target = self
-    advancedMenu.addItem(accessibilityItem)
+    preferencesMenu.addItem(accessibilityItem)
 
     let openSettingsItem = NSMenuItem(
       title: "Open Settings File…",
@@ -357,41 +395,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       keyEquivalent: ""
     )
     openSettingsItem.target = self
-    advancedMenu.addItem(openSettingsItem)
+    preferencesMenu.addItem(openSettingsItem)
 
-    advancedItem.submenu = advancedMenu
-    menu.addItem(advancedItem)
+    preferencesItem.submenu = preferencesMenu
+    menu.addItem(preferencesItem)
 
     let aboutItem = NSMenuItem(
-      title: "About & Privacy…",
+      title: "About & Privacy",
       action: #selector(showAboutAndPrivacy),
       keyEquivalent: ""
     )
     aboutItem.target = self
     menu.addItem(aboutItem)
 
+    let updatesItem = NSMenuItem(title: "Check for Updates", action: nil, keyEquivalent: "")
+    let updatesMenu = NSMenu()
+
     let checkForUpdatesItem = NSMenuItem(
-      title: "Check for Updates…",
+      title: "Check",
       action: #selector(checkForUpdates),
       keyEquivalent: ""
     )
     checkForUpdatesItem.target = self
-    checkForUpdatesItem.isEnabled = isUpdaterAvailable
-    if !isUpdaterAvailable {
-      checkForUpdatesItem.toolTip = "Updates are not configured for this build."
-    }
     self.checkForUpdatesItem = checkForUpdatesItem
-    menu.addItem(checkForUpdatesItem)
+    updatesMenu.addItem(checkForUpdatesItem)
 
     let updateStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     updateStatusItem.isEnabled = false
     self.updateStatusItem = updateStatusItem
-    menu.addItem(updateStatusItem)
+    updatesMenu.addItem(updateStatusItem)
 
     let updateLastCheckedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     updateLastCheckedItem.isEnabled = false
     self.updateLastCheckedItem = updateLastCheckedItem
-    menu.addItem(updateLastCheckedItem)
+    updatesMenu.addItem(updateLastCheckedItem)
+
+    updatesItem.submenu = updatesMenu
+    menu.addItem(updatesItem)
 
     menu.addItem(.separator())
 
@@ -403,7 +443,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     statusMenu = menu
     syncLaunchAtLoginMenuState()
     syncFallbackMenuState()
-    syncBackendMenuStates()
+    syncProviderMenuStates()
+    syncLanguageMenuState()
     syncHotKeyMenuItems()
     syncCancelMenuState()
     syncUpdateMenuItems()
@@ -423,9 +464,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  private func syncBackendMenuStates() {
-    backendGeminiItem?.state = settings.provider == .gemini ? .on : .off
-    backendOpenRouterItem?.state = settings.provider == .openRouter ? .on : .off
+  private func syncProviderMenuStates() {
+    providerGeminiItem?.state = settings.provider == .gemini ? .on : .off
+    providerOpenRouterItem?.state = settings.provider == .openRouter ? .on : .off
     setGeminiKeyItem?.isEnabled = settings.provider == .gemini
     setGeminiModelItem?.isEnabled = settings.provider == .gemini
     detectGeminiModelItem?.isEnabled = settings.provider == .gemini
@@ -459,6 +500,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func syncFallbackMenuState() {
     fallbackToOpenRouterItem?.state = settings.fallbackToOpenRouterOnGeminiError ? .on : .off
+  }
+
+  private func syncLanguageMenuState() {
+    languageAutoItem?.state = settings.correctionLanguage == .auto ? .on : .off
+    languageEnglishItem?.state = settings.correctionLanguage == .englishUS ? .on : .off
+    languageIndonesianItem?.state = settings.correctionLanguage == .indonesian ? .on : .off
   }
 
   private func syncUpdateMenuItems() {
@@ -594,7 +641,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
           settings.geminiModel = chosen
           persistSettings()
-          syncBackendMenuStates()
+          syncProviderMenuStates()
           refreshCorrector()
           return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
         } catch {
@@ -637,7 +684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         settings.openRouterModel = chosen
         persistSettings()
-        syncBackendMenuStates()
+        syncProviderMenuStates()
         refreshCorrector()
         let message = preferFree
           ? "OpenRouter switched to a working free model: \(chosen)"
@@ -716,10 +763,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func selectGeminiBackend() {
+  @objc private func selectGeminiProvider() {
     settings.provider = .gemini
     persistSettings()
-    syncBackendMenuStates()
+    syncProviderMenuStates()
     refreshCorrector()
 
     let keyFromKeychain =
@@ -736,10 +783,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func selectOpenRouterBackend() {
+  @objc private func selectOpenRouterProvider() {
     settings.provider = .openRouter
     persistSettings()
-    syncBackendMenuStates()
+    syncProviderMenuStates()
     refreshCorrector()
 
     let keyFromKeychain =
@@ -777,7 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           }
           self.settings.geminiApiKey = nil
           self.persistSettings()
-          self.syncBackendMenuStates()
+          self.syncProviderMenuStates()
           self.feedback?.showInfo("Gemini key cleared")
           self.refreshCorrector()
         } catch {
@@ -790,7 +837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountGemini)
           self.settings.geminiApiKey = nil
           self.persistSettings()
-          self.syncBackendMenuStates()
+          self.syncProviderMenuStates()
           self.feedback?.showInfo("Gemini key saved")
           self.refreshCorrector()
         } catch {
@@ -822,7 +869,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           }
           self.settings.openRouterApiKey = nil
           self.persistSettings()
-          self.syncBackendMenuStates()
+          self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenRouter key cleared")
           self.refreshCorrector()
         } catch {
@@ -835,7 +882,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenRouter)
           self.settings.openRouterApiKey = nil
           self.persistSettings()
-          self.syncBackendMenuStates()
+          self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenRouter key saved")
           self.refreshCorrector()
         } catch {
@@ -860,7 +907,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard !normalized.isEmpty else { return }
       self.settings.geminiModel = normalized
       self.persistSettings()
-      self.syncBackendMenuStates()
+      self.syncProviderMenuStates()
       self.refreshCorrector()
     }
   }
@@ -879,7 +926,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard !trimmed.isEmpty else { return }
       self.settings.openRouterModel = trimmed
       self.persistSettings()
-      self.syncBackendMenuStates()
+      self.syncProviderMenuStates()
       self.refreshCorrector()
     }
   }
@@ -941,6 +988,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  @objc private func selectLanguageAuto() {
+    runAfterMenuDismissed { [weak self] in
+      self?.setCorrectionLanguage(.auto)
+    }
+  }
+
+  @objc private func selectLanguageEnglish() {
+    runAfterMenuDismissed { [weak self] in
+      self?.setCorrectionLanguage(.englishUS)
+    }
+  }
+
+  @objc private func selectLanguageIndonesian() {
+    runAfterMenuDismissed { [weak self] in
+      self?.setCorrectionLanguage(.indonesian)
+    }
+  }
+
+  private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
+    guard settings.correctionLanguage != language else { return }
+    settings.correctionLanguage = language
+    persistSettings()
+    syncLanguageMenuState()
+  }
+
   private func isRunningFromApplicationsFolder() -> Bool {
     let path = Bundle.main.bundleURL.standardizedFileURL.path
     return path.hasPrefix("/Applications/")
@@ -960,7 +1032,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "If you quit, you can relaunch from Finder → Applications → \(expectedAppName).",
       "",
       "1) Grant Accessibility permission (required for ⌘C/⌘V/⌘A).",
-      "2) Set an API key: Backend → Set Gemini API Key… or Set OpenRouter API Key…",
+      "2) Set an API key: Provider → Set Gemini API Key… or Set OpenRouter API Key…",
       "",
       "Shortcuts:",
       "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
@@ -992,17 +1064,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let alert = NSAlert()
     alert.messageText = "Move \(appDisplayName) to /Applications"
     alert.informativeText = "Start at Login is most reliable when the app is in /Applications. Install the app there (for example via the .pkg), then enable Start at Login again."
-    alert.addButton(withTitle: "Reveal App")
-    alert.addButton(withTitle: "Cancel")
-    let response = alert.runModal()
-    if response == .alertFirstButtonReturn {
-      revealAppInFinder()
-    }
+    alert.addButton(withTitle: "OK")
+    _ = alert.runModal()
   }
 
   private func detectGeminiModelAsync() async {
     guard let apiKey = currentGeminiApiKey() else {
-      showSimpleAlert(title: "Missing Gemini API Key", message: "Set it via Backend → Set Gemini API Key…")
+      showSimpleAlert(title: "Missing Gemini API Key", message: "Set it via Provider → Set Gemini API Key…")
       return
     }
 
@@ -1015,7 +1083,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
       settings.geminiModel = chosen
       persistSettings()
-      syncBackendMenuStates()
+      syncProviderMenuStates()
       refreshCorrector()
       showSimpleAlert(title: "Gemini Model Updated", message: "Using: \(chosen)")
     } catch {
@@ -1028,7 +1096,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func detectOpenRouterModelAsync() async {
     guard let apiKey = currentOpenRouterApiKey() else {
-      showSimpleAlert(title: "Missing OpenRouter API Key", message: "Set it via Backend → Set OpenRouter API Key…")
+      showSimpleAlert(title: "Missing OpenRouter API Key", message: "Set it via Provider → Set OpenRouter API Key…")
       return
     }
 
@@ -1051,7 +1119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
       settings.openRouterModel = chosen
       persistSettings()
-      syncBackendMenuStates()
+      syncProviderMenuStates()
       refreshCorrector()
       showSimpleAlert(title: "OpenRouter Model Updated", message: "Using: \(chosen)")
     } catch {
@@ -1532,12 +1600,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func revealAppInFinder() {
-    runAfterMenuDismissed {
-      NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
-    }
-  }
-
   @objc private func showAboutAndPrivacy() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
@@ -1568,14 +1630,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
         "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
         "",
-        "Backend:",
+        "Provider:",
         "• Provider: \(providerName)",
         "• Model: \(providerModel)",
         "• URL: \(providerURL)",
         "",
         "Privacy:",
         "• Copies selected text or Select All to the clipboard temporarily",
-        "• Sends only that text to the backend over HTTPS",
+        "• Sends only that text to the provider over HTTPS",
         "• Pastes corrected text back",
         "• Restores your original clipboard",
         "• Stores API keys in macOS Keychain (service: \(self.keychainService))",

@@ -22,6 +22,7 @@ Settings live in `~/Library/Application Support/TextPolish/settings.json`.
 
 - `timingProfiles`: per-app overrides for copy/paste timings. Keys can be bundle identifiers or app names.
 - `fallbackToOpenRouterOnGeminiError`: retry with OpenRouter on Gemini request failures (429, 5xx, network).
+- `correctionLanguage`: force the correction language (`auto`, `en-US`, `id-ID`).
 
 ## Installer (.pkg)
 

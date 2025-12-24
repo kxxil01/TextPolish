@@ -20,12 +20,12 @@ final class GeminiCorrector: GrammarCorrector {
       case .requestFailed(let status, let message):
         if status == 404 {
           if let message, !message.isEmpty {
-            return "Gemini request failed (404): \(message) — try Backend → Detect Gemini Model… (or Set Gemini Model…) "
+            return "Gemini request failed (404): \(message) — try Provider → Detect Gemini Model… (or Set Gemini Model…) "
           }
-          return "Gemini request failed (404) — try Backend → Detect Gemini Model… (or Set Gemini Model…)"
+          return "Gemini request failed (404) — try Provider → Detect Gemini Model… (or Set Gemini Model…)"
         }
         if status == 429 {
-          return "Gemini quota exceeded (429) — check billing/rate limits or switch Backend → OpenRouter"
+          return "Gemini quota exceeded (429) — check billing/rate limits or switch Provider → OpenRouter"
         }
         if let message, !message.isEmpty {
           return "Gemini request failed (\(status)): \(message)"
@@ -51,6 +51,7 @@ final class GeminiCorrector: GrammarCorrector {
   private let maxAttempts: Int
   private let minSimilarity: Double
   private let extraInstruction: String?
+  private let correctionLanguage: Settings.CorrectionLanguage
 
   init(settings: Settings) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -71,6 +72,7 @@ final class GeminiCorrector: GrammarCorrector {
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
     self.extraInstruction = settings.geminiExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.correctionLanguage = settings.correctionLanguage
   }
 
   func correct(_ text: String) async throws -> String {
@@ -255,6 +257,10 @@ final class GeminiCorrector: GrammarCorrector {
         "IMPORTANT: Your previous output changed the text too much. This time, keep everything identical except for the minimal characters needed to correct errors.",
         at: 2
       )
+    }
+
+    if let languageInstruction = correctionLanguage.promptInstruction {
+      instructions.append(languageInstruction)
     }
 
     if let extraInstruction, !extraInstruction.isEmpty {

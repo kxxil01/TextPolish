@@ -15,8 +15,9 @@ Choose:
 
 1. Install TextPolish.app to /Applications and open it.
 2. Grant Accessibility permission: System Settings -> Privacy & Security -> Accessibility -> TextPolish.
-3. Set your API key from the menu: Backend -> Set Gemini API Key... (or OpenRouter).
-4. Use the shortcuts below.
+3. Set your API key from the menu: Provider -> Set Gemini API Key... (or OpenRouter).
+4. Optional: Preferences -> Language to force English (US) or Indonesian.
+5. Use the shortcuts below.
 
 ## Shortcuts
 
@@ -26,7 +27,7 @@ Choose:
 ## How it works
 
 - Copies your selected text or current input.
-- Sends that text to the chosen backend for correction.
+- Sends that text to the chosen provider for correction.
 - Pastes the corrected text back.
 - Restores your clipboard.
 
@@ -34,11 +35,11 @@ Choose:
 
 - Correct Selection / Correct All
 - Cancel Correction
-- Backend: Gemini or OpenRouter, set keys and models
+- Provider: Gemini or OpenRouter, set keys and models
 - Hotkeys: change or reset
 - Check for Updates
-- Advanced: Start at Login, Fallback to OpenRouter on Gemini errors, Open Accessibility Settings, Open Settings File
-- About and Privacy
+- Preferences: Start at Login, Language, Fallback to OpenRouter on Gemini errors, Open Accessibility Settings, Open Settings File
+- About & Privacy
 
 ## Updates
 
@@ -70,6 +71,14 @@ Gemini fallback to OpenRouter on temporary errors (requires an OpenRouter key):
 }
 ```
 
+Force the correction language:
+
+```json
+{
+  "correctionLanguage": "en-US"
+}
+```
+
 ## Privacy
 
 - Sends only the text you selected or the current input.
@@ -82,8 +91,8 @@ Gemini fallback to OpenRouter on temporary errors (requires an OpenRouter key):
 - No menu bar icon: open the app from /Applications and keep it running.
 - Hotkeys do not work: grant Accessibility permission and focus the input field.
 - Start at Login does not enable: install or move the app to /Applications first.
-- Gemini says "model not found": use Backend -> Detect Gemini Model.
-- Quota errors: switch backend or update your key.
+- Gemini says "model not found": use Provider -> Detect Gemini Model.
+- Quota errors: switch provider or update your key.
 - Check for Updates is disabled: this build does not have update info.
 
 ## Screenshot
