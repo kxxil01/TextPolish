@@ -23,6 +23,9 @@
                 </div>
             </a>
             <div class="nav-buttons">
+                <a href="https://github.com/kxxil01/TextPolish" class="github-stars" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/github/stars/kxxil01/TextPolish?style=social" alt="GitHub stars">
+                </a>
                 <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.pkg" class="nav-btn nav-btn-primary" target="_blank" rel="noopener">Download</a>
                 <a href="https://github.com/kxxil01/TextPolish" class="nav-btn nav-btn-secondary" target="_blank" rel="noopener">Source</a>
             </div>
@@ -46,23 +49,47 @@
                 
                 <!-- Description -->
                 <p class="hero-description">
-                    TextPolish corrects your grammar and typos with a global hotkey, 
-                    so you never have to worry about embarrassing mistakes in Discord, 
+                    TextPolish corrects your grammar and typos with a global hotkey,
+                    so you never have to worry about embarrassing mistakes in Discord,
                     Slack, or any app.
                 </p>
 
-                <!-- Buttons -->
-                <div class="hero-actions">
-                    <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.pkg" class="btn btn-primary" target="_blank" rel="noopener">Download latest</a>
-                    <a href="https://github.com/kxxil01/TextPolish" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                <!-- Works With -->
+                <div class="works-with">
+                    <span class="works-with-label">Works with:</span>
+                    <div class="works-with-icons">
+                        <span class="app-icon" title="Discord">💬</span>
+                        <span class="app-icon" title="Slack">📱</span>
+                        <span class="app-icon" title="Gmail">✉️</span>
+                        <span class="app-icon" title="Notes">📝</span>
+                        <span class="app-icon" title="Any app">➕</span>
+                    </div>
                 </div>
 
-                <!-- Homebrew -->
-                <div class="homebrew-section">
-                    <span class="homebrew-label">Homebrew:</span>
-                    <div class="homebrew-code">
-                        <code>brew install --cask kxxil01/tap/textpolish</code>
-                        <button class="copy-btn" onclick="navigator.clipboard.writeText('brew install --cask kxxil01/tap/textpolish')">📋</button>
+                <!-- Download Options -->
+                <div class="download-section">
+                    <div class="download-options">
+                        <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.pkg" class="download-option primary" target="_blank" rel="noopener">
+                            <span class="download-icon">📦</span>
+                            <span class="download-info">
+                                <span class="download-name">Installer (.pkg)</span>
+                                <span class="download-desc">Recommended</span>
+                            </span>
+                        </a>
+                        <a href="https://github.com/kxxil01/TextPolish/releases/latest/download/TextPolish.app.zip" class="download-option" target="_blank" rel="noopener">
+                            <span class="download-icon">🗜️</span>
+                            <span class="download-info">
+                                <span class="download-name">App (.zip)</span>
+                                <span class="download-desc">Drag to Apps</span>
+                            </span>
+                        </a>
+                    </div>
+                    <div class="homebrew-option">
+                        <span class="homebrew-label">or via Homebrew:</span>
+                        <div class="homebrew-code">
+                            <code>brew install --cask kxxil01/tap/textpolish</code>
+                            <button class="copy-btn" onclick="navigator.clipboard.writeText('brew install --cask kxxil01/tap/textpolish')">📋</button>
+                        </div>
                     </div>
                 </div>
 
@@ -105,6 +132,36 @@
                                 <p class="demo-correct">Hey guys, <span class="demo-fix">I</span> just wanted to let you know the meeting <span class="demo-fix">has been</span> moved to <span class="demo-fix">tomorrow</span>. We should <span class="demo-fix">definitely</span> prepare beforehand and make sure <span class="demo-fix">everyone's</span> ready. <span class="demo-fix">Don't</span> forget your laptops <span class="demo-fix">because</span> it's a long one!</p>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="how-it-works">
+            <h2 class="section-title">How it works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Select text</h3>
+                        <p>Highlight the text you want to fix in any app</p>
+                    </div>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Press hotkey</h3>
+                        <p>Hit <kbd>⌃⌥⌘G</kbd> to correct instantly</p>
+                    </div>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Done!</h3>
+                        <p>Fixed text is pasted, clipboard restored</p>
                     </div>
                 </div>
             </div>
