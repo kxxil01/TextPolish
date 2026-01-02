@@ -357,39 +357,49 @@ body::before {
 
 .demo-wrong {
     font-size: 13px;
-    color: #f38ba8;
+    color: rgba(255, 255, 255, 0.7);
     line-height: 1.5;
     margin: 0;
 }
 
 .demo-correct {
     font-size: 13px;
-    color: #a6e3a1;
+    color: rgba(255, 255, 255, 0.7);
     line-height: 1.5;
     margin: 0;
+}
+
+.demo-error {
+    color: #f38ba8;
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: #f38ba8;
+    text-underline-offset: 2px;
+}
+
+.demo-fix {
+    color: #a6e3a1;
+    background: rgba(166, 227, 161, 0.15);
+    border-radius: 3px;
+    padding: 0 3px;
 }
 
 .demo-arrow {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 12px;
+    gap: 8px;
+    padding: 10px;
     color: #89b4fa;
-}
-
-.demo-arrow span {
-    font-size: 18px;
-}
-
-.demo-arrow kbd {
-    background: rgba(137, 180, 250, 0.2);
-    border: 1px solid #89b4fa;
-    border-radius: 4px;
-    padding: 4px 8px;
     font-family: 'SF Mono', Monaco, monospace;
-    font-size: 11px;
-    color: #89b4fa;
+    font-size: 13px;
+    background: rgba(137, 180, 250, 0.1);
+    border-radius: 6px;
+    margin: 8px 0;
+}
+
+.demo-arrow-icon {
+    font-size: 16px;
 }
 
 /* Bottom Cards */
@@ -407,6 +417,17 @@ body::before {
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 24px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.card-icon {
+    font-size: 24px;
+    margin-bottom: 12px;
 }
 
 .card h3 {
@@ -414,7 +435,7 @@ body::before {
     font-weight: 600;
     color: rgba(255, 255, 255, 0.5);
     letter-spacing: 0.05em;
-    margin: 0 0 12px 0;
+    margin: 0 0 8px 0;
 }
 
 .card p {

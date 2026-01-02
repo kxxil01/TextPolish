@@ -21,14 +21,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Navbar background on scroll
+    // Navbar background on scroll (dark theme)
     const nav = document.querySelector('.nav');
     window.addEventListener('scroll', function() {
         if (window.scrollY > 50) {
-            nav.style.background = 'rgba(255, 255, 255, 0.98)';
-            nav.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+            nav.style.background = 'rgba(13, 17, 23, 0.95)';
+            nav.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.3)';
         } else {
-            nav.style.background = 'rgba(255, 255, 255, 0.95)';
+            nav.style.background = 'transparent';
             nav.style.boxShadow = 'none';
         }
     });
@@ -74,26 +74,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Demo text animation
+    // Demo text animation - highlight before/after alternately
     function animateDemo() {
-        const originalText = document.querySelector('.demo-message.original p');
-        const correctedText = document.querySelector('.demo-message.corrected p');
-        
-        if (originalText && correctedText) {
+        const wrongText = document.querySelector('.demo-wrong');
+        const correctText = document.querySelector('.demo-correct');
+
+        if (wrongText && correctText) {
+            // Highlight "before" state
+            wrongText.style.opacity = '1';
+            correctText.style.opacity = '0.5';
+
             setTimeout(() => {
-                originalText.style.opacity = '0.6';
-                correctedText.style.opacity = '1';
-            }, 2000);
-            
-            setTimeout(() => {
-                originalText.style.opacity = '1';
-                correctedText.style.opacity = '0.6';
-            }, 4000);
+                // Highlight "after" state
+                wrongText.style.opacity = '0.5';
+                correctText.style.opacity = '1';
+            }, 3000);
         }
     }
 
     // Start demo animation
-    animateDemo();
+    setTimeout(animateDemo, 1000);
     setInterval(animateDemo, 6000);
 
     // Keyboard shortcut display enhancement
@@ -121,36 +121,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Copy to clipboard functionality for code blocks
-    const codeBlocks = document.querySelectorAll('code');
+    const codeBlocks = document.querySelectorAll('.homebrew-code code');
     codeBlocks.forEach(code => {
         code.style.cursor = 'pointer';
         code.title = 'Click to copy';
-        
+
         code.addEventListener('click', function() {
             navigator.clipboard.writeText(this.textContent).then(() => {
                 const originalText = this.textContent;
                 this.textContent = 'Copied!';
-                this.style.background = '#68d391';
-                this.style.color = '#22543d';
-                
+                this.style.background = 'rgba(166, 227, 161, 0.3)';
+                this.style.color = '#a6e3a1';
+
                 setTimeout(() => {
                     this.textContent = originalText;
-                    this.style.background = '#e2e8f0';
-                    this.style.color = '#2d3748';
+                    this.style.background = '';
+                    this.style.color = '';
                 }, 2000);
             });
         });
     });
 
-    // Feature card hover effects
-    const featureCards = document.querySelectorAll('.feature-card');
-    featureCards.forEach(card => {
+    // Card hover effects (handled by CSS, but keeping for potential future use)
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
         card.addEventListener('mouseenter', function() {
-            this.style.borderColor = '#007acc';
+            // Hover handled by CSS
         });
-        
+
         card.addEventListener('mouseleave', function() {
-            this.style.borderColor = '#e2e8f0';
+            // Hover handled by CSS
         });
     });
 
