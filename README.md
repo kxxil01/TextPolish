@@ -1,18 +1,15 @@
 # TextPolish
 
-Small, fast menu bar app for macOS that fixes grammar and typos in any app (Discord, etc). It keeps your formatting and tone and restores your clipboard.
+**Fix grammar and typos in any app with a keyboard shortcut.**
+
+A small, fast menu bar app for macOS. Works in Discord, Slack, emails, or any text field. Your clipboard is restored after each correction.
+
+![TextPolish menu bar preview](docs/screenshot.svg)
 
 [![CI](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kxxil01/TextPolish/actions/workflows/ci.yml)
 [![Release](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml/badge.svg?event=release)](https://github.com/kxxil01/TextPolish/actions/workflows/release.yml)
 
-## Why TextPolish
-
-Discord and other apps do not have fast, reliable grammar correction everywhere. I wanted a small menu bar app that works in any text box, runs on hotkeys, and preserves your voice.
-
-Key goals:
-- Fast, minimal UI and instant hotkeys
-- Smallest possible edits, no AI rewrite tone
-- Clipboard safe and reliable across apps
+---
 
 ## Download
 
@@ -22,140 +19,140 @@ Key goals:
 brew install --cask kxxil01/tap/textpolish
 ```
 
-**Manual download:**
+**Manual download:** [Latest release](https://github.com/kxxil01/TextPolish/releases)
 
-Latest release: https://github.com/kxxil01/TextPolish/releases
+- `TextPolish.pkg` — installer (recommended)
+- `TextPolish.app.zip` — drag to Applications
 
-- TextPolish.app.zip — drag and drop to /Applications
-- TextPolish.pkg — guided installer
+**Website:** [textpolish.pages.dev](https://textpolish.pages.dev)
 
-**Landing page:** https://textpolish.pages.dev
+---
 
-## Quick Start
+## Setup (3 steps)
 
-1. Install TextPolish.app to /Applications and open it.
-2. Grant Accessibility permission: System Settings -> Privacy & Security -> Accessibility -> TextPolish.
-3. Set your API key from the menu: Provider -> Set Gemini API Key... (or OpenRouter).
-4. Optional: Preferences -> Language to force English (US) or Indonesian.
-5. Use the shortcuts below.
+### 1. Open the app
 
-## Shortcuts
+After installing, open TextPolish from Applications. You'll see a small icon in your menu bar (top-right of your screen).
 
-- Correct Selection: Ctrl+Option+Command+G
-- Correct All: Ctrl+Option+Command+Shift+G (presses Command+A first)
+### 2. Allow Accessibility
 
-## How it works
+TextPolish needs permission to send keyboard shortcuts (copy/paste) to other apps.
 
-- Copies your selected text or current input.
-- Sends that text to the chosen provider for correction.
-- Pastes the corrected text back.
-- Restores your clipboard.
+**System Settings → Privacy & Security → Accessibility → Enable TextPolish**
 
-## Architecture
+### 3. Add your API key (free)
 
-Text correction flow:
+TextPolish uses AI to correct your text. You need a free API key:
 
-```
-Select text -> Copy (Cmd+C) -> Provider (Gemini/OpenRouter) -> Paste (Cmd+V) -> Restore clipboard
-```
+**Option A: Gemini (recommended)**
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/app/apikey)
+2. Click "Create API Key" (free, no credit card needed)
+3. Copy the key
+4. In TextPolish menu: **Provider → Set Gemini API Key...** → paste → Save
 
-Update flow:
+**Option B: OpenRouter**
+1. Go to [openrouter.ai/keys](https://openrouter.ai/keys) and sign up
+2. Create an API key
+3. In TextPolish menu: **Provider → OpenRouter** → **Set OpenRouter API Key...**
 
-```
-GitHub Release -> appcast.xml -> Sparkle -> TextPolish
-```
+That's it! You're ready to use TextPolish.
 
-## Menu
+---
 
-- Correct Selection / Correct All
-- Cancel Correction
-- Provider: Gemini or OpenRouter, set keys and models
-- Hotkeys: change or reset
-- Check for Updates
-- Preferences: Start at Login, Language, Fallback to OpenRouter on Gemini errors, Open Accessibility Settings, Open Settings File
-- About & Privacy
+## How to Use
 
-## Updates
+### Keyboard Shortcuts
 
-Updates are delivered through GitHub Releases. The app checks automatically about every 6 hours and you can run Check for Updates from the menu.
-The menu also shows update status and the last check time.
-Use Check for Updates -> Check to run it manually.
+| Action | Shortcut | What it does |
+|--------|----------|--------------|
+| **Correct Selection** | `⌃⌥⌘G` | Fixes the text you've selected |
+| **Correct All** | `⌃⌥⌘⇧G` | Selects all text in the field, then fixes it |
 
-## CI/CD and Release
+> **Tip:** `⌃⌥⌘G` means hold Control + Option + Command, then press G.
 
-- Pushes to `main` run CI on GitHub Actions to build and validate the app.
-- Release workflow builds the app, generates the Sparkle appcast, and uploads release assets.
-- Builds are created in CI to avoid storing artifacts in the repo.
+### Or Use the Menu
 
-## Advanced settings (optional)
+Click the TextPolish icon in your menu bar and choose:
+- **Correct Selection** — fix selected text
+- **Correct All** — fix everything in the text field
 
-Settings live in `~/Library/Application Support/TextPolish/settings.json` (open from the menu).
+### What Happens
 
-Per-app timing profiles (bundle id or app name keys):
+1. TextPolish copies your text
+2. Sends it to the AI for correction
+3. Pastes the corrected text back
+4. Restores your original clipboard
 
-```json
-{
-  "timingProfiles": {
-    "Discord": {
-      "copyTimeoutMilliseconds": 1200,
-      "pasteSettleDelayMilliseconds": 40
-    }
-  }
-}
-```
+The icon shows a badge with how many corrections you've made today.
 
-Gemini fallback to OpenRouter on temporary errors (requires an OpenRouter key):
+---
 
-```json
-{
-  "fallbackToOpenRouterOnGeminiError": true
-}
-```
+## Features
 
-Force the correction language:
+- **Works everywhere** — Discord, Slack, Gmail, Notes, any app with a text field
+- **Keeps your voice** — minimal edits, no AI rewriting your tone
+- **Preserves formatting** — line breaks, markdown, emojis stay intact
+- **Clipboard safe** — your clipboard is always restored
+- **Privacy focused** — no analytics, keys stored in macOS Keychain
+- **Auto-updates** — get new versions automatically
 
-```json
-{
-  "correctionLanguage": "en-US"
-}
-```
+---
 
-## Security and Privacy
+## Settings
 
-- Sends only the text you selected or the current input.
-- No analytics or telemetry.
-- API keys are stored in macOS Keychain.
-- Your clipboard is restored after each correction.
-- Language choice only guides the correction and does not translate your text.
-- Updates are delivered via GitHub Releases and Sparkle.
+Click the menu bar icon to access:
+
+| Setting | What it does |
+|---------|--------------|
+| **Provider** | Switch between Gemini and OpenRouter |
+| **Hotkeys** | Change or reset keyboard shortcuts |
+| **Language** | Force English (US) or Indonesian |
+| **Start at Login** | Launch automatically when you log in |
+| **Check for Updates** | Manually check for new versions |
+
+---
 
 ## Troubleshooting
 
-- No menu bar icon: open the app from /Applications and keep it running.
-- Hotkeys do not work: grant Accessibility permission and focus the input field.
-- Start at Login does not enable: install or move the app to /Applications first.
-- Gemini says "model not found": use Provider -> Detect Gemini Model.
-- Quota errors: switch provider or update your key.
-- Check for Updates is disabled: this build does not have update info.
+**No menu bar icon?**
+→ Open TextPolish from Applications. Keep it running.
 
-## Screenshot
+**Shortcuts don't work?**
+→ Check Accessibility permission in System Settings.
+→ Make sure you're focused on a text field.
 
-![TextPolish menu bar preview](docs/screenshot.svg)
+**"Model not found" error?**
+→ Menu → Provider → Detect Gemini Model
 
-## Build from source
+**Quota/rate limit error?**
+→ Wait a minute, or switch to OpenRouter as backup.
 
-Developer notes live in docs/development.md.
+**Start at Login won't enable?**
+→ Move the app to /Applications first.
 
-## Contributing and Security
+---
 
-- Contributing guide: CONTRIBUTING.md
-- Security policy: SECURITY.md
+## Privacy & Security
+
+- **Only sends your selected text** — nothing else
+- **No analytics or tracking** — zero telemetry
+- **API keys in Keychain** — securely stored by macOS
+- **Open source** — review the code yourself
+
+---
+
+## For Developers
+
+- [Development guide](docs/development.md)
+- [Contributing](CONTRIBUTING.md)
+- [Agent notes](AGENTS.md)
+
+---
 
 ## License
 
-MIT. See LICENSE.
+MIT — see [LICENSE](LICENSE)
 
 ## Credits
 
-Creator: Kurniadi Ilham (https://github.com/kxxil01)
-LinkedIn: https://linkedin.com/in/kurniadi-ilham
+Created by [Kurniadi Ilham](https://github.com/kxxil01) · [LinkedIn](https://linkedin.com/in/kurniadi-ilham)
