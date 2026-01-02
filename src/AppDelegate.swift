@@ -89,13 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: appDisplayName)
     loadTodayCorrectionCount()
-    statusItem.button?.image = makeIconWithBadge(count: todayCorrectionCount)
+    let initialIcon = makeIconWithBadge(count: todayCorrectionCount)
+    statusItem.button?.image = initialIcon
     statusItem.button?.toolTip = appDisplayName
     statusItem.button?.target = self
     statusItem.button?.action = #selector(statusItemClicked(_:))
     statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-    let feedback = StatusItemFeedback(statusItem: statusItem, baseImage: baseImage)
+    let feedback = StatusItemFeedback(statusItem: statusItem, baseImage: initialIcon)
     self.feedback = feedback
     correctionController = CorrectionController(
       corrector: CorrectorFactory.make(settings: settings),
@@ -592,7 +593,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateStatusItemIcon() {
-    statusItem.button?.image = makeIconWithBadge(count: todayCorrectionCount)
+    let icon = makeIconWithBadge(count: todayCorrectionCount)
+    statusItem.button?.image = icon
+    feedback?.updateBaseImage(icon)
   }
 
   private func makeIconWithBadge(count: Int) -> NSImage? {

@@ -12,7 +12,7 @@ final class StatusItemFeedback: FeedbackPresenter {
   typealias SleepHandler = (Duration) async -> Void
 
   private let statusItem: NSStatusItem
-  private let baseImage: NSImage?
+  private var baseImage: NSImage?
   private let baseToolTip: String?
   private let baseTitle: String?
   private let sleepHandler: SleepHandler
@@ -28,6 +28,10 @@ final class StatusItemFeedback: FeedbackPresenter {
     self.baseToolTip = statusItem.button?.toolTip
     self.baseTitle = statusItem.button?.title
     self.sleepHandler = sleepHandler
+  }
+
+  func updateBaseImage(_ image: NSImage?) {
+    self.baseImage = image
   }
 
   func showSuccess() {
