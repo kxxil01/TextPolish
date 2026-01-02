@@ -64,6 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let didShowWelcomeKey = "didShowWelcome_0_1"
   private let expectedAppName = "TextPolish"
 
+  private let correctionCountKey = "correctionCount"
+  private let correctionCountDateKey = "correctionCountDate"
+  private var todayCorrectionCount: Int = 0
+
   private var appDisplayName: String {
     let display =
       (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
@@ -84,7 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     NSApp.setActivationPolicy(.accessory)
 
     baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: appDisplayName)
-    statusItem.button?.image = baseImage
+    loadTodayCorrectionCount()
+    statusItem.button?.image = makeIconWithBadge(count: todayCorrectionCount)
     statusItem.button?.toolTip = appDisplayName
     statusItem.button?.target = self
     statusItem.button?.action = #selector(statusItemClicked(_:))
@@ -99,6 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       recoverer: { [weak self] error in
         guard let self else { return nil }
         return await self.recoverFromError(error)
+      },
+      onSuccess: { [weak self] in
+        self?.incrementCorrectionCount()
       }
     )
 
@@ -544,6 +552,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     } catch {
       NSLog("[TextPolish] Failed to save settings: \(error)")
     }
+  }
+
+  // MARK: - Correction Counter & Badge
+
+  private func loadTodayCorrectionCount() {
+    let defaults = UserDefaults.standard
+    let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
+    let today = formattedToday()
+
+    if storedDate == today {
+      todayCorrectionCount = defaults.integer(forKey: correctionCountKey)
+    } else {
+      todayCorrectionCount = 0
+      defaults.set(0, forKey: correctionCountKey)
+      defaults.set(today, forKey: correctionCountDateKey)
+    }
+  }
+
+  private func incrementCorrectionCount() {
+    let defaults = UserDefaults.standard
+    let today = formattedToday()
+    let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
+
+    if storedDate != today {
+      todayCorrectionCount = 0
+      defaults.set(today, forKey: correctionCountDateKey)
+    }
+
+    todayCorrectionCount += 1
+    defaults.set(todayCorrectionCount, forKey: correctionCountKey)
+    updateStatusItemIcon()
+  }
+
+  private func formattedToday() -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: Date())
+  }
+
+  private func updateStatusItemIcon() {
+    statusItem.button?.image = makeIconWithBadge(count: todayCorrectionCount)
+  }
+
+  private func makeIconWithBadge(count: Int) -> NSImage? {
+    guard let base = baseImage else { return nil }
+    let size = NSSize(width: 18, height: 18)
+
+    let image = NSImage(size: size, flipped: false) { rect in
+      base.draw(in: rect)
+
+      if count > 0 {
+        let badgeSize: CGFloat = 10
+        let badgeRect = NSRect(
+          x: rect.width - badgeSize + 2,
+          y: rect.height - badgeSize + 2,
+          width: badgeSize,
+          height: badgeSize
+        )
+
+        NSColor.systemRed.setFill()
+        NSBezierPath(ovalIn: badgeRect).fill()
+
+        let text = count > 99 ? "99+" : "\(count)"
+        let font = NSFont.systemFont(ofSize: 7, weight: .bold)
+        let attrs: [NSAttributedString.Key: Any] = [
+          .font: font,
+          .foregroundColor: NSColor.white,
+        ]
+        let textSize = text.size(withAttributes: attrs)
+        let textRect = NSRect(
+          x: badgeRect.midX - textSize.width / 2,
+          y: badgeRect.midY - textSize.height / 2,
+          width: textSize.width,
+          height: textSize.height
+        )
+        text.draw(in: textRect, withAttributes: attrs)
+      }
+      return true
+    }
+
+    image.isTemplate = count == 0
+    return image
   }
 
   private func keychainLabel(for account: String) -> String? {

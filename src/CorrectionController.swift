@@ -87,6 +87,7 @@ final class CorrectionController {
   private let keyboard: KeyboardControlling
   private let pasteboard: PasteboardControlling
   private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
+  private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
   private var isRunning = false
@@ -99,7 +100,8 @@ final class CorrectionController {
     timings: Timings = .default,
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
-    recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil
+    recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil,
+    onSuccess: (@MainActor () -> Void)? = nil
   ) {
     self.corrector = corrector
     self.feedback = feedback
@@ -107,6 +109,7 @@ final class CorrectionController {
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
     self.recoverer = recoverer
+    self.onSuccess = onSuccess
   }
 
   func updateCorrector(_ corrector: GrammarCorrector) {
@@ -211,9 +214,11 @@ final class CorrectionController {
         didPaste = true
         try await Task.sleep(for: timings.postPasteDelay)
         self.feedback.showSuccess()
+        self.onSuccess?()
       } catch is CancellationError {
         if didPaste {
           self.feedback.showSuccess()
+          self.onSuccess?()
         } else {
           self.feedback.showInfo("Canceled")
         }
