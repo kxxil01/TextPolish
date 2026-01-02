@@ -602,40 +602,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     guard let base = baseImage else { return nil }
     let size = NSSize(width: 18, height: 18)
 
-    let image = NSImage(size: size, flipped: false) { rect in
-      base.draw(in: rect)
-
-      if count > 0 {
-        let badgeSize: CGFloat = 10
-        let badgeRect = NSRect(
-          x: rect.width - badgeSize + 2,
-          y: rect.height - badgeSize + 2,
-          width: badgeSize,
-          height: badgeSize
-        )
-
-        NSColor.systemRed.setFill()
-        NSBezierPath(ovalIn: badgeRect).fill()
-
-        let text = count > 99 ? "99+" : "\(count)"
-        let font = NSFont.systemFont(ofSize: 7, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [
-          .font: font,
-          .foregroundColor: NSColor.white,
-        ]
-        let textSize = text.size(withAttributes: attrs)
-        let textRect = NSRect(
-          x: badgeRect.midX - textSize.width / 2,
-          y: badgeRect.midY - textSize.height / 2,
-          width: textSize.width,
-          height: textSize.height
-        )
-        text.draw(in: textRect, withAttributes: attrs)
+    // When count == 0, return template image (adapts to menu bar)
+    if count == 0 {
+      let image = NSImage(size: size, flipped: false) { rect in
+        base.draw(in: rect)
+        return true
       }
+      image.isTemplate = true
+      return image
+    }
+
+    // When count > 0, draw tinted icon with badge
+    let image = NSImage(size: size, flipped: false) { rect in
+      // Draw base icon tinted to menu bar foreground color
+      let tintedBase = base.copy() as! NSImage
+      tintedBase.lockFocus()
+      NSColor.white.set()
+      let imageRect = NSRect(origin: .zero, size: tintedBase.size)
+      imageRect.fill(using: .sourceAtop)
+      tintedBase.unlockFocus()
+      tintedBase.draw(in: rect)
+
+      // Draw badge circle
+      let badgeSize: CGFloat = 10
+      let badgeRect = NSRect(
+        x: rect.width - badgeSize + 2,
+        y: rect.height - badgeSize + 2,
+        width: badgeSize,
+        height: badgeSize
+      )
+
+      NSColor.systemRed.setFill()
+      NSBezierPath(ovalIn: badgeRect).fill()
+
+      // Draw badge text
+      let text = count > 99 ? "99+" : "\(count)"
+      let font = NSFont.systemFont(ofSize: 7, weight: .bold)
+      let attrs: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: NSColor.white,
+      ]
+      let textSize = text.size(withAttributes: attrs)
+      let textRect = NSRect(
+        x: badgeRect.midX - textSize.width / 2,
+        y: badgeRect.midY - textSize.height / 2,
+        width: textSize.width,
+        height: textSize.height
+      )
+      text.draw(in: textRect, withAttributes: attrs)
+
       return true
     }
 
-    image.isTemplate = count == 0
+    image.isTemplate = false
     return image
   }
 
