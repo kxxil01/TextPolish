@@ -74,27 +74,54 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Demo text animation - highlight before/after alternately
-    function animateDemo() {
-        const wrongText = document.querySelector('.demo-wrong');
-        const correctText = document.querySelector('.demo-correct');
+    // Demo typewriter animation
+    const demoArrow = document.querySelector('.demo-arrow');
+    const wrongMessage = document.querySelector('.demo-wrong');
+    const correctMessage = document.querySelector('.demo-correct');
 
-        if (wrongText && correctText) {
-            // Highlight "before" state
-            wrongText.style.opacity = '1';
-            correctText.style.opacity = '0.5';
+    if (wrongMessage && correctMessage && demoArrow) {
+        // Store original content
+        const wrongHTML = wrongMessage.innerHTML;
+        const correctHTML = correctMessage.innerHTML;
+
+        // Initial state
+        correctMessage.parentElement.parentElement.style.opacity = '0';
+        correctMessage.parentElement.parentElement.style.transform = 'translateY(10px)';
+        correctMessage.parentElement.parentElement.style.transition = 'all 0.5s ease';
+        demoArrow.style.opacity = '0';
+        demoArrow.style.transition = 'opacity 0.3s ease';
+
+        function runDemoAnimation() {
+            // Reset
+            wrongMessage.parentElement.parentElement.style.opacity = '1';
+            correctMessage.parentElement.parentElement.style.opacity = '0';
+            correctMessage.parentElement.parentElement.style.transform = 'translateY(10px)';
+            demoArrow.style.opacity = '0';
+
+            // Phase 1: Show wrong text (already visible)
+            setTimeout(() => {
+                // Phase 2: Flash the arrow with hotkey
+                demoArrow.style.opacity = '1';
+                demoArrow.classList.add('demo-arrow-pulse');
+            }, 2000);
 
             setTimeout(() => {
-                // Highlight "after" state
-                wrongText.style.opacity = '0.5';
-                correctText.style.opacity = '1';
-            }, 3000);
-        }
-    }
+                // Phase 3: Show corrected text sliding in
+                correctMessage.parentElement.parentElement.style.opacity = '1';
+                correctMessage.parentElement.parentElement.style.transform = 'translateY(0)';
+                wrongMessage.parentElement.parentElement.style.opacity = '0.4';
+            }, 2500);
 
-    // Start demo animation
-    setTimeout(animateDemo, 1000);
-    setInterval(animateDemo, 6000);
+            setTimeout(() => {
+                // Phase 4: Reset arrow pulse
+                demoArrow.classList.remove('demo-arrow-pulse');
+            }, 3500);
+        }
+
+        // Start animation
+        setTimeout(runDemoAnimation, 1000);
+        setInterval(runDemoAnimation, 7000);
+    }
 
     // Keyboard shortcut display enhancement
     const shortcuts = document.querySelectorAll('.shortcut kbd');
