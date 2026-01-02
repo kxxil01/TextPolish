@@ -46,14 +46,18 @@ TextPolish uses AI to correct your text. You need a free API key:
 
 **Option A: Gemini (recommended)**
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/app/apikey)
-2. Click "Create API Key" (free, no credit card needed)
+2. Click "Create API Key" — **free, no credit card needed**
 3. Copy the key
 4. In TextPolish menu: **Provider → Set Gemini API Key...** → paste → Save
+
+> Free tier includes ~15 requests/minute, ~1500/day. Plenty for normal use.
 
 **Option B: OpenRouter**
 1. Go to [openrouter.ai/keys](https://openrouter.ai/keys) and sign up
 2. Create an API key
 3. In TextPolish menu: **Provider → OpenRouter** → **Set OpenRouter API Key...**
+
+> The default model is free. No credits needed unless you switch to a paid model.
 
 That's it! You're ready to use TextPolish.
 
@@ -124,8 +128,9 @@ Click the menu bar icon to access:
 **"Model not found" error?**
 → Menu → Provider → Detect Gemini Model
 
-**Quota/rate limit error?**
-→ Wait a minute, or switch to OpenRouter as backup.
+**Quota/rate limit error (429)?**
+→ You've hit the free tier limit. Wait a minute and try again.
+→ Or enable **Preferences → Fallback to OpenRouter** as automatic backup.
 
 **Start at Login won't enable?**
 → Move the app to /Applications first.
