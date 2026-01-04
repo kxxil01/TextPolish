@@ -12,6 +12,82 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
 </head>
 <body>
+    <script>
+        // Demo animation - cycles through before/after correction
+        document.addEventListener('DOMContentLoaded', function() {
+            const demoContent = document.querySelector('.demo-content');
+            if (!demoContent) return;
+
+            let showingBefore = true;
+
+            function animateDemo() {
+                const wrongMsg = demoContent.querySelector('.demo-message:first-child');
+                const arrow = demoContent.querySelector('.demo-arrow');
+                const correctMsg = demoContent.querySelector('.demo-message:last-child');
+
+                if (!wrongMsg || !arrow || !correctMsg) return;
+
+                if (showingBefore) {
+                    // Phase 1: Show "before" state
+                    wrongMsg.style.opacity = '1';
+                    wrongMsg.style.transform = 'translateY(0)';
+                    arrow.style.opacity = '0.3';
+                    correctMsg.style.opacity = '0.2';
+                    correctMsg.style.transform = 'translateY(10px)';
+
+                    setTimeout(() => {
+                        // Phase 2: Pulse the arrow (hotkey pressed)
+                        arrow.style.opacity = '1';
+                        arrow.style.transform = 'scale(1.1)';
+                        arrow.style.background = 'rgba(166, 227, 161, 0.2)';
+
+                        setTimeout(() => {
+                            arrow.style.transform = 'scale(1)';
+
+                            // Phase 3: Show corrected text
+                            setTimeout(() => {
+                                wrongMsg.style.opacity = '0.3';
+                                wrongMsg.style.transform = 'translateY(-5px)';
+                                correctMsg.style.opacity = '1';
+                                correctMsg.style.transform = 'translateY(0)';
+                                arrow.style.background = 'rgba(137, 180, 250, 0.1)';
+                                showingBefore = false;
+                            }, 300);
+                        }, 200);
+                    }, 2000);
+                } else {
+                    // Reset to show "before" again
+                    wrongMsg.style.opacity = '1';
+                    wrongMsg.style.transform = 'translateY(0)';
+                    arrow.style.opacity = '0.3';
+                    correctMsg.style.opacity = '0.2';
+                    correctMsg.style.transform = 'translateY(10px)';
+                    showingBefore = true;
+                }
+            }
+
+            // Add transition styles
+            const wrongMsg = demoContent.querySelector('.demo-message:first-child');
+            const arrow = demoContent.querySelector('.demo-arrow');
+            const correctMsg = demoContent.querySelector('.demo-message:last-child');
+
+            if (wrongMsg && arrow && correctMsg) {
+                wrongMsg.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                arrow.style.transition = 'opacity 0.3s ease, transform 0.2s ease, background 0.3s ease';
+                correctMsg.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+
+                // Initial state
+                correctMsg.style.opacity = '0.2';
+                correctMsg.style.transform = 'translateY(10px)';
+                arrow.style.opacity = '0.3';
+
+                // Start animation loop
+                animateDemo();
+                setInterval(animateDemo, 4000);
+            }
+        });
+    </script>
+
     <!-- Navigation -->
     <nav class="nav">
         <div class="nav-container">
@@ -46,7 +122,7 @@
 
                 <!-- Title -->
                 <h1 class="hero-title">Fix grammar instantly.</h1>
-                
+
                 <!-- Description -->
                 <p class="hero-description">
                     TextPolish corrects your grammar and typos with a global hotkey,
@@ -175,34 +251,6 @@
                 <div class="card-icon">🔒</div>
                 <h3>PRIVACY</h3>
                 <p>Text is sent only to your configured AI provider. API keys stored in macOS Keychain. Zero analytics.</p>
-            </div>
-        </section>
-
-        <!-- Testimonials -->
-        <section class="testimonials">
-            <h2 class="section-title">What users say</h2>
-            <div class="testimonial-grid">
-                <div class="testimonial">
-                    <p class="testimonial-text">"Finally, I can send Discord messages without worrying about typos. The hotkey is so natural."</p>
-                    <div class="testimonial-author">
-                        <span class="testimonial-name">Developer</span>
-                        <span class="testimonial-role">macOS user</span>
-                    </div>
-                </div>
-                <div class="testimonial">
-                    <p class="testimonial-text">"Super lightweight and fast. Lives in the menu bar, does one thing perfectly."</p>
-                    <div class="testimonial-author">
-                        <span class="testimonial-name">Designer</span>
-                        <span class="testimonial-role">Slack power user</span>
-                    </div>
-                </div>
-                <div class="testimonial">
-                    <p class="testimonial-text">"I use it dozens of times a day. The clipboard restore feature is brilliant."</p>
-                    <div class="testimonial-author">
-                        <span class="testimonial-name">Writer</span>
-                        <span class="testimonial-role">Gmail enthusiast</span>
-                    </div>
-                </div>
             </div>
         </section>
     </main>
