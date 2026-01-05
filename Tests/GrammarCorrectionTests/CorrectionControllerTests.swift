@@ -271,7 +271,7 @@ final class CorrectionControllerTests: XCTestCase {
     controller.correctSelection()
 
     await fulfillment(of: [completion], timeout: 1.0)
-    XCTAssertEqual(feedback.infoMessages.first, "Retrying with fallback")
+    XCTAssertEqual(feedback.infoMessages.first, "Primary provider failed, trying fallback...")
     XCTAssertEqual(keyboard.commandVCount, 1)
   }
 

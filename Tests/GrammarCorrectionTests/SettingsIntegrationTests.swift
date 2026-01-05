@@ -20,21 +20,21 @@ final class SettingsIntegrationTests: XCTestCase {
     private func createTestSettings() -> Settings {
         return Settings(
             provider: .gemini,
+            requestTimeoutSeconds: 30.0,
+            correctionLanguage: .englishUS,
+            hotKeyCorrectSelection: Settings.HotKey.correctSelectionDefault,
+            hotKeyCorrectAll: Settings.HotKey.correctAllDefault,
+            hotKeyAnalyzeTone: Settings.HotKey.analyzeToneDefault,
+            fallbackToOpenRouterOnGeminiError: false,
             geminiApiKey: "",
             geminiModel: "gemini-1.5-flash",
             geminiBaseURL: "https://generativelanguage.googleapis.com",
+            geminiMinSimilarity: 0.7,
             geminiExtraInstruction: "",
             openRouterApiKey: "",
             openRouterModel: "anthropic/claude-3-haiku",
             openRouterBaseURL: "https://openrouter.ai/api/v1",
-            hotKeyCorrectSelection: Settings.HotKey.correctSelectionDefault,
-            hotKeyCorrectAll: Settings.HotKey.correctAllDefault,
-            hotKeyAnalyzeTone: Settings.HotKey.analyzeToneDefault,
-            requestTimeoutSeconds: 30.0,
-            geminiMinSimilarity: 0.7,
-            openRouterMinSimilarity: 0.7,
-            correctionLanguage: .englishUS,
-            fallbackToOpenRouterOnGeminiError: false
+            openRouterMinSimilarity: 0.7
         )
     }
 
@@ -60,7 +60,7 @@ final class SettingsIntegrationTests: XCTestCase {
     func testProviderSelectionUpdatesSettings() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let initialProvider = settingsWindowViewController?.settings.provider
+        let _ = settingsWindowViewController?.settings.provider
 
         // When
         settingsWindowViewController?.geminiProviderButton?.state = .on
@@ -202,7 +202,7 @@ final class SettingsIntegrationTests: XCTestCase {
     func testCancelDoesNotSaveChanges() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let originalModel = settingsWindowViewController?.settings.geminiModel
+        let _ = settingsWindowViewController?.settings.geminiModel
         settingsWindowViewController?.geminiModelField?.stringValue = "modified-model"
 
         // When

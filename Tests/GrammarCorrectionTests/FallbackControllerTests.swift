@@ -92,7 +92,7 @@ final class FallbackControllerTests: XCTestCase {
 
     func testPerformFallbackSuccess() async {
         // Given
-        mockFallbackProvider.shouldThrow = false
+        mockFallbackProvider.setShouldThrow(false)
         let testText = "Test text for correction"
 
         // When
@@ -108,8 +108,8 @@ final class FallbackControllerTests: XCTestCase {
 
     func testPerformFallbackFailure() async {
         // Given
-        mockFallbackProvider.shouldThrow = true
-        mockFallbackProvider.throwError = NSError(domain: "TestError", code: 1, userInfo: nil)
+        mockFallbackProvider.setShouldThrow(true)
+        mockFallbackProvider.setThrowError(NSError(domain: "TestError", code: 1, userInfo: nil))
         let testText = "Test text for correction"
 
         // When
@@ -165,7 +165,7 @@ final class FallbackControllerTests: XCTestCase {
 
     func testFallbackWithEmptyText() async {
         // Given
-        mockFallbackProvider.shouldThrow = false
+        mockFallbackProvider.setShouldThrow(false)
         let emptyText = ""
 
         // When
@@ -177,7 +177,7 @@ final class FallbackControllerTests: XCTestCase {
 
     func testMultipleFallbackAttempts() async {
         // Given
-        mockFallbackProvider.shouldThrow = false
+        mockFallbackProvider.setShouldThrow(false)
 
         // When
         await fallbackController.performFallback(text: "Test 1", corrector: mockFallbackProvider)
@@ -189,7 +189,7 @@ final class FallbackControllerTests: XCTestCase {
 
     func testInfoMessageFormat() async {
         // Given
-        mockFallbackProvider.shouldThrow = false
+        mockFallbackProvider.setShouldThrow(false)
 
         // When
         await fallbackController.performFallback(text: "test", corrector: mockFallbackProvider)
@@ -201,8 +201,8 @@ final class FallbackControllerTests: XCTestCase {
     func testErrorMessageFormat() async {
         // Given
         let customError = NSError(domain: "CustomError", code: 42, userInfo: [NSLocalizedDescriptionKey: "Custom error message"])
-        mockFallbackProvider.shouldThrow = true
-        mockFallbackProvider.throwError = customError
+        mockFallbackProvider.setShouldThrow(true)
+        mockFallbackProvider.setThrowError(customError)
 
         // When
         await fallbackController.performFallback(text: "test", corrector: mockFallbackProvider)
@@ -216,7 +216,7 @@ final class FallbackControllerTests: XCTestCase {
         // This is implicitly tested by the async/await pattern
 
         // Given
-        mockFallbackProvider.shouldThrow = false
+        mockFallbackProvider.setShouldThrow(false)
 
         // When
         await fallbackController.performFallback(text: "test", corrector: mockFallbackProvider)
@@ -234,9 +234,17 @@ final class FallbackControllerTests: XCTestCase {
 
 // MARK: - Mock GrammarCorrector
 
-final class MockGrammarCorrector: GrammarCorrector {
-    var shouldThrow = false
-    var throwError: Error?
+final class MockGrammarCorrector: GrammarCorrector, @unchecked Sendable {
+    private var shouldThrow = false
+    private var throwError: Error?
+
+    func setShouldThrow(_ shouldThrow: Bool) {
+        self.shouldThrow = shouldThrow
+    }
+
+    func setThrowError(_ error: Error?) {
+        self.throwError = error
+    }
 
     func correct(_ text: String) async throws -> String {
         if shouldThrow {
