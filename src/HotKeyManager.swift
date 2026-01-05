@@ -9,6 +9,7 @@ final class HotKeyManager {
   enum HotKeyID: Int {
     case correctSelection = 1
     case correctAll = 2
+    case analyzeTone = 3
   }
 
   enum HotKeyManagerError: Error {
@@ -23,6 +24,7 @@ final class HotKeyManager {
   private var hotKeyRefs: [Int: EventHotKeyRef] = [:]
   private var registeredSelection: Settings.HotKey?
   private var registeredAll: Settings.HotKey?
+  private var registeredAnalyzeTone: Settings.HotKey?
 
   private static let signature: OSType = 0x47434F52 // 'GCOR'
   private static let eventHotKeyDuplicateErr: OSStatus = -9962
@@ -40,10 +42,11 @@ final class HotKeyManager {
     self.installHandler = installHandler
   }
 
-  func registerHotKeys(correctSelection: Settings.HotKey, correctAll: Settings.HotKey) throws {
+  func registerHotKeys(correctSelection: Settings.HotKey, correctAll: Settings.HotKey, analyzeTone: Settings.HotKey) throws {
     try installHandlerIfNeeded()
     if registeredSelection == correctSelection,
        registeredAll == correctAll,
+       registeredAnalyzeTone == analyzeTone,
        !hotKeyRefs.isEmpty
     {
       return
@@ -51,32 +54,40 @@ final class HotKeyManager {
 
     let previousSelection = registeredSelection
     let previousAll = registeredAll
+    let previousAnalyzeTone = registeredAnalyzeTone
     unregisterAll()
 
     let correctSelectionID = HotKeyID.correctSelection.rawValue
     let correctAllID = HotKeyID.correctAll.rawValue
+    let analyzeToneID = HotKeyID.analyzeTone.rawValue
 
     do {
       try registerHotKey(id: correctSelectionID, keyCode: correctSelection.keyCode, modifiers: correctSelection.modifiers)
       try registerHotKey(id: correctAllID, keyCode: correctAll.keyCode, modifiers: correctAll.modifiers)
+      try registerHotKey(id: analyzeToneID, keyCode: analyzeTone.keyCode, modifiers: analyzeTone.modifiers)
       registeredSelection = correctSelection
       registeredAll = correctAll
+      registeredAnalyzeTone = analyzeTone
     } catch {
       unregisterAll()
-      if let previousSelection, let previousAll {
+      if let previousSelection, let previousAll, let previousAnalyzeTone {
         do {
           try registerHotKey(id: correctSelectionID, keyCode: previousSelection.keyCode, modifiers: previousSelection.modifiers)
           try registerHotKey(id: correctAllID, keyCode: previousAll.keyCode, modifiers: previousAll.modifiers)
+          try registerHotKey(id: analyzeToneID, keyCode: previousAnalyzeTone.keyCode, modifiers: previousAnalyzeTone.modifiers)
           registeredSelection = previousSelection
           registeredAll = previousAll
+          registeredAnalyzeTone = previousAnalyzeTone
         } catch {
           registeredSelection = nil
           registeredAll = nil
+          registeredAnalyzeTone = nil
           NSLog("[TextPolish] Failed to restore previous hotkeys: \(error)")
         }
       } else {
         registeredSelection = nil
         registeredAll = nil
+        registeredAnalyzeTone = nil
       }
       throw error
     }

@@ -12,6 +12,7 @@ struct Settings: Codable {
 
     static let correctSelectionDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let correctAllDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
+    static let analyzeToneDefault = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey))
 
     var displayString: String {
       var parts: [String] = []
@@ -270,6 +271,7 @@ struct Settings: Codable {
   var correctionLanguage: CorrectionLanguage
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
+  var hotKeyAnalyzeTone: HotKey
   var fallbackToOpenRouterOnGeminiError: Bool
   var geminiApiKey: String?
   var geminiModel: String
@@ -297,6 +299,7 @@ struct Settings: Codable {
     correctionLanguage: CorrectionLanguage = .auto,
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
+    hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     fallbackToOpenRouterOnGeminiError: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.0-flash-lite-001",
@@ -323,6 +326,7 @@ struct Settings: Codable {
     self.correctionLanguage = correctionLanguage
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
+    self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.fallbackToOpenRouterOnGeminiError = fallbackToOpenRouterOnGeminiError
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
@@ -352,6 +356,7 @@ struct Settings: Codable {
     correctionLanguage = try container.decodeIfPresent(CorrectionLanguage.self, forKey: .correctionLanguage) ?? .auto
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
+    hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     fallbackToOpenRouterOnGeminiError =
       try container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError) ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
@@ -383,6 +388,7 @@ struct Settings: Codable {
     case correctionLanguage
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
+    case hotKeyAnalyzeTone
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey
     case geminiModel

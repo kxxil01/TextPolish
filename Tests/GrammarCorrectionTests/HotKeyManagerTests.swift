@@ -40,18 +40,22 @@ final class HotKeyManagerTests: XCTestCase {
 
     let oldSelection = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey))
     let oldAll = Settings.HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey))
+    let oldAnalyzeTone = Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey))
 
-    XCTAssertNoThrow(try manager.registerHotKeys(correctSelection: oldSelection, correctAll: oldAll))
+    XCTAssertNoThrow(try manager.registerHotKeys(correctSelection: oldSelection, correctAll: oldAll, analyzeTone: oldAnalyzeTone))
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], oldSelection)
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], oldAnalyzeTone)
 
     let newSelection = Settings.HotKey(keyCode: UInt32(kVK_ANSI_J), modifiers: UInt32(cmdKey))
     let newAll = Settings.HotKey(keyCode: UInt32(kVK_ANSI_K), modifiers: UInt32(cmdKey))
+    let newAnalyzeTone = Settings.HotKey(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey))
     failAllKeyCode = newAll.keyCode
 
-    XCTAssertThrowsError(try manager.registerHotKeys(correctSelection: newSelection, correctAll: newAll))
+    XCTAssertThrowsError(try manager.registerHotKeys(correctSelection: newSelection, correctAll: newAll, analyzeTone: newAnalyzeTone))
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], oldSelection)
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], oldAnalyzeTone)
   }
 
   func testIsHotKeyInUseIgnoresCurrentHotKeys() {

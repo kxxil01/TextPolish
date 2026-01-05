@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var baseImage: NSImage?
   private var settings = Settings.loadOrCreateDefault()
   private var correctionController: CorrectionController?
+  private var toneAnalysisController: ToneAnalysisController?
+  private var toneResultWindow: ToneAnalysisResultWindow?
   private var feedback: StatusItemFeedback?
   private var statusMenu: NSMenu?
   private var lastTargetApplication: NSRunningApplication?
@@ -38,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var fallbackToOpenRouterItem: NSMenuItem?
   private var selectionItem: NSMenuItem?
   private var allItem: NSMenuItem?
+  private var analyzeToneItem: NSMenuItem?
   private var cancelCorrectionItem: NSMenuItem?
   private var checkForUpdatesItem: NSMenuItem?
   private var updateStatusItem: NSMenuItem?
@@ -111,6 +114,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     )
 
+    let toneResultWindow = ToneAnalysisResultWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),
+      styleMask: [.titled, .closable],
+      backing: .buffered,
+      defer: false
+    )
+    self.toneResultWindow = toneResultWindow
+    toneAnalysisController = ToneAnalysisController(
+      analyzer: ToneAnalyzerFactory.make(settings: settings),
+      feedback: feedback,
+      resultPresenter: toneResultWindow,
+      timings: .init(settings: settings)
+    )
+
     workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification,
       object: nil,
@@ -126,14 +143,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     setupMenu()
     setupHotKeys()
     _ = updaterController
-    if !isUpdaterAvailable {
+    if isUpdaterAvailable {
+      updaterController.updater.automaticallyChecksForUpdates = true
+      NSLog("[TextPolish] Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
+    } else {
       updaterController.updater.automaticallyChecksForUpdates = false
+      NSLog("[TextPolish] Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
     }
     maybeShowWelcome()
   }
 
   @objc private func statusItemClicked(_ sender: Any?) {
     captureFrontmostApplication()
+    refreshCorrectionCountIfNewDay()
+    updateStatusItemIcon()
     syncLaunchAtLoginMenuState()
     syncUpdateMenuItems()
     guard let statusMenu, let button = statusItem.button else { return }
@@ -201,11 +224,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     allItem.target = self
 
+    let analyzeToneItem = NSMenuItem(
+      title: "Analyze Tone",
+      action: #selector(analyzeTone),
+      keyEquivalent: ""
+    )
+    analyzeToneItem.target = self
+
     self.selectionItem = selectionItem
     self.allItem = allItem
+    self.analyzeToneItem = analyzeToneItem
 
     menu.addItem(selectionItem)
     menu.addItem(allItem)
+    menu.addItem(analyzeToneItem)
 
     let cancelItem = NSMenuItem(
       title: "Cancel Correction",
@@ -234,6 +266,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     setAllHotKeyItem.target = self
 
+    let setAnalyzeToneHotKeyItem = NSMenuItem(
+      title: "Set Analyze Tone Hotkey…",
+      action: #selector(setAnalyzeToneHotKey),
+      keyEquivalent: ""
+    )
+    setAnalyzeToneHotKeyItem.target = self
+
     let resetHotKeysItem = NSMenuItem(
       title: "Reset to Defaults",
       action: #selector(resetHotKeys),
@@ -243,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     hotKeysMenu.addItem(setSelectionHotKeyItem)
     hotKeysMenu.addItem(setAllHotKeyItem)
+    hotKeysMenu.addItem(setAnalyzeToneHotKeyItem)
     hotKeysMenu.addItem(.separator())
     hotKeysMenu.addItem(resetHotKeysItem)
 
@@ -558,6 +598,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   // MARK: - Correction Counter & Badge
 
   private func loadTodayCorrectionCount() {
+    refreshCorrectionCountIfNewDay()
+  }
+
+  private func refreshCorrectionCountIfNewDay() {
     let defaults = UserDefaults.standard
     let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
     let today = formattedToday()
@@ -572,17 +616,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func incrementCorrectionCount() {
-    let defaults = UserDefaults.standard
-    let today = formattedToday()
-    let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
-
-    if storedDate != today {
-      todayCorrectionCount = 0
-      defaults.set(today, forKey: correctionCountDateKey)
-    }
-
+    refreshCorrectionCountIfNewDay()
     todayCorrectionCount += 1
-    defaults.set(todayCorrectionCount, forKey: correctionCountKey)
+    UserDefaults.standard.set(todayCorrectionCount, forKey: correctionCountKey)
     updateStatusItemIcon()
   }
 
@@ -707,6 +743,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func refreshCorrector() {
     correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
     correctionController?.updateTimings(.init(settings: settings))
+    toneAnalysisController?.updateAnalyzer(ToneAnalyzerFactory.make(settings: settings))
+    toneAnalysisController?.updateTimings(.init(settings: settings))
   }
 
   private func timingsOverride(for app: NSRunningApplication?) -> CorrectionController.Timings? {
@@ -831,6 +869,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
       case HotKeyManager.HotKeyID.correctAll.rawValue:
         self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
+      case HotKeyManager.HotKeyID.analyzeTone.rawValue:
+        self.toneAnalysisController?.analyzeSelection(targetApplication: target)
       default:
         break
       }
@@ -839,7 +879,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     do {
       try hotKeyManager.registerHotKeys(
         correctSelection: settings.hotKeyCorrectSelection,
-        correctAll: settings.hotKeyCorrectAll
+        correctAll: settings.hotKeyCorrectAll,
+        analyzeTone: settings.hotKeyAnalyzeTone
       )
     } catch {
       NSLog("[TextPolish] Failed to register hotkeys: \(error)")
@@ -872,6 +913,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       } else {
         self.feedback?.showInfo("No correction in progress")
       }
+    }
+  }
+
+  @objc private func analyzeTone() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let target = self.lastTargetApplication
+      self.toneAnalysisController?.analyzeSelection(targetApplication: target)
     }
   }
 
@@ -1798,7 +1847,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           do {
             try self.hotKeyManager.registerHotKeys(
               correctSelection: self.settings.hotKeyCorrectSelection,
-              correctAll: self.settings.hotKeyCorrectAll
+              correctAll: self.settings.hotKeyCorrectAll,
+              analyzeTone: self.settings.hotKeyAnalyzeTone
             )
             self.syncHotKeyMenuItems()
           } catch {
@@ -1811,7 +1861,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if HotKeyManager.isHotKeyInUse(
           hotKey: newHotKey,
-          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll]
+          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
         ) {
           self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
           return
@@ -1822,7 +1872,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
           try self.hotKeyManager.registerHotKeys(
             correctSelection: self.settings.hotKeyCorrectSelection,
-            correctAll: self.settings.hotKeyCorrectAll
+            correctAll: self.settings.hotKeyCorrectAll,
+            analyzeTone: self.settings.hotKeyAnalyzeTone
           )
           self.syncHotKeyMenuItems()
         } catch {
@@ -1852,7 +1903,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           do {
             try self.hotKeyManager.registerHotKeys(
               correctSelection: self.settings.hotKeyCorrectSelection,
-              correctAll: self.settings.hotKeyCorrectAll
+              correctAll: self.settings.hotKeyCorrectAll,
+              analyzeTone: self.settings.hotKeyAnalyzeTone
             )
             self.syncHotKeyMenuItems()
           } catch {
@@ -1865,7 +1917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if HotKeyManager.isHotKeyInUse(
           hotKey: newHotKey,
-          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll]
+          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
         ) {
           self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
           return
@@ -1876,11 +1928,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
           try self.hotKeyManager.registerHotKeys(
             correctSelection: self.settings.hotKeyCorrectSelection,
-            correctAll: self.settings.hotKeyCorrectAll
+            correctAll: self.settings.hotKeyCorrectAll,
+            analyzeTone: self.settings.hotKeyAnalyzeTone
           )
           self.syncHotKeyMenuItems()
         } catch {
           self.settings.hotKeyCorrectAll = oldHotKey
+          self.persistSettings()
+          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+        }
+      }
+    }
+  }
+
+  @objc private func setAnalyzeToneHotKey() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let title = "Set Analyze Tone Hotkey"
+      let message = "Current: \(self.settings.hotKeyAnalyzeTone.displayString)\n\nPress a key combination to change it."
+      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .analyzeToneDefault) {
+        if newHotKey == self.settings.hotKeyAnalyzeTone {
+          return
+        }
+        if HotKeyManager.isHotKeyInUse(
+          hotKey: newHotKey,
+          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
+        ) {
+          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+          return
+        }
+        let oldHotKey = self.settings.hotKeyAnalyzeTone
+        self.settings.hotKeyAnalyzeTone = newHotKey
+        self.persistSettings()
+        do {
+          try self.hotKeyManager.registerHotKeys(
+            correctSelection: self.settings.hotKeyCorrectSelection,
+            correctAll: self.settings.hotKeyCorrectAll,
+            analyzeTone: self.settings.hotKeyAnalyzeTone
+          )
+          self.syncHotKeyMenuItems()
+        } catch {
+          self.settings.hotKeyAnalyzeTone = oldHotKey
           self.persistSettings()
           self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
         }
@@ -1893,11 +1981,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       self.settings.hotKeyCorrectSelection = .correctSelectionDefault
       self.settings.hotKeyCorrectAll = .correctAllDefault
+      self.settings.hotKeyAnalyzeTone = .analyzeToneDefault
       self.persistSettings()
       do {
         try self.hotKeyManager.registerHotKeys(
           correctSelection: self.settings.hotKeyCorrectSelection,
-          correctAll: self.settings.hotKeyCorrectAll
+          correctAll: self.settings.hotKeyCorrectAll,
+          analyzeTone: self.settings.hotKeyAnalyzeTone
         )
         self.syncHotKeyMenuItems()
         self.showSimpleAlert(title: "Hotkeys Reset", message: "Hotkeys have been reset to defaults.")
@@ -1910,6 +2000,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func syncHotKeyMenuItems() {
     let selectionHotKey = settings.hotKeyCorrectSelection
     let allHotKey = settings.hotKeyCorrectAll
+    let analyzeToneHotKey = settings.hotKeyAnalyzeTone
 
     selectionItem?.title = "Correct Selection"
     selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)
@@ -1918,6 +2009,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     allItem?.title = "Correct All"
     allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
     allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
+
+    analyzeToneItem?.title = "Analyze Tone"
+    analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
+    analyzeToneItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: analyzeToneHotKey.modifiers)
   }
 
   private func syncCancelMenuState() {
