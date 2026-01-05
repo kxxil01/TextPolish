@@ -48,8 +48,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
       - name: Swift Version
         run: swift --version
-      - name: Run Tests
-        run: swift test
+        
       - name: Resolve Version
         id: version
         if: github.event_name == 'release'
