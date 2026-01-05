@@ -53,27 +53,30 @@ class SettingsWindowViewController: NSViewController {
     }
 
     private func setupUI() {
-        // Create button bar at bottom with fixed positioning
-        let buttonBar = NSView(frame: NSRect(x: 0, y: 0, width: view.bounds.width, height: 50))
-        buttonBar.autoresizingMask = [.width, .height]
+        // Create button bar at bottom
+        let buttonBar = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 50))
+        buttonBar.autoresizingMask = [.width, .minYMargin]
+        buttonBar.wantsLayer = true
+        buttonBar.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         view.addSubview(buttonBar)
 
-        // Create Apply button - positioned from right edge
+        // Create Apply button
         let applyButton = NSButton(title: "Apply", target: self, action: #selector(applyButtonClicked(_:)))
-        applyButton.frame = NSRect(x: view.bounds.width - 130, y: 10, width: 120, height: 32)
+        applyButton.frame = NSRect(x: buttonBar.frame.width - 130, y: 10, width: 120, height: 32)
         applyButton.keyEquivalent = "\r"
-        applyButton.autoresizingMask = [.minXMargin]  // Keep fixed distance from right edge
+        applyButton.autoresizingMask = [.minXMargin]
         buttonBar.addSubview(applyButton)
 
-        // Create Cancel button - positioned from right edge
+        // Create Cancel button
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelButtonClicked(_:)))
-        cancelButton.frame = NSRect(x: view.bounds.width - 260, y: 10, width: 120, height: 32)
+        cancelButton.frame = NSRect(x: buttonBar.frame.width - 260, y: 10, width: 120, height: 32)
         cancelButton.keyEquivalent = "\u{1b}"
-        cancelButton.autoresizingMask = [.minXMargin]  // Keep fixed distance from right edge
+        cancelButton.autoresizingMask = [.minXMargin]
         buttonBar.addSubview(cancelButton)
 
         // Create tab view above button bar
-        tabView = NSTabView(frame: NSRect(x: 0, y: 50, width: view.bounds.width, height: view.bounds.height - 50))
+        let tabHeight = view.frame.height - 50
+        tabView = NSTabView(frame: NSRect(x: 0, y: 50, width: view.frame.width, height: tabHeight))
         tabView.autoresizingMask = [.width, .height]
         view.addSubview(tabView)
 
@@ -125,237 +128,253 @@ class SettingsWindowViewController: NSViewController {
     }
 
     private func createProviderTab() -> NSView {
-        // Use full tab view height
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: tabView.bounds.width, height: tabView.bounds.height))
+        // Use full tab view frame size
+        let container = NSView(frame: tabView.frame)
         container.autoresizingMask = [.width, .height]
 
         let padding: CGFloat = 20
-        var yPosition: CGFloat = container.bounds.height - padding - 30
+        let contentWidth = container.frame.width - (padding * 2)
 
         // Provider selection label
-        let providerLabel = createLabel("Primary Provider", fontSize: 14, weight: .bold)
-        providerLabel.frame = NSRect(x: padding, y: yPosition, width: 200, height: 20)
+        let providerLabel = createLabel("Primary Provider", fontSize: 16, weight: .bold)
+        providerLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 24)
+        providerLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(providerLabel)
-        yPosition -= 40
 
         // Gemini provider radio button
         geminiProviderButton = NSButton(radioButtonWithTitle: "Gemini (Google)", target: self, action: #selector(providerChanged(_:)))
-        geminiProviderButton.frame = NSRect(x: padding * 2, y: yPosition, width: 200, height: 20)
+        geminiProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 100, width: contentWidth, height: 24)
+        geminiProviderButton.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiProviderButton)
-        yPosition -= 30
 
         // OpenRouter provider radio button
         openRouterProviderButton = NSButton(radioButtonWithTitle: "OpenRouter", target: self, action: #selector(providerChanged(_:)))
-        openRouterProviderButton.frame = NSRect(x: padding * 2, y: yPosition, width: 200, height: 20)
+        openRouterProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 130, width: contentWidth, height: 24)
+        openRouterProviderButton.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterProviderButton)
-        yPosition -= 50
 
         // Fallback checkbox
         fallbackCheckbox = NSButton(checkboxWithTitle: "Enable automatic fallback to alternative provider", target: self, action: #selector(fallbackChanged(_:)))
-        fallbackCheckbox.frame = NSRect(x: padding, y: yPosition, width: 400, height: 20)
+        fallbackCheckbox.frame = NSRect(x: padding, y: container.frame.height - 170, width: contentWidth, height: 24)
+        fallbackCheckbox.autoresizingMask = [.width, .minYMargin]
         container.addSubview(fallbackCheckbox)
 
         return container
     }
 
     private func createGeminiTab() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: tabView.bounds.width, height: tabView.bounds.height))
+        let container = NSView(frame: tabView.frame)
         container.autoresizingMask = [.width, .height]
 
         let padding: CGFloat = 20
-        var yPosition: CGFloat = container.bounds.height - padding - 30
+        let contentWidth = container.frame.width - (padding * 2)
 
         // API Key
         let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
-        apiKeyLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        apiKeyLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 20)
+        apiKeyLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(apiKeyLabel)
-        yPosition -= 25
 
-        geminiApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: yPosition, width: 400, height: 24))
+        geminiApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: container.frame.height - 90, width: contentWidth, height: 26))
         geminiApiKeyField.placeholderString = "Enter your Gemini API key"
+        geminiApiKeyField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiApiKeyField)
-        yPosition -= 40
 
         // Model
         let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
-        modelLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        modelLabel.frame = NSRect(x: padding, y: container.frame.height - 130, width: contentWidth, height: 20)
+        modelLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(modelLabel)
-        yPosition -= 25
 
-        geminiModelField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 300, height: 24))
+        geminiModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
         geminiModelField.placeholderString = "gemini-1.5-pro"
+        geminiModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiModelField)
 
         detectGeminiModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectGeminiModel(_:)))
-        detectGeminiModelButton.frame = NSRect(x: padding + 310, y: yPosition, width: 120, height: 24)
+        detectGeminiModelButton.frame = NSRect(x: container.frame.width - padding - 120, y: container.frame.height - 160, width: 120, height: 26)
+        detectGeminiModelButton.autoresizingMask = [.minXMargin, .minYMargin]
         container.addSubview(detectGeminiModelButton)
-        yPosition -= 40
 
         // Base URL
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
-        baseURLLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        baseURLLabel.frame = NSRect(x: padding, y: container.frame.height - 200, width: contentWidth, height: 20)
+        baseURLLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(baseURLLabel)
-        yPosition -= 25
 
-        geminiBaseURLField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 400, height: 24))
+        geminiBaseURLField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 26))
         geminiBaseURLField.placeholderString = "https://generativelanguage.googleapis.com"
+        geminiBaseURLField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiBaseURLField)
 
         return container
     }
 
     private func createOpenRouterTab() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: tabView.bounds.width, height: tabView.bounds.height))
+        let container = NSView(frame: tabView.frame)
         container.autoresizingMask = [.width, .height]
 
         let padding: CGFloat = 20
-        var yPosition: CGFloat = container.bounds.height - padding - 30
+        let contentWidth = container.frame.width - (padding * 2)
 
         // API Key
         let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
-        apiKeyLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        apiKeyLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 20)
+        apiKeyLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(apiKeyLabel)
-        yPosition -= 25
 
-        openRouterApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: yPosition, width: 400, height: 24))
+        openRouterApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: container.frame.height - 90, width: contentWidth, height: 26))
         openRouterApiKeyField.placeholderString = "Enter your OpenRouter API key"
+        openRouterApiKeyField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterApiKeyField)
-        yPosition -= 40
 
         // Model
         let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
-        modelLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        modelLabel.frame = NSRect(x: padding, y: container.frame.height - 130, width: contentWidth, height: 20)
+        modelLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(modelLabel)
-        yPosition -= 25
 
-        openRouterModelField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 300, height: 24))
+        openRouterModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
         openRouterModelField.placeholderString = "anthropic/claude-3-haiku"
+        openRouterModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterModelField)
 
         detectOpenRouterModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectOpenRouterModel(_:)))
-        detectOpenRouterModelButton.frame = NSRect(x: padding + 310, y: yPosition, width: 120, height: 24)
+        detectOpenRouterModelButton.frame = NSRect(x: container.frame.width - padding - 120, y: container.frame.height - 160, width: 120, height: 26)
+        detectOpenRouterModelButton.autoresizingMask = [.minXMargin, .minYMargin]
         container.addSubview(detectOpenRouterModelButton)
-        yPosition -= 40
 
         // Base URL
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
-        baseURLLabel.frame = NSRect(x: padding, y: yPosition, width: 100, height: 17)
+        baseURLLabel.frame = NSRect(x: padding, y: container.frame.height - 200, width: contentWidth, height: 20)
+        baseURLLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(baseURLLabel)
-        yPosition -= 25
 
-        openRouterBaseURLField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 400, height: 24))
+        openRouterBaseURLField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 26))
         openRouterBaseURLField.placeholderString = "https://openrouter.ai/api/v1"
+        openRouterBaseURLField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterBaseURLField)
 
         return container
     }
 
     private func createHotkeysTab() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: tabView.bounds.width, height: tabView.bounds.height))
+        let container = NSView(frame: tabView.frame)
         container.autoresizingMask = [.width, .height]
 
         let padding: CGFloat = 20
-        var yPosition: CGFloat = container.bounds.height - padding - 30
+        let contentWidth = container.frame.width - (padding * 2)
 
-        // Instructions
-        let instructions = createLabel("Click on a field and press your desired key combination", fontSize: 11, weight: .regular)
-        instructions.textColor = NSColor.secondaryLabelColor
-        instructions.frame = NSRect(x: padding, y: yPosition, width: 400, height: 17)
-        container.addSubview(instructions)
-        yPosition -= 40
+        // Title
+        let titleLabel = createLabel("Hotkey Configuration", fontSize: 16, weight: .bold)
+        titleLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 24)
+        titleLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(titleLabel)
+
+        // Instruction
+        let instructionLabel = createLabel("Click on a field below and press the desired key combination", fontSize: 11, weight: .regular)
+        instructionLabel.frame = NSRect(x: padding, y: container.frame.height - 85, width: contentWidth, height: 17)
+        instructionLabel.textColor = NSColor.secondaryLabelColor
+        instructionLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(instructionLabel)
 
         // Correct Selection
         let selectionLabel = createLabel("Correct Selection", fontSize: 12, weight: .medium)
-        selectionLabel.frame = NSRect(x: padding, y: yPosition, width: 150, height: 17)
+        selectionLabel.frame = NSRect(x: padding, y: container.frame.height - 120, width: 200, height: 20)
+        selectionLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(selectionLabel)
 
-        correctSelectionField = KeyComboField(frame: NSRect(x: padding + 160, y: yPosition - 2, width: 200, height: 24))
+        correctSelectionField = KeyComboField(frame: NSRect(x: padding + 220, y: container.frame.height - 125, width: 200, height: 30))
+        correctSelectionField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(correctSelectionField)
-        yPosition -= 40
 
         // Correct All
         let allLabel = createLabel("Correct All", fontSize: 12, weight: .medium)
-        allLabel.frame = NSRect(x: padding, y: yPosition, width: 150, height: 17)
+        allLabel.frame = NSRect(x: padding, y: container.frame.height - 165, width: 200, height: 20)
+        allLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(allLabel)
 
-        correctAllField = KeyComboField(frame: NSRect(x: padding + 160, y: yPosition - 2, width: 200, height: 24))
+        correctAllField = KeyComboField(frame: NSRect(x: padding + 220, y: container.frame.height - 170, width: 200, height: 30))
+        correctAllField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(correctAllField)
-        yPosition -= 40
 
         // Analyze Tone
         let toneLabel = createLabel("Analyze Tone", fontSize: 12, weight: .medium)
-        toneLabel.frame = NSRect(x: padding, y: yPosition, width: 150, height: 17)
+        toneLabel.frame = NSRect(x: padding, y: container.frame.height - 210, width: 200, height: 20)
+        toneLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(toneLabel)
 
-        analyzeToneField = KeyComboField(frame: NSRect(x: padding + 160, y: yPosition - 2, width: 200, height: 24))
+        analyzeToneField = KeyComboField(frame: NSRect(x: padding + 220, y: container.frame.height - 215, width: 200, height: 30))
+        analyzeToneField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(analyzeToneField)
 
         return container
     }
 
     private func createAdvancedTab() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: tabView.bounds.width, height: tabView.bounds.height))
+        let container = NSView(frame: tabView.frame)
         container.autoresizingMask = [.width, .height]
 
         let padding: CGFloat = 20
-        var yPosition: CGFloat = container.bounds.height - padding - 30
+        let contentWidth = container.frame.width - (padding * 2)
 
         // Request Timeout
         let timeoutLabel = createLabel("Request Timeout (seconds)", fontSize: 12, weight: .medium)
-        timeoutLabel.frame = NSRect(x: padding, y: yPosition, width: 200, height: 17)
+        timeoutLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 20)
+        timeoutLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(timeoutLabel)
-        yPosition -= 25
 
-        requestTimeoutField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 100, height: 24))
+        requestTimeoutField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 90, width: 150, height: 26))
         requestTimeoutField.placeholderString = "20"
+        requestTimeoutField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(requestTimeoutField)
-        yPosition -= 40
 
         // Gemini Min Similarity
         let geminiSimLabel = createLabel("Gemini Min Similarity", fontSize: 12, weight: .medium)
-        geminiSimLabel.frame = NSRect(x: padding, y: yPosition, width: 200, height: 17)
+        geminiSimLabel.frame = NSRect(x: padding, y: container.frame.height - 130, width: contentWidth, height: 20)
+        geminiSimLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiSimLabel)
-        yPosition -= 25
 
-        geminiMinSimilarityField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 100, height: 24))
+        geminiMinSimilarityField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: 150, height: 26))
         geminiMinSimilarityField.placeholderString = "0.65"
+        geminiMinSimilarityField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiMinSimilarityField)
-        yPosition -= 40
 
         // OpenRouter Min Similarity
         let openRouterSimLabel = createLabel("OpenRouter Min Similarity", fontSize: 12, weight: .medium)
-        openRouterSimLabel.frame = NSRect(x: padding, y: yPosition, width: 200, height: 17)
+        openRouterSimLabel.frame = NSRect(x: padding, y: container.frame.height - 200, width: contentWidth, height: 20)
+        openRouterSimLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterSimLabel)
-        yPosition -= 25
 
-        openRouterMinSimilarityField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 100, height: 24))
+        openRouterMinSimilarityField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 230, width: 150, height: 26))
         openRouterMinSimilarityField.placeholderString = "0.65"
+        openRouterMinSimilarityField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterMinSimilarityField)
-        yPosition -= 40
 
         // Language
         let languageLabel = createLabel("Correction Language", fontSize: 12, weight: .medium)
-        languageLabel.frame = NSRect(x: padding, y: yPosition, width: 200, height: 17)
+        languageLabel.frame = NSRect(x: padding, y: container.frame.height - 270, width: contentWidth, height: 20)
+        languageLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(languageLabel)
-        yPosition -= 25
 
-        languagePopup = NSPopUpButton(frame: NSRect(x: padding, y: yPosition, width: 200, height: 24))
+        languagePopup = NSPopUpButton(frame: NSRect(x: padding, y: container.frame.height - 300, width: 200, height: 26))
         languagePopup.addItems(withTitles: ["Auto", "English (US)", "Indonesian"])
+        languagePopup.autoresizingMask = [.width, .minYMargin]
         container.addSubview(languagePopup)
-        yPosition -= 40
 
         // Extra Instruction
         let extraLabel = createLabel("Extra Instruction (Optional)", fontSize: 12, weight: .medium)
-        extraLabel.frame = NSRect(x: padding, y: yPosition, width: 250, height: 17)
+        extraLabel.frame = NSRect(x: padding, y: container.frame.height - 340, width: contentWidth, height: 20)
+        extraLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(extraLabel)
-        yPosition -= 25
 
-        extraInstructionField = NSTextField(frame: NSRect(x: padding, y: yPosition, width: 400, height: 80))
+        extraInstructionField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 420, width: contentWidth, height: 70))
         extraInstructionField.placeholderString = "Additional instructions for the AI..."
         extraInstructionField.isEditable = true
         extraInstructionField.isSelectable = true
         extraInstructionField.cell = NSTextFieldCell()
         extraInstructionField.cell!.wraps = true
+        extraInstructionField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(extraInstructionField)
 
         return container
