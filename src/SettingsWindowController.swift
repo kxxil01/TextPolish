@@ -4,9 +4,13 @@ class SettingsWindowController: NSWindowController {
     var viewController: SettingsWindowViewController?
 
     convenience init() {
-        self.init(window: Self.createWindow())
+        let window = Self.createWindow()
+        self.init(window: window)
         self.window?.title = "TextPolish Settings"
         self.window?.isReleasedWhenClosed = false
+
+        // Set up view controller immediately when window is created
+        setupViewController()
     }
 
     private static func createWindow() -> NSWindow {
@@ -24,19 +28,15 @@ class SettingsWindowController: NSWindowController {
         return window
     }
 
-    override func windowDidLoad() {
-        super.windowDidLoad()
-        setupViewController()
-    }
-
     private func setupViewController() {
         let vc = SettingsWindowViewController()
         viewController = vc
         vc.settingsWindowController = self
 
+        // Force the view to load by accessing it
+        let _ = vc.view
+
         window?.contentView = vc.view
-        vc.view.frame = NSRect(x: 0, y: 0, width: 600, height: 450)
-        vc.view.autoresizingMask = [.width, .height]
     }
 
     override func close() {
