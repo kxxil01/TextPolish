@@ -154,6 +154,11 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   }
 
   func dismiss() {
+    // Remove the local monitor to prevent memory leak
+    if let monitor = localMonitor {
+      NSEvent.removeMonitor(monitor)
+      localMonitor = nil
+    }
     orderOut(nil)
   }
 
@@ -171,16 +176,23 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
       y: mouseLocation.y - windowSize.height - 20
     )
 
-    // Ensure window stays on screen
+    // Ensure entire window stays on screen
     let screenFrame = screen.visibleFrame
+
+    // Adjust X position if window would be off-screen horizontally
     if newOrigin.x + windowSize.width > screenFrame.maxX {
-      newOrigin.x = mouseLocation.x - windowSize.width - 20
-    }
-    if newOrigin.y < screenFrame.minY {
-      newOrigin.y = mouseLocation.y + 20
+      newOrigin.x = screenFrame.maxX - windowSize.width - 10
     }
     if newOrigin.x < screenFrame.minX {
-      newOrigin.x = screenFrame.minX + 20
+      newOrigin.x = screenFrame.minX + 10
+    }
+
+    // Adjust Y position if window would be off-screen vertically
+    if newOrigin.y < screenFrame.minY {
+      newOrigin.y = screenFrame.minY + 10
+    }
+    if newOrigin.y + windowSize.height > screenFrame.maxY {
+      newOrigin.y = mouseLocation.y + 20
     }
 
     setFrameOrigin(newOrigin)

@@ -4,13 +4,14 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let legacyKeychainService = "com.ilham.GrammarCorrection"
+  private let legacyKeychainService = "com.kxxil01.TextPolish"
   private let keychainAccount = "openRouterApiKey"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
+  private let config: ToneAnalysisConfig
 
-  init(settings: Settings) throws {
+  init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
     keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
     keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
@@ -20,18 +21,27 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
 
     self.baseURL = baseURL
     self.model = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    // Validate model name
+    if self.model.isEmpty {
+      throw ToneAnalysisError.invalidModelName(settings.openRouterModel)
+    }
+
     self.timeoutSeconds = settings.requestTimeoutSeconds
+    self.config = config
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.count >= 5 else { throw ToneAnalysisError.textTooShort }
+    // Validate original text length before trimming
+    guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
+    guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
 
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
 
-    return try parseResponse(output)
+    return try ToneAnalysisJSONParser.parseResponse(output)
   }
 
   private func resolveApiKey() throws -> String {
@@ -66,39 +76,77 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
-    let url = try makeChatCompletionsURL()
-    var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-    request.httpMethod = "POST"
-    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-    request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-    request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
-    request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
+    // Try up to 3 times with rate limit backoff
+    for attempt in 0..<3 {
+      do {
+        let url = try makeChatCompletionsURL()
+        var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
+        request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
 
-    let body = OpenRouterToneRequest(
-      model: model,
-      messages: [
-        .init(role: "user", content: prompt),
-      ],
-      temperature: 0.0,
-      maxTokens: 512
-    )
-    request.httpBody = try JSONEncoder().encode(body)
+        let body = OpenRouterToneRequest(
+          model: model,
+          messages: [
+            .init(role: "user", content: prompt),
+          ],
+          temperature: 0.0,
+          maxTokens: config.maxOutputTokens
+        )
+        request.httpBody = try JSONEncoder().encode(body)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else {
-      throw ToneAnalysisError.requestFailed(-1, nil)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+          throw ToneAnalysisError.requestFailed(-1, nil)
+        }
+
+        if (200..<300).contains(http.statusCode) {
+          let decoded = try JSONDecoder().decode(OpenRouterToneResponse.self, from: data)
+          let content = decoded.choices?.first?.message?.content ?? ""
+
+          // Check if response is empty
+          guard !content.isEmpty else {
+            throw ToneAnalysisError.emptyResponse
+          }
+          return content
+        }
+
+        // Handle rate limiting with exponential backoff
+        if http.statusCode == 429 {
+          let retryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
+          try await Task.sleep(for: .seconds(retryAfter))
+          // Continue to next attempt
+          continue
+        }
+
+        let message = parseErrorMessage(data: data)
+        NSLog("[TextPolish] OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        throw ToneAnalysisError.requestFailed(http.statusCode, message)
+      } catch {
+        // If it's the last attempt, throw the error
+        if attempt == 2 {
+          throw error
+        }
+        // For other errors on non-last attempts, continue
+        continue
+      }
     }
 
-    if (200..<300).contains(http.statusCode) {
-      let decoded = try JSONDecoder().decode(OpenRouterToneResponse.self, from: data)
-      let content = decoded.choices?.first?.message?.content ?? ""
-      return content
-    }
+    throw ToneAnalysisError.requestFailed(-1, nil)
+  }
 
-    let message = parseErrorMessage(data: data)
-    NSLog("[TextPolish] OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
-    throw ToneAnalysisError.requestFailed(http.statusCode, message)
+  private func extractRetryAfter(from data: Data) -> Double? {
+    guard let string = String(data: data, encoding: .utf8) else { return nil }
+    guard let range = string.range(of: #"retry_after"\s*:\s*(\d+)"#, options: .regularExpression) else { return nil }
+    let match = string[range]
+    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
+    if let number = Int(numberString) {
+      return Double(number)
+    }
+    return nil
   }
 
   private struct OpenAIErrorEnvelope: Decodable {
@@ -143,46 +191,6 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
     \(text)
     """
   }
-
-  private func parseResponse(_ response: String) throws -> ToneAnalysisResult {
-    var cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    // Remove markdown code fences if present
-    if cleaned.hasPrefix("```json") {
-      cleaned = String(cleaned.dropFirst(7))
-    } else if cleaned.hasPrefix("```") {
-      cleaned = String(cleaned.dropFirst(3))
-    }
-    if cleaned.hasSuffix("```") {
-      cleaned = String(cleaned.dropLast(3))
-    }
-    cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    guard !cleaned.isEmpty else { throw ToneAnalysisError.emptyResponse }
-
-    guard let data = cleaned.data(using: .utf8) else {
-      throw ToneAnalysisError.invalidResponse("Could not convert to data")
-    }
-
-    do {
-      let parsed = try JSONDecoder().decode(ToneAnalysisJSON.self, from: data)
-      return ToneAnalysisResult(
-        tone: parsed.tone,
-        sentiment: parsed.sentiment,
-        formality: parsed.formality,
-        explanation: parsed.explanation
-      )
-    } catch {
-      throw ToneAnalysisError.invalidResponse(error.localizedDescription)
-    }
-  }
-}
-
-private struct ToneAnalysisJSON: Decodable {
-  let tone: DetectedTone
-  let sentiment: Sentiment
-  let formality: FormalityLevel
-  let explanation: String
 }
 
 private struct OpenRouterToneRequest: Encodable {

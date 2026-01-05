@@ -39,6 +39,7 @@ final class ToneAnalysisController {
   private var timings: Timings
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
+  private var currentAnalyzerTask: Task<ToneAnalysisResult, Error>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
 
   init(
@@ -58,6 +59,8 @@ final class ToneAnalysisController {
   }
 
   func updateAnalyzer(_ analyzer: ToneAnalyzer) {
+    // Cancel any ongoing analysis to prevent race conditions
+    cancelCurrentAnalysis()
     self.analyzer = analyzer
   }
 
@@ -73,6 +76,8 @@ final class ToneAnalysisController {
   func cancelCurrentAnalysis() -> Bool {
     guard isRunning, let currentTask else { return false }
     currentTask.cancel()
+    // Also cancel the analyzer task if it's running
+    currentAnalyzerTask?.cancel()
     return true
   }
 
@@ -160,6 +165,7 @@ final class ToneAnalysisController {
   private func attemptCopy(excluding sentinel: String, timings: Timings) async throws -> String {
     pasteboard.setString(sentinel)
     try await Task.sleep(for: timings.copySettleDelay)
+    try Task.checkCancellation()
 
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
@@ -191,8 +197,15 @@ final class ToneAnalysisController {
     let task = Task.detached(priority: .userInitiated) {
       try await analyzer.analyze(text)
     }
+    currentAnalyzerTask = task
+    defer {
+      currentAnalyzerTask = nil
+    }
     return try await withTaskCancellationHandler {
-      try await task.value
+      let result = try await task.value
+      // Check for cancellation before returning result
+      try Task.checkCancellation()
+      return result
     } onCancel: {
       task.cancel()
     }

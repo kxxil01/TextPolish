@@ -4,13 +4,14 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let legacyKeychainService = "com.ilham.GrammarCorrection"
+  private let legacyKeychainService = "com.kxxil01.TextPolish"
   private let keychainAccount = "geminiApiKey"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
+  private let config: ToneAnalysisConfig
 
-  init(settings: Settings) throws {
+  init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv =
       ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
@@ -27,18 +28,27 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
     } else {
       self.model = rawModel
     }
+
+    // Validate model name
+    if self.model.isEmpty {
+      throw ToneAnalysisError.invalidModelName(settings.geminiModel)
+    }
+
     self.timeoutSeconds = settings.requestTimeoutSeconds
+    self.config = config
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.count >= 5 else { throw ToneAnalysisError.textTooShort }
+    // Validate original text length before trimming
+    guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
+    guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
 
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
 
-    return try parseResponse(output)
+    return try ToneAnalysisJSONParser.parseResponse(output)
   }
 
   private func resolveApiKey() throws -> String {
@@ -94,40 +104,74 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
         contents: [
           .init(role: "user", parts: [.init(text: prompt)]),
         ],
-        generationConfig: .init(temperature: 0.0, maxOutputTokens: 512)
+        generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
       )
       request.httpBody = try JSONEncoder().encode(body)
 
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse else {
-        lastError = ToneAnalysisError.requestFailed(-1, nil)
+      do {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+          lastError = ToneAnalysisError.requestFailed(-1, nil)
+          continue
+        }
+
+        if (200..<300).contains(http.statusCode) {
+          let decoded = try JSONDecoder().decode(GeminiToneResponse.self, from: data)
+          let textParts = decoded.candidates?
+            .first?
+            .content?
+            .parts?
+            .compactMap(\.text)
+            ?? []
+
+          // Check if response is empty
+          let joined = textParts.joined()
+          guard !joined.isEmpty else {
+            throw ToneAnalysisError.emptyResponse
+          }
+          return joined
+        }
+
+        let message = parseErrorMessage(data: data)
+        NSLog("[TextPolish] Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
+
+        // Handle rate limiting with exponential backoff
+        if http.statusCode == 429 {
+          let retryAfter = extractRetryAfter(from: data) ?? 2
+          try await Task.sleep(for: .seconds(retryAfter))
+          // Don't set lastError, just retry this same version
+          continue
+        }
+
+        if http.statusCode == 404, index < versionsToTry.count - 1 {
+          lastError = ToneAnalysisError.requestFailed(http.statusCode, message)
+          continue
+        }
+
+        throw ToneAnalysisError.requestFailed(http.statusCode, message)
+      } catch {
+        // If it's already a ToneAnalysisError, rethrow it
+        if error is ToneAnalysisError {
+          throw error
+        }
+        // Otherwise, treat as a network error
+        lastError = error
         continue
       }
-
-      if (200..<300).contains(http.statusCode) {
-        let decoded = try JSONDecoder().decode(GeminiToneResponse.self, from: data)
-        let textParts = decoded.candidates?
-          .first?
-          .content?
-          .parts?
-          .compactMap(\.text)
-          ?? []
-
-        return textParts.joined()
-      }
-
-      let message = parseErrorMessage(data: data)
-      NSLog("[TextPolish] Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
-
-      if http.statusCode == 404, index < versionsToTry.count - 1 {
-        lastError = ToneAnalysisError.requestFailed(http.statusCode, message)
-        continue
-      }
-
-      throw ToneAnalysisError.requestFailed(http.statusCode, message)
     }
 
     throw lastError ?? ToneAnalysisError.requestFailed(-1, nil)
+  }
+
+  private func extractRetryAfter(from data: Data) -> Double? {
+    guard let string = String(data: data, encoding: .utf8) else { return nil }
+    guard let range = string.range(of: #"retryAfter"\s*:\s*(\d+)"#, options: .regularExpression) else { return nil }
+    let match = string[range]
+    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
+    if let number = Int(numberString) {
+      return Double(number)
+    }
+    return nil
   }
 
   private struct GoogleErrorEnvelope: Decodable {
@@ -174,46 +218,6 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
     \(text)
     """
   }
-
-  private func parseResponse(_ response: String) throws -> ToneAnalysisResult {
-    var cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    // Remove markdown code fences if present
-    if cleaned.hasPrefix("```json") {
-      cleaned = String(cleaned.dropFirst(7))
-    } else if cleaned.hasPrefix("```") {
-      cleaned = String(cleaned.dropFirst(3))
-    }
-    if cleaned.hasSuffix("```") {
-      cleaned = String(cleaned.dropLast(3))
-    }
-    cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    guard !cleaned.isEmpty else { throw ToneAnalysisError.emptyResponse }
-
-    guard let data = cleaned.data(using: .utf8) else {
-      throw ToneAnalysisError.invalidResponse("Could not convert to data")
-    }
-
-    do {
-      let parsed = try JSONDecoder().decode(ToneAnalysisJSON.self, from: data)
-      return ToneAnalysisResult(
-        tone: parsed.tone,
-        sentiment: parsed.sentiment,
-        formality: parsed.formality,
-        explanation: parsed.explanation
-      )
-    } catch {
-      throw ToneAnalysisError.invalidResponse(error.localizedDescription)
-    }
-  }
-}
-
-private struct ToneAnalysisJSON: Decodable {
-  let tone: DetectedTone
-  let sentiment: Sentiment
-  let formality: FormalityLevel
-  let explanation: String
 }
 
 private struct GeminiToneRequest: Encodable {
