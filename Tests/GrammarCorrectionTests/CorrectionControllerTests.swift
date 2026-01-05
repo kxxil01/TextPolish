@@ -147,6 +147,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: NoopCorrector(),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: StubKeyboard(isTrusted: false),
       pasteboard: StubPasteboard()
@@ -175,6 +176,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: AppendCorrector(),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard
@@ -203,6 +205,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: AppendCorrector(),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard
@@ -231,6 +234,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: SlowCorrector(delay: .milliseconds(200)),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard
@@ -255,6 +259,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: ThrowingCorrector(error: TestError()),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard,
@@ -330,6 +335,7 @@ final class CorrectionControllerTests: XCTestCase {
     let controller = CorrectionController(
       corrector: AppendCorrector(),
       feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard

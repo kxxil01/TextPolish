@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var workspaceActivationObserver: Any?
   private var isMenuOpen = false
   private var pendingAfterMenuAction: (@MainActor () async -> Void)?
+  private var settingsWindowController: SettingsWindowController?
   private lazy var updaterController = SPUStandardUpdaterController(
     startingUpdater: true,
     updaterDelegate: self,
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     correctionController = CorrectionController(
       corrector: CorrectorFactory.make(settings: settings),
       feedback: feedback,
+      settings: settings,
       timings: .init(settings: settings),
       recoverer: { [weak self] error in
         guard let self else { return nil }
@@ -137,6 +139,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
       Task { @MainActor [weak self] in
         self?.lastTargetApplication = app
+      }
+    }
+
+    // Listen for settings changes
+    NotificationCenter.default.addObserver(
+      forName: .settingsDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let newSettings = notification.object as? Settings else { return }
+      Task { @MainActor [weak self] in
+        self?.settings = newSettings
+        self?.refreshCorrector()
+        self?.setupHotKeys()
       }
     }
 
@@ -439,8 +455,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     preferencesMenu.addItem(accessibilityItem)
 
     let openSettingsItem = NSMenuItem(
-      title: "Open Settings File…",
-      action: #selector(openSettingsFile),
+      title: "Open Settings Window…",
+      action: #selector(openSettingsWindow),
       keyEquivalent: ""
     )
     openSettingsItem.target = self
@@ -1165,6 +1181,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     runAfterMenuDismissed { [weak self] in
       self?.setCorrectionLanguage(.indonesian)
     }
+  }
+
+  @objc private func openSettingsWindow(_ sender: Any?) {
+    settingsWindowController = SettingsWindowController()
+    settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
   }
 
   private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {

@@ -86,6 +86,7 @@ final class CorrectionController {
   private let feedback: FeedbackPresenter
   private let keyboard: KeyboardControlling
   private let pasteboard: PasteboardControlling
+  private let settings: Settings
   private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
   private let onSuccess: (@MainActor () -> Void)?
 
@@ -97,6 +98,7 @@ final class CorrectionController {
   init(
     corrector: GrammarCorrector,
     feedback: FeedbackPresenter,
+    settings: Settings,
     timings: Timings = .default,
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
@@ -105,6 +107,7 @@ final class CorrectionController {
   ) {
     self.corrector = corrector
     self.feedback = feedback
+    self.settings = settings
     self.timings = timings
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
@@ -193,6 +196,42 @@ final class CorrectionController {
         do {
           corrected = try await self.runCorrector(corrector, text: inputText)
         } catch {
+          // Check if we should try fallback provider
+          if settings.fallbackToOpenRouterOnGeminiError,
+             let fallbackCorrector = createFallbackCorrector()
+          {
+            self.feedback.showInfo("Primary provider failed, trying fallback...")
+            do {
+              corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
+              self.feedback.showSuccess()
+              self.onSuccess?()
+              return
+            } catch {
+              // Both failed, show fallback alert
+              let fallback = FallbackController(
+                fallbackProvider: fallbackCorrector,
+                showSuccess: { [weak self] in
+                  self?.feedback.showSuccess()
+                  self?.onSuccess?()
+                },
+                showInfo: { [weak self] message in
+                  self?.feedback.showInfo(message)
+                },
+                showError: { [weak self] message in
+                  self?.feedback.showError(message)
+                }
+              ) { [weak self] success in
+                if success {
+                  self?.updateCorrector(fallbackCorrector)
+                }
+              }
+
+              fallback.showFallbackAlert(for: error, corrector: corrector, text: inputText)
+              throw error
+            }
+          }
+
+          // Use recoverer if available
           if let recoverer, let action = await recoverer(error) {
             self.feedback.showInfo(action.message)
             let retryCorrector = action.corrector ?? self.corrector
@@ -290,5 +329,38 @@ final class CorrectionController {
     } onCancel: {
       task.cancel()
     }
+  }
+
+  private func createFallbackCorrector() -> GrammarCorrector? {
+    let fallbackSettings = Settings(
+      provider: settings.provider == .gemini ? .openRouter : .gemini,
+      requestTimeoutSeconds: settings.requestTimeoutSeconds,
+      activationDelayMilliseconds: settings.activationDelayMilliseconds,
+      selectAllDelayMilliseconds: settings.selectAllDelayMilliseconds,
+      copySettleDelayMilliseconds: settings.copySettleDelayMilliseconds,
+      copyTimeoutMilliseconds: settings.copyTimeoutMilliseconds,
+      pasteSettleDelayMilliseconds: settings.pasteSettleDelayMilliseconds,
+      postPasteDelayMilliseconds: settings.postPasteDelayMilliseconds,
+      timingProfiles: settings.timingProfiles,
+      correctionLanguage: settings.correctionLanguage,
+      hotKeyCorrectSelection: settings.hotKeyCorrectSelection,
+      hotKeyCorrectAll: settings.hotKeyCorrectAll,
+      hotKeyAnalyzeTone: settings.hotKeyAnalyzeTone,
+      fallbackToOpenRouterOnGeminiError: settings.fallbackToOpenRouterOnGeminiError,
+      geminiApiKey: settings.geminiApiKey,
+      geminiModel: settings.geminiModel,
+      geminiBaseURL: settings.geminiBaseURL,
+      geminiMaxAttempts: settings.geminiMaxAttempts,
+      geminiMinSimilarity: settings.geminiMinSimilarity,
+      geminiExtraInstruction: settings.geminiExtraInstruction,
+      openRouterApiKey: settings.openRouterApiKey,
+      openRouterModel: settings.openRouterModel,
+      openRouterBaseURL: settings.openRouterBaseURL,
+      openRouterMaxAttempts: settings.openRouterMaxAttempts,
+      openRouterMinSimilarity: settings.openRouterMinSimilarity,
+      openRouterExtraInstruction: settings.openRouterExtraInstruction
+    )
+
+    return CorrectorFactory.make(settings: fallbackSettings)
   }
 }

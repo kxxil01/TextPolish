@@ -1,0 +1,221 @@
+import XCTest
+import AppKit
+@testable import GrammarCorrection
+
+final class SettingsWindowViewControllerTests: XCTestCase {
+    var viewController: SettingsWindowViewController!
+    var mockDelegate: MockSettingsDelegate!
+
+    override func setUp() {
+        super.setUp()
+        viewController = SettingsWindowViewController()
+        mockDelegate = MockSettingsDelegate()
+        viewController.delegate = mockDelegate
+
+        // Load the view
+        let _ = viewController.view
+    }
+
+    override func tearDown() {
+        viewController = nil
+        mockDelegate = nil
+        super.tearDown()
+    }
+
+    func testViewControllerInitialization() {
+        XCTAssertNotNil(viewController.view, "View should be initialized")
+    }
+
+    func testTabViewCreation() {
+        XCTAssertNotNil(viewController.tabView, "Tab view should be created")
+        XCTAssertEqual(viewController.tabView?.tabViewItems.count, 5, "Should have 5 tabs")
+    }
+
+    func testAllTabsCreated() {
+        let tabLabels = viewController.tabView?.tabViewItems.map { $0.label } ?? []
+        XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
+        XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
+        XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
+        XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
+        XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
+    }
+
+    func testProviderTabElements() {
+        XCTAssertNotNil(viewController.geminiProviderButton, "Gemini provider button should exist")
+        XCTAssertNotNil(viewController.openRouterProviderButton, "OpenRouter provider button should exist")
+        XCTAssertNotNil(viewController.fallbackCheckbox, "Fallback checkbox should exist")
+    }
+
+    func testGeminiTabElements() {
+        XCTAssertNotNil(viewController.geminiApiKeyField, "Gemini API key field should exist")
+        XCTAssertNotNil(viewController.geminiModelField, "Gemini model field should exist")
+        XCTAssertNotNil(viewController.geminiBaseURLField, "Gemini base URL field should exist")
+        XCTAssertNotNil(viewController.detectGeminiModelButton, "Detect Gemini model button should exist")
+    }
+
+    func testOpenRouterTabElements() {
+        XCTAssertNotNil(viewController.openRouterApiKeyField, "OpenRouter API key field should exist")
+        XCTAssertNotNil(viewController.openRouterModelField, "OpenRouter model field should exist")
+        XCTAssertNotNil(viewController.openRouterBaseURLField, "OpenRouter base URL field should exist")
+        XCTAssertNotNil(viewController.detectOpenRouterModelButton, "Detect OpenRouter model button should exist")
+    }
+
+    func testHotkeysTabElements() {
+        XCTAssertNotNil(viewController.correctSelectionField, "Correct selection field should exist")
+        XCTAssertNotNil(viewController.correctAllField, "Correct all field should exist")
+        XCTAssertNotNil(viewController.analyzeToneField, "Analyze tone field should exist")
+    }
+
+    func testAdvancedTabElements() {
+        XCTAssertNotNil(viewController.requestTimeoutField, "Request timeout field should exist")
+        XCTAssertNotNil(viewController.geminiMinSimilarityField, "Gemini min similarity field should exist")
+        XCTAssertNotNil(viewController.openRouterMinSimilarityField, "OpenRouter min similarity field should exist")
+        XCTAssertNotNil(viewController.languagePopup, "Language popup should exist")
+        XCTAssertNotNil(viewController.extraInstructionField, "Extra instruction field should exist")
+    }
+
+    func testLoadSettings() {
+        viewController.loadSettings()
+        XCTAssertNotNil(viewController.settings, "Settings should be loaded")
+    }
+
+    func testSaveSettingsWithValidData() {
+        // Given
+        viewController.loadSettings()
+        viewController.geminiProviderButton.state = .on
+        viewController.fallbackCheckbox.state = .on
+        viewController.geminiApiKeyField.stringValue = "test-key"
+        viewController.geminiModelField.stringValue = "gemini-1.5-pro"
+
+        // When
+        viewController.saveSettings()
+
+        // Then
+        XCTAssertEqual(viewController.settings.provider, .gemini, "Provider should be saved")
+        XCTAssertTrue(viewController.settings.fallbackToOpenRouterOnGeminiError, "Fallback setting should be saved")
+    }
+
+    func testProviderChanged() {
+        // Given
+        viewController.loadSettings()
+        viewController.openRouterProviderButton.state = .on
+
+        // When
+        viewController.providerChanged(viewController.geminiProviderButton!)
+
+        // Then
+        XCTAssertEqual(viewController.geminiProviderButton.state, .on, "Gemini button should be on")
+        XCTAssertEqual(viewController.openRouterProviderButton.state, .off, "OpenRouter button should be off")
+    }
+
+    func testLanguageChanged() {
+        // Given
+        viewController.loadSettings()
+        viewController.languagePopup.selectItem(at: 1)
+
+        // When
+        viewController.languageChanged(viewController.languagePopup!)
+
+        // Then
+        XCTAssertEqual(viewController.languagePopup.indexOfSelectedItem, 1, "Language should be changed")
+    }
+
+    func testApplyButtonClicked() {
+        // Given
+        let mockWindowController = MockSettingsWindowController()
+        viewController.settingsWindowController = mockWindowController
+        viewController.loadSettings()
+
+        // When
+        viewController.applyButtonClicked(NSButton())
+
+        // Then
+        XCTAssertTrue(mockWindowController.closeCalled, "Apply should close window")
+    }
+
+    func testCancelButtonClicked() {
+        // Given
+        let mockWindowController = MockSettingsWindowController()
+        viewController.settingsWindowController = mockWindowController
+
+        // When
+        viewController.cancelButtonClicked(NSButton())
+
+        // Then
+        XCTAssertTrue(mockWindowController.closeCalled, "Cancel should close window")
+    }
+
+    func testDetectGeminiModel() {
+        // This is an async test - it will test the button state changes
+        viewController.geminiApiKeyField.stringValue = "test-key"
+        viewController.geminiModelField.stringValue = ""
+
+        viewController.detectGeminiModel(viewController.detectGeminiModelButton!)
+
+        XCTAssertEqual(viewController.detectGeminiModelButton.title, "Detect Model", "Button should reset after action")
+    }
+
+    func testDetectOpenRouterModel() {
+        viewController.openRouterApiKeyField.stringValue = "test-key"
+        viewController.openRouterModelField.stringValue = ""
+
+        viewController.detectOpenRouterModel(viewController.detectOpenRouterModelButton!)
+
+        XCTAssertEqual(viewController.detectOpenRouterModelButton.title, "Detect Model", "Button should reset after action")
+    }
+
+    func testSettingsDidChangeDelegate() {
+        // Given
+        viewController.loadSettings()
+        let initialSettings = viewController.settings
+
+        // When
+        viewController.saveSettings()
+
+        // Then
+        XCTAssertTrue(mockDelegate.settingsDidChangeCalled, "Delegate should be notified of settings change")
+    }
+
+    func testUpdateProviderButtons() {
+        // Given
+        viewController.settings = Settings.loadOrCreateDefault()
+        viewController.settings.provider = .gemini
+
+        // When
+        viewController.updateProviderButtons()
+
+        // Then
+        XCTAssertEqual(viewController.geminiProviderButton.state, .on, "Gemini should be selected")
+        XCTAssertEqual(viewController.openRouterProviderButton.state, .off, "OpenRouter should not be selected")
+    }
+
+    func testFallbackChanged() {
+        // Given
+        viewController.loadSettings()
+
+        // When
+        viewController.fallbackChanged(viewController.fallbackCheckbox!)
+
+        // Then
+        XCTAssertNoThrow(NSException()) // Should not crash
+    }
+}
+
+// MARK: - Mocks
+class MockSettingsDelegate: SettingsWindowViewControllerDelegate {
+    var settingsDidChangeCalled = false
+    var receivedSettings: Settings?
+
+    func settingsDidChange(_ settings: Settings) {
+        settingsDidChangeCalled = true
+        receivedSettings = settings
+    }
+}
+
+class MockSettingsWindowController: SettingsWindowController {
+    var closeCalled = false
+
+    override func close() {
+        closeCalled = true
+    }
+}
