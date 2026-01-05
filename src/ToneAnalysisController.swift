@@ -41,6 +41,7 @@ final class ToneAnalysisController {
   private var currentTask: Task<Void, Never>?
   private var currentAnalyzerTask: Task<ToneAnalysisResult, Error>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
+  private let onSuccess: (() -> Void)?
 
   init(
     analyzer: ToneAnalyzer,
@@ -48,7 +49,8 @@ final class ToneAnalysisController {
     resultPresenter: ToneAnalysisResultPresenter,
     timings: Timings = .default,
     keyboard: KeyboardControlling? = nil,
-    pasteboard: PasteboardControlling? = nil
+    pasteboard: PasteboardControlling? = nil,
+    onSuccess: (() -> Void)? = nil
   ) {
     self.analyzer = analyzer
     self.feedback = feedback
@@ -56,6 +58,7 @@ final class ToneAnalysisController {
     self.timings = timings
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
+    self.onSuccess = onSuccess
   }
 
   func updateAnalyzer(_ analyzer: ToneAnalyzer) {
@@ -131,6 +134,7 @@ final class ToneAnalysisController {
         try Task.checkCancellation()
 
         self.resultPresenter.showResult(result)
+        self.onSuccess?()
       } catch is CancellationError {
         self.feedback.showInfo("Canceled")
       } catch {

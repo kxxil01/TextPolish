@@ -72,6 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let correctionCountDateKey = "correctionCountDate"
   private var todayCorrectionCount: Int = 0
 
+  private let toneAnalysisCountKey = "toneAnalysisCount"
+  private let toneAnalysisCountDateKey = "toneAnalysisCountDate"
+  private var todayToneAnalysisCount: Int = 0
+
   private var appDisplayName: String {
     let display =
       (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
@@ -93,7 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: appDisplayName)
     loadTodayCorrectionCount()
-    let initialIcon = makeIconWithBadge(count: todayCorrectionCount)
+    loadTodayToneAnalysisCount()
+    let initialIcon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
     statusItem.button?.image = initialIcon
     statusItem.button?.toolTip = appDisplayName
     statusItem.button?.target = self
@@ -127,7 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       analyzer: ToneAnalyzerFactory.make(settings: settings),
       feedback: feedback,
       resultPresenter: toneResultWindow,
-      timings: .init(settings: settings)
+      timings: .init(settings: settings),
+      onSuccess: { [weak self] in
+        self?.incrementToneAnalysisCount()
+      }
     )
 
     workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -172,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @objc private func statusItemClicked(_ sender: Any?) {
     captureFrontmostApplication()
     refreshCorrectionCountIfNewDay()
+    refreshToneAnalysisCountIfNewDay()
     updateStatusItemIcon()
     syncLaunchAtLoginMenuState()
     syncUpdateMenuItems()
@@ -635,6 +644,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     refreshCorrectionCountIfNewDay()
     todayCorrectionCount += 1
     UserDefaults.standard.set(todayCorrectionCount, forKey: correctionCountKey)
+    updateStatusItemIcon()
+  }
+
+  private func loadTodayToneAnalysisCount() {
+    refreshToneAnalysisCountIfNewDay()
+  }
+
+  private func refreshToneAnalysisCountIfNewDay() {
+    let defaults = UserDefaults.standard
+    let storedDate = defaults.string(forKey: toneAnalysisCountDateKey) ?? ""
+    let today = formattedToday()
+
+    if storedDate == today {
+      todayToneAnalysisCount = defaults.integer(forKey: toneAnalysisCountKey)
+    } else {
+      todayToneAnalysisCount = 0
+      defaults.set(0, forKey: toneAnalysisCountKey)
+      defaults.set(today, forKey: toneAnalysisCountDateKey)
+    }
+  }
+
+  private func incrementToneAnalysisCount() {
+    refreshToneAnalysisCountIfNewDay()
+    todayToneAnalysisCount += 1
+    UserDefaults.standard.set(todayToneAnalysisCount, forKey: toneAnalysisCountKey)
     updateStatusItemIcon()
   }
 

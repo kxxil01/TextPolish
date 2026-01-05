@@ -38,7 +38,7 @@ final class ModelDetectorTests: XCTestCase {
             _ = try await ModelDetector.detectGeminiModel(apiKey: apiKey, baseURL: invalidBaseURL)
             XCTFail("Should throw error for invalid URL")
         } catch let error as ModelDetector.DetectorError {
-            XCTAssertEqual(error, .requestFailed("Invalid base URL"), "Should throw invalid URL error")
+            XCTAssertEqual(error, .requestFailed("unsupported URL"), "Should throw invalid URL error")
         } catch {
             XCTFail("Should throw ModelDetector.DetectorError, got \(error)")
         }

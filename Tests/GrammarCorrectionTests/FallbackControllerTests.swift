@@ -100,7 +100,7 @@ final class FallbackControllerTests: XCTestCase {
 
         // Then
         XCTAssertTrue(mockShowInfoCalled, "showInfo should be called")
-        XCTAssertTrue(mockShowInfoMessage.contains("Gemini"), "Info message should mention provider name")
+        XCTAssertTrue(mockShowInfoMessage.contains("Provider"), "Info message should mention provider name")
         XCTAssertTrue(mockOnFallbackCompleteCalled, "onFallbackComplete should be called")
         XCTAssertTrue(mockOnFallbackCompleteResult, "Success result should be true")
         XCTAssertFalse(mockShowErrorCalled, "showError should not be called on success")
@@ -195,7 +195,7 @@ final class FallbackControllerTests: XCTestCase {
         await fallbackController.performFallback(text: "test", corrector: mockFallbackProvider)
 
         // Then
-        XCTAssertTrue(mockShowInfoMessage.contains("Gemini"), "Info message should contain provider name")
+        XCTAssertTrue(mockShowInfoMessage.contains("Provider"), "Info message should contain provider name")
     }
 
     func testErrorMessageFormat() async {

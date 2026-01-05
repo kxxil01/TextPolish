@@ -24,6 +24,14 @@ final class FallbackController {
     }
 
     func showFallbackAlert(for error: Error, corrector: GrammarCorrector, text: String) {
+        // Don't show alert in test environment to avoid blocking CI/CD
+        #if DEBUG
+        if NSClassFromString("XCTestCase") != nil {
+            NSLog("[TextPolish] Fallback alert suppressed in test environment: \(error)")
+            return
+        }
+        #endif
+
         let alert = NSAlert()
         alert.messageText = "Primary Provider Failed"
         alert.informativeText = "Try using \(providerName(for: fallbackProvider)) instead?\n\nError: \(error.localizedDescription)"

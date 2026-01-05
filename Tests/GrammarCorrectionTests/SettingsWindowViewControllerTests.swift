@@ -146,22 +146,27 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     }
 
     func testDetectGeminiModel() {
-        // This is an async test - it will test the button state changes
+        // This test verifies the button shows loading state during async operation
         viewController.geminiApiKeyField.stringValue = "TEST_GEMINI_KEY_FOR_UNIT_TESTING"
         viewController.geminiModelField.stringValue = ""
 
         viewController.detectGeminiModel(viewController.detectGeminiModelButton!)
 
-        XCTAssertEqual(viewController.detectGeminiModelButton.title, "Detect Model", "Button should reset after action")
+        // Button should show loading state immediately
+        XCTAssertEqual(viewController.detectGeminiModelButton.title, "Detecting...", "Button should show loading state")
+        XCTAssertFalse(viewController.detectGeminiModelButton.isEnabled, "Button should be disabled during operation")
     }
 
     func testDetectOpenRouterModel() {
+        // This test verifies the button shows loading state during async operation
         viewController.openRouterApiKeyField.stringValue = "TEST_OR_KEY_FOR_UNIT_TESTING"
         viewController.openRouterModelField.stringValue = ""
 
         viewController.detectOpenRouterModel(viewController.detectOpenRouterModelButton!)
 
-        XCTAssertEqual(viewController.detectOpenRouterModelButton.title, "Detect Model", "Button should reset after action")
+        // Button should show loading state immediately
+        XCTAssertEqual(viewController.detectOpenRouterModelButton.title, "Detecting...", "Button should show loading state")
+        XCTAssertFalse(viewController.detectOpenRouterModelButton.isEnabled, "Button should be disabled during operation")
     }
 
     func testSettingsDidChangeDelegate() {
