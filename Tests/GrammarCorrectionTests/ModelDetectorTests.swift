@@ -30,7 +30,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testDetectGeminiModelThrowsWhenInvalidBaseURL() async {
         // Given
-        let apiKey = "test-key"
+        let apiKey = "TEST_KEY_FOR_UNIT_TESTING"
         let invalidBaseURL = "not-a-valid-url"
 
         // When & Then
@@ -50,7 +50,7 @@ final class ModelDetectorTests: XCTestCase {
         // For now, we test the error handling path
 
         // Given
-        let apiKey = "invalid-key"
+        let apiKey = "INVALID_TEST_KEY_FOR_TESTING"
         let baseURL = "https://generativelanguage.googleapis.com"
 
         // When & Then

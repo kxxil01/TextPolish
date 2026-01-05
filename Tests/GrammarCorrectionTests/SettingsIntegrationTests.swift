@@ -86,7 +86,7 @@ final class SettingsIntegrationTests: XCTestCase {
     func testApiKeyUpdate() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let testApiKey = "test-api-key-12345"
+        let testApiKey = "TEST_VALUE_FOR_UNIT_TESTING_ONLY"
 
         // When
         settingsWindowViewController?.geminiApiKeyField?.stringValue = testApiKey
@@ -154,7 +154,7 @@ final class SettingsIntegrationTests: XCTestCase {
     func testOpenRouterSettingsUpdate() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let testApiKey = "or-test-key"
+        let testApiKey = "TEST_OR_API_KEY_FOR_TESTING_ONLY"
         let testModel = "anthropic/claude-3-sonnet"
 
         // When
@@ -252,14 +252,14 @@ final class SettingsIntegrationTests: XCTestCase {
         // When - make multiple changes
         settingsWindowViewController?.geminiProviderButton?.state = .on
         settingsWindowViewController?.fallbackCheckbox?.state = .on
-        settingsWindowViewController?.geminiApiKeyField?.stringValue = "test-key"
+        settingsWindowViewController?.geminiApiKeyField?.stringValue = "TEST_GEMINI_KEY_FOR_TESTING"
         settingsWindowViewController?.geminiModelField?.stringValue = "test-model"
         settingsWindowViewController?.saveSettings()
 
         // Then
         XCTAssertEqual(settingsWindowViewController?.settings.provider, .gemini, "Provider should be updated")
         XCTAssertTrue(settingsWindowViewController?.settings.fallbackToOpenRouterOnGeminiError ?? false, "Fallback should be enabled")
-        XCTAssertEqual(settingsWindowViewController?.settings.geminiApiKey, "test-key", "API key should be updated")
+        XCTAssertEqual(settingsWindowViewController?.settings.geminiApiKey, "TEST_GEMINI_KEY_FOR_TESTING", "API key should be updated")
         XCTAssertEqual(settingsWindowViewController?.settings.geminiModel, "test-model", "Model should be updated")
     }
 

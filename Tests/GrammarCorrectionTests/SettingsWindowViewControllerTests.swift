@@ -84,7 +84,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         viewController.loadSettings()
         viewController.geminiProviderButton.state = .on
         viewController.fallbackCheckbox.state = .on
-        viewController.geminiApiKeyField.stringValue = "test-key"
+        viewController.geminiApiKeyField.stringValue = "TEST_GEMINI_API_KEY_FOR_TESTING"
         viewController.geminiModelField.stringValue = "gemini-1.5-pro"
 
         // When
@@ -147,7 +147,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
     func testDetectGeminiModel() {
         // This is an async test - it will test the button state changes
-        viewController.geminiApiKeyField.stringValue = "test-key"
+        viewController.geminiApiKeyField.stringValue = "TEST_GEMINI_KEY_FOR_UNIT_TESTING"
         viewController.geminiModelField.stringValue = ""
 
         viewController.detectGeminiModel(viewController.detectGeminiModelButton!)
@@ -156,7 +156,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     }
 
     func testDetectOpenRouterModel() {
-        viewController.openRouterApiKeyField.stringValue = "test-key"
+        viewController.openRouterApiKeyField.stringValue = "TEST_OR_KEY_FOR_UNIT_TESTING"
         viewController.openRouterModelField.stringValue = ""
 
         viewController.detectOpenRouterModel(viewController.detectOpenRouterModelButton!)
