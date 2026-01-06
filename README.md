@@ -168,34 +168,6 @@ Click the menu bar icon to access:
 
 ---
 
-## Changelog
-
-### Version 0.1.x (January 2025)
-
-**Code Refactoring:**
-- ✅ **Major refactoring:** Extracted 369 lines of duplicate code into shared `TextProcessor` protocol
-- ✅ **Improved maintainability:** Single source of truth for text processing logic
-- ✅ **Code reduction:** Reduced total lines from 993 to 833 (-160 lines)
-- ✅ **Test coverage:** Maintained 100% (135/135 tests passing)
-- ✅ **Zero breaking changes:** All existing functionality preserved
-
-**Performance Improvements:**
-- ✅ Cached regex patterns for text protection (10-20% faster corrections)
-- ✅ Removed 378 lines of unused/dead code across both correctors
-- ✅ Added debug logging for better troubleshooting
-
-**Code Quality:**
-- ✅ Protocol-oriented design with default implementations
-- ✅ Eliminated code duplication between Gemini and OpenRouter correctors
-- ✅ Better separation of concerns (shared logic vs provider-specific code)
-
-### Previous Versions
-
-- **Tone Analysis Feature:** Added ability to analyze text tone with detailed insights
-- **UI/UX Improvements:** Various settings window and menu bar enhancements
-
----
-
 ## For Developers
 
 - [Development guide](docs/development.md)
