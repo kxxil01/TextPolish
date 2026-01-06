@@ -111,20 +111,18 @@ final class GeminiCorrector: GrammarCorrector {
   }
 
   private func resolveApiKey() throws -> String {
+    // Try primary keychain
     do {
-      let keyFromPrimaryKeychain =
-        try Keychain.getPassword(service: keychainService, account: keychainAccount)
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-      if !keyFromPrimaryKeychain.isEmpty { return keyFromPrimaryKeychain }
+      if let keyFromPrimaryKeychain = try Keychain.getPassword(service: keychainService, account: keychainAccount)?.trimmingCharacters(in: .whitespacesAndNewlines), !keyFromPrimaryKeychain.isEmpty {
+        return keyFromPrimaryKeychain
+      }
     } catch {
       NSLog("[TextPolish] Failed to read primary keychain: \(error)")
     }
 
+    // Try legacy keychain
     do {
-      let keyFromLegacyKeychain =
-        try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-      if !keyFromLegacyKeychain.isEmpty {
+      if let keyFromLegacyKeychain = try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)?.trimmingCharacters(in: .whitespacesAndNewlines), !keyFromLegacyKeychain.isEmpty {
         if legacyKeychainService != keychainService {
           do {
             try Keychain.setPassword(keyFromLegacyKeychain, service: keychainService, account: keychainAccount, label: keychainLabel)
