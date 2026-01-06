@@ -26,33 +26,33 @@ The app tracks daily usage for both features and displays the combined count in 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        User triggers                         │
+│                        User triggers                        │
 │                    hotkey (⌃⌥⌘G / ⌃⌥⌘⇧G)                    │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     HotKeyManager                            │
-│              (Carbon global hotkey registration)             │
+│                     HotKeyManager                           │
+│              (Carbon global hotkey registration)            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   CorrectionController                       │
-│         (orchestrates copy → correct → paste flow)           │
-│                                                              │
-│  1. Snapshot clipboard (PasteboardController)                │
+│                   CorrectionController                      │
+│         (orchestrates copy → correct → paste flow)          │
+│                                                             │
+│  1. Snapshot clipboard (PasteboardController)               │
 │  2. Send ⌘C via KeyboardController                          │
-│  3. Wait for clipboard change                                │
-│  4. Call GrammarCorrector.correct(text)                      │
-│  5. Set corrected text to clipboard                          │
+│  3. Wait for clipboard change                               │
+│  4. Call GrammarCorrector.correct(text)                     │
+│  5. Set corrected text to clipboard                         │
 │  6. Send ⌘V via KeyboardController                          │
-│  7. Restore original clipboard                               │
+│  7. Restore original clipboard                              │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              GeminiCorrector / OpenRouterCorrector           │
+│              GeminiCorrector / OpenRouterCorrector          │
 │                    (AI provider API calls)                  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -60,38 +60,38 @@ The app tracks daily usage for both features and displays the combined count in 
 ### Tone Analysis Flow
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        User triggers                         │
+│                        User triggers                        │
 │                          hotkey (TBD)                       │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     HotKeyManager                            │
-│              (Carbon global hotkey registration)             │
+│                     HotKeyManager                           │
+│              (Carbon global hotkey registration)            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                ToneAnalysisController                        │
+│                ToneAnalysisController                       │
 │         (orchestrates copy → analyze → show result)         │
-│                                                              │
-│  1. Snapshot clipboard (PasteboardController)                │
+│                                                             │
+│  1. Snapshot clipboard (PasteboardController)               │
 │  2. Send ⌘C via KeyboardController                          │
-│  3. Wait for clipboard change                                │
-│  4. Call ToneAnalyzer.analyze(text)                          │
+│  3. Wait for clipboard change                               │
+│  4. Call ToneAnalyzer.analyze(text)                         │
 │  5. Display result in window                                │
-│  6. Restore original clipboard                               │
+│  6. Restore original clipboard                              │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     ToneAnalyzerFactory                      │
-│              (creates analyzer based on provider)            │
+│                     ToneAnalyzerFactory                     │
+│              (creates analyzer based on provider)           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              GeminiCorrector / OpenRouterCorrector           │
+│              GeminiCorrector / OpenRouterCorrector          │
 │                    (AI provider API calls)                  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -99,9 +99,9 @@ The app tracks daily usage for both features and displays the combined count in 
 ### Usage Tracking
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AppDelegate                             │
-│                                                              │
-│  • Grammar correction counter (daily)                        │
+│                      AppDelegate                            │
+│                                                             │
+│  • Grammar correction counter (daily)                       │
 │  • Tone analysis counter (daily)                            │
 │  • Combined badge on status bar                             │
 │  • Automatic reset at midnight                              │
