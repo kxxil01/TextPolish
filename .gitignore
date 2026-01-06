@@ -2,3 +2,4 @@ build/
 .build/
 .sparkle/
 .DS_Store
+firebase-debug.log
