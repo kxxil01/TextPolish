@@ -250,11 +250,50 @@ final class CorrectionControllerTests: XCTestCase {
 
   @MainActor
   func testRecovererUsesFallbackCorrector() async {
-    // SKIPPED: This test is timing out due to async/await issues in CI environment
-    // The test verifies fallback behavior but is not critical for core functionality
-    // Related to issue: https://github.com/example/textpolish/issues/123
-    // TODO: Fix this test to properly handle async recovery scenarios
-    XCTAssertTrue(true, "Test skipped - needs investigation")
+    var settings = Settings.loadOrCreateDefault()
+    settings.fallbackToOpenRouterOnGeminiError = true
+
+    let primaryFailed = expectation(description: "primary corrector should fail")
+    let fallbackSucceeded = expectation(description: "fallback corrector should succeed")
+    let feedback = StubFeedback()
+    feedback.onInfo = { message in
+      if message.contains("Primary provider failed") {
+        primaryFailed.fulfill()
+      }
+      if message.contains("fallback") {
+        fallbackSucceeded.fulfill()
+      }
+    }
+
+    let pasteboard = StubPasteboard(waitResults: [.success("test text")])
+    let keyboard = StubKeyboard(isTrusted: true)
+
+    let controller = CorrectionController(
+      corrector: ThrowingCorrector(error: TestError()),
+      feedback: feedback,
+      settings: settings,
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    let completion = expectation(description: "correction completes")
+    controller.onSuccess = {
+      completion.fulfill()
+    }
+
+    controller.correctSelection()
+
+    // Wait for either fallback or completion with reasonable timeout
+    await fulfillment(
+      of: [primaryFailed, fallbackSucceeded, completion],
+      timeout: 5.0,
+      enforceOrder: false
+    )
+
+    // Verify that we got fallback-related messages
+    let hasFallbackMessage = feedback.infoMessages.contains { $0.contains("fallback") || $0.contains("Primary provider") }
+    XCTAssertTrue(hasFallbackMessage, "Should show fallback-related message")
   }
 
   func testFeedbackCooldownAllowsAfterInterval() {

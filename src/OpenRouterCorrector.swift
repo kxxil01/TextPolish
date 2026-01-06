@@ -42,6 +42,13 @@ final class OpenRouterCorrector: GrammarCorrector {
     }
   }
 
+  // MARK: - Cached Regex Patterns
+
+  private static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
+  private static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
+  private static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
+  private static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
+
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -100,19 +107,31 @@ final class OpenRouterCorrector: GrammarCorrector {
   }
 
   private func resolveApiKey() throws -> String {
-    let keyFromPrimaryKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccount))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromPrimaryKeychain.isEmpty { return keyFromPrimaryKeychain }
+    do {
+      let keyFromPrimaryKeychain =
+        try Keychain.getPassword(service: keychainService, account: keychainAccount)
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+      if !keyFromPrimaryKeychain.isEmpty { return keyFromPrimaryKeychain }
+    } catch {
+      NSLog("[TextPolish] Failed to read primary keychain: \(error)")
+    }
 
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccount))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty {
-      if legacyKeychainService != keychainService {
-        try? Keychain.setPassword(keyFromLegacyKeychain, service: keychainService, account: keychainAccount, label: keychainLabel)
+    do {
+      let keyFromLegacyKeychain =
+        try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+      if !keyFromLegacyKeychain.isEmpty {
+        if legacyKeychainService != keychainService {
+          do {
+            try Keychain.setPassword(keyFromLegacyKeychain, service: keychainService, account: keychainAccount, label: keychainLabel)
+          } catch {
+            NSLog("[TextPolish] Failed to migrate legacy keychain: \(error)")
+          }
+        }
+        return keyFromLegacyKeychain
       }
-      return keyFromLegacyKeychain
+    } catch {
+      NSLog("[TextPolish] Failed to read legacy keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -322,196 +341,6 @@ final class OpenRouterCorrector: GrammarCorrector {
     return result
   }
 
-  private func applyInlineCodeFormatting(_ text: String) -> String {
-    let protected = protect(text)
-    let formatted = formatInlineCode(in: protected.text)
-    return restore(formatted, placeholders: protected.placeholders)
-  }
-
-  private func formatInlineCode(in text: String) -> String {
-    var result = ""
-    var buffer = ""
-    var bufferIsWhitespace: Bool? = nil
-    var inDatasourceList = false
-    var allowNextDatasourceName = false
-
-    func processToken(_ token: String) -> String {
-      let (prefix, core, suffix) = splitToken(token)
-      if core.isEmpty {
-        if inDatasourceList, token.contains(",") {
-          allowNextDatasourceName = true
-        }
-        if inDatasourceList, containsSentenceEnd(token) {
-          inDatasourceList = false
-          allowNextDatasourceName = false
-        }
-        return token
-      }
-
-      let lower = core.lowercased()
-      if lower == "datasource" || lower == "datasources" {
-        inDatasourceList = true
-        allowNextDatasourceName = true
-        return token
-      }
-
-      if inDatasourceList {
-        if isConnectorToken(lower) {
-          allowNextDatasourceName = true
-          if containsSentenceEnd(suffix) {
-            inDatasourceList = false
-            allowNextDatasourceName = false
-          }
-          return token
-        }
-
-        if allowNextDatasourceName {
-          if isDatasourceName(core) {
-            let wrapped = prefix + "`" + core + "`" + suffix
-            allowNextDatasourceName = suffix.contains(",")
-            if containsSentenceEnd(suffix) {
-              inDatasourceList = false
-              allowNextDatasourceName = false
-            }
-            return wrapped
-          }
-          inDatasourceList = false
-          allowNextDatasourceName = false
-        } else {
-          inDatasourceList = false
-        }
-      }
-
-      if shouldWrapToken(core) {
-        return prefix + "`" + core + "`" + suffix
-      }
-      return token
-    }
-
-    func flushBuffer() {
-      guard let isWhitespace = bufferIsWhitespace else { return }
-      if isWhitespace {
-        result.append(buffer)
-      } else {
-        result.append(processToken(buffer))
-      }
-      buffer = ""
-    }
-
-    for ch in text {
-      let isWhitespace = ch.isWhitespace
-      if bufferIsWhitespace == nil {
-        bufferIsWhitespace = isWhitespace
-        buffer.append(ch)
-        continue
-      }
-      if isWhitespace == bufferIsWhitespace {
-        buffer.append(ch)
-      } else {
-        flushBuffer()
-        bufferIsWhitespace = isWhitespace
-        buffer = String(ch)
-      }
-    }
-    if !buffer.isEmpty {
-      flushBuffer()
-    }
-
-    return result
-  }
-
-  private func isConnectorToken(_ lower: String) -> Bool {
-    lower == "and" || lower == "or" || lower == "&"
-  }
-
-  private func isDatasourceName(_ core: String) -> Bool {
-    if core.contains("`") || core.contains("GC_PROTECT_") { return false }
-    let lower = core.lowercased()
-    if Self.datasourceStopwords.contains(lower) { return false }
-    return matches(core, pattern: "^[A-Za-z0-9_.:-]+$")
-  }
-
-  private func shouldWrapToken(_ core: String) -> Bool {
-    if core.contains("`") || core.contains("GC_PROTECT_") { return false }
-    if matches(core, pattern: "^[A-Za-z0-9_.:-]+=[A-Za-z0-9_.:/-]+$") { return true }
-    if core.contains("-") {
-      if matches(core, pattern: "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}$") { return true }
-      if core.range(of: "[0-9]", options: .regularExpression) != nil { return true }
-    }
-    return false
-  }
-
-  private func splitToken(_ token: String) -> (prefix: String, core: String, suffix: String) {
-    var start = token.startIndex
-    var end = token.endIndex
-
-    while start < end, isTrimPunctuation(token[start]) {
-      start = token.index(after: start)
-    }
-
-    while end > start {
-      let before = token.index(before: end)
-      if isTrimPunctuation(token[before]) {
-        end = before
-      } else {
-        break
-      }
-    }
-
-    let prefix = String(token[..<start])
-    let core = String(token[start..<end])
-    let suffix = String(token[end...])
-    return (prefix, core, suffix)
-  }
-
-  private func containsSentenceEnd(_ value: String) -> Bool {
-    value.contains(".") || value.contains("!") || value.contains("?") || value.contains(":") || value.contains(";")
-  }
-
-  private func matches(_ text: String, pattern: String) -> Bool {
-    text.range(of: pattern, options: .regularExpression) != nil
-  }
-
-  private func isTrimPunctuation(_ ch: Character) -> Bool {
-    for scalar in ch.unicodeScalars {
-      if Self.tokenTrimSet.contains(scalar) { return true }
-    }
-    return false
-  }
-
-  private static let tokenTrimSet = CharacterSet(charactersIn: "\"'()[]{}.,!?;:")
-  private static let datasourceStopwords: Set<String> = [
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "but",
-    "by",
-    "for",
-    "from",
-    "in",
-    "is",
-    "it",
-    "of",
-    "on",
-    "or",
-    "that",
-    "the",
-    "these",
-    "this",
-    "those",
-    "to",
-    "was",
-    "were",
-    "with",
-    "you",
-    "we",
-    "i",
-  ]
-
   private func splitOuterWhitespace(_ string: String) -> (prefix: String, core: String, suffix: String) {
     var start = string.startIndex
     while start < string.endIndex, string[start].isWhitespace {
@@ -547,15 +376,14 @@ final class OpenRouterCorrector: GrammarCorrector {
       .replacingOccurrences(of: "-", with: "")
       .prefix(8)
 
-    let patterns: [String] = [
-      "```[\\s\\S]*?```", // fenced code blocks (multiline)
-      "`[^`\\n]*`", // inline code
-      "<[^>\\n]+>", // Discord tokens like <@id>, <#id>, <:name:id>
-      "https?://[^\\s]+", // URLs
+    let regexes = [
+      Self.fencedCodeBlockRegex,
+      Self.inlineCodeRegex,
+      Self.discordTokenRegex,
+      Self.urlRegex,
     ]
 
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { continue }
+    for regex in regexes {
       current = protectMatches(
         in: current,
         regex: regex,
