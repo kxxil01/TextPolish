@@ -113,20 +113,6 @@ jobs:
           ASSET_URL="https://github.com/kxxil01/TextPolish/releases/download/${VERSION}/TextPolish.app.zip"
           echo "   Asset URL: $ASSET_URL"
 
-          # Wait briefly for CDN propagation (releases may need a moment to be available)
-          echo "⏳ Waiting briefly for CDN propagation..."
-          sleep 5
-
-          # Check if asset exists
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ASSET_URL}")
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "❌ ERROR: Release asset not found (HTTP $HTTP_STATUS)"
-            echo "   URL: ${ASSET_URL}"
-            echo "🔧 Please verify the release was uploaded correctly"
-            exit 1
-          fi
-          echo "✅ Release asset exists (HTTP $HTTP_STATUS)"
-
           # Download and verify SHA256
           echo "🔒 Downloading release asset to verify SHA256..."
           RELEASE_SHA256=$(curl -sL --retry 3 --retry-all-errors "${ASSET_URL}" | shasum -a 256 | awk '{print $1}')
