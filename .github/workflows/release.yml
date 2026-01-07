@@ -48,7 +48,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.MACOS_KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
       - name: Swift Version
         run: swift --version
-        
+
       - name: Resolve Version
         id: version
         if: github.event_name == 'release'
@@ -101,17 +101,61 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          SHA256=$(shasum -a 256 build/TextPolish.app.zip | awk '{print $1}')
+          echo "🔧 Starting Homebrew tap update for version ${VERSION}"
 
+          # Calculate local SHA256
+          echo "📊 Calculating SHA256 of local build..."
+          LOCAL_SHA256=$(shasum -a 256 build/TextPolish.app.zip | awk '{print $1}')
+          echo "   Local SHA256: $LOCAL_SHA256"
+
+          # Verify release asset exists and get SHA256
+          echo "🔍 Verifying release asset..."
+          ASSET_URL="https://github.com/kxxil01/TextPolish/releases/download/${VERSION}/TextPolish.app.zip"
+          echo "   Asset URL: $ASSET_URL"
+
+          # Check if asset exists
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ASSET_URL}")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ ERROR: Release asset not found (HTTP $HTTP_STATUS)"
+            echo "   URL: ${ASSET_URL}"
+            echo "🔧 Please verify the release was uploaded correctly"
+            exit 1
+          fi
+          echo "✅ Release asset exists (HTTP $HTTP_STATUS)"
+
+          # Download and verify SHA256
+          echo "🔒 Downloading release asset to verify SHA256..."
+          RELEASE_SHA256=$(curl -sL --retry 3 --retry-all-errors "${ASSET_URL}" | shasum -a 256 | awk '{print $1}')
+          echo "   Release SHA256: $RELEASE_SHA256"
+
+          # Compare SHA256s
+          if [ "$LOCAL_SHA256" != "$RELEASE_SHA256" ]; then
+            echo "❌ ERROR: SHA256 mismatch!"
+            echo "   Local:   $LOCAL_SHA256"
+            echo "   Release: $RELEASE_SHA256"
+            echo "🔧 Please verify the build and release process"
+            exit 1
+          fi
+          echo "✅ SHA256 verified - Release asset is valid"
+
+          # Clone tap repository
+          echo "📥 Cloning homebrew-tap repository..."
           git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kxxil01/homebrew-tap.git /tmp/homebrew-tap
           cd /tmp/homebrew-tap
 
-          cat > Casks/textpolish.rb << EOF
-          cask "textpolish" do
-            version "${VERSION}"
-            sha256 "${SHA256}"
+          # Create branch for update
+          BRANCH_NAME="homebrew-update-${VERSION}"
+          echo "🌿 Creating branch: $BRANCH_NAME"
+          git checkout -b "$BRANCH_NAME"
 
-            url "https://github.com/kxxil01/TextPolish/releases/download/v#{version}/TextPolish.app.zip"
+          # Generate cask file
+          echo "📝 Generating updated cask file..."
+          cat > Casks/textpolish.rb << 'CASK_EOF'
+          cask "textpolish" do
+            version "VERSION_PLACEHOLDER"
+            sha256 "SHA256_PLACEHOLDER"
+
+            url "https://github.com/kxxil01/TextPolish/releases/download/VERSION_PLACEHOLDER/TextPolish.app.zip"
             name "TextPolish"
             desc "Grammar correction anywhere on macOS"
             homepage "https://github.com/kxxil01/TextPolish"
@@ -125,10 +169,57 @@ jobs:
               "~/Library/Preferences/com.kxxil01.TextPolish.plist",
             ]
           end
-          EOF
+          CASK_EOF
 
+          # Replace placeholders
+          sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" Casks/textpolish.rb
+          sed -i '' "s/SHA256_PLACEHOLDER/${LOCAL_SHA256}/g" Casks/textpolish.rb
+
+          # Verify file was updated
+          if ! grep -q "version \"${VERSION}\"" Casks/textpolish.rb; then
+            echo "❌ ERROR: Failed to update cask file"
+            exit 1
+          fi
+
+          if ! grep -q "sha256 \"${LOCAL_SHA256}\"" Casks/textpolish.rb; then
+            echo "❌ ERROR: Failed to update SHA256 in cask file"
+            exit 1
+          fi
+
+          echo "✅ Casks/textpolish.rb updated successfully"
+          echo "📄 Version: ${VERSION}"
+          echo "📄 SHA256: ${LOCAL_SHA256}"
+
+          # Commit changes
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/textpolish.rb
-          git commit -m "Update TextPolish to v${VERSION}"
-          git push
+
+          # Check if there are changes to commit
+          if ! git diff --cached --quiet; then
+            echo "📝 Committing changes..."
+            git commit -m "Update TextPolish to v${VERSION}"
+
+            # Push branch
+            echo "📤 Pushing changes..."
+            git push -u origin "$BRANCH_NAME"
+
+            # Create PR
+            echo "🔄 Creating Pull Request..."
+            PR_TITLE="Update TextPolish to v${VERSION}"
+            PR_BODY="Automated Homebrew tap update for TextPolish v${VERSION}"
+
+            gh pr create \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --repo kxxil01/homebrew-tap
+
+            echo "✅ Pull request created successfully"
+            echo "🔗 Please review and merge the PR at: https://github.com/kxxil01/homebrew-tap/pulls"
+          else
+            echo "ℹ️  No changes to commit (cask file already up to date)"
+          fi
+
+          echo "🎉 Homebrew tap update completed successfully!"
