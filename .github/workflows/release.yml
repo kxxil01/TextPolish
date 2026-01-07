@@ -133,11 +133,6 @@ jobs:
           git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kxxil01/homebrew-tap.git /tmp/homebrew-tap
           cd /tmp/homebrew-tap
 
-          # Create branch for update
-          BRANCH_NAME="homebrew-update-${VERSION}"
-          echo "🌿 Creating branch: $BRANCH_NAME"
-          git checkout -b "$BRANCH_NAME"
-
           # Generate cask file
           echo "📝 Generating updated cask file..."
           cat > Casks/textpolish.rb << 'CASK_EOF'
@@ -190,24 +185,12 @@ jobs:
             echo "📝 Committing changes..."
             git commit -m "Update TextPolish to v${VERSION}"
 
-            # Push branch
-            echo "📤 Pushing changes..."
-            git push -u origin "$BRANCH_NAME"
+            # Push to main
+            echo "📤 Pushing changes to main..."
+            git push origin main
 
-            # Create PR
-            echo "🔄 Creating Pull Request..."
-            PR_TITLE="Update TextPolish to v${VERSION}"
-            PR_BODY="Automated Homebrew tap update for TextPolish v${VERSION}"
-
-            gh pr create \
-              --title "$PR_TITLE" \
-              --body "$PR_BODY" \
-              --base main \
-              --head "$BRANCH_NAME" \
-              --repo kxxil01/homebrew-tap
-
-            echo "✅ Pull request created successfully"
-            echo "🔗 Please review and merge the PR at: https://github.com/kxxil01/homebrew-tap/pulls"
+            echo "✅ Homebrew tap updated successfully"
+            echo "🔗 View changes at: https://github.com/kxxil01/homebrew-tap/commit/main"
           else
             echo "ℹ️  No changes to commit (cask file already up to date)"
           fi
