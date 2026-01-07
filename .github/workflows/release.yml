@@ -113,6 +113,10 @@ jobs:
           ASSET_URL="https://github.com/kxxil01/TextPolish/releases/download/${VERSION}/TextPolish.app.zip"
           echo "   Asset URL: $ASSET_URL"
 
+          # Wait briefly for CDN propagation (releases may need a moment to be available)
+          echo "⏳ Waiting briefly for CDN propagation..."
+          sleep 5
+
           # Check if asset exists
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ASSET_URL}")
           if [ "$HTTP_STATUS" != "200" ]; then
