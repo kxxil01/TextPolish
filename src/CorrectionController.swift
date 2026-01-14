@@ -203,9 +203,6 @@ final class CorrectionController {
             self.feedback.showInfo("Primary provider failed, trying fallback...")
             do {
               corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
-              self.feedback.showSuccess()
-              self.onSuccess?()
-              return
             } catch {
               // Both failed, show fallback alert
               let fallback = FallbackController(
@@ -220,11 +217,7 @@ final class CorrectionController {
                 showError: { [weak self] message in
                   self?.feedback.showError(message)
                 }
-              ) { [weak self] success in
-                if success {
-                  self?.updateCorrector(fallbackCorrector)
-                }
-              }
+              )
 
               fallback.showFallbackAlert(for: error, corrector: corrector, text: inputText)
               throw error
