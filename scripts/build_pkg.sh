@@ -9,8 +9,19 @@ PKG_ROOT="$BUILD_DIR/pkgroot"
 COMPONENT_PLIST="$BUILD_DIR/components.plist"
 PKG_SCRIPTS="$ROOT_DIR/scripts/pkg_scripts"
 
-BUILD_OUTPUT="$("$ROOT_DIR/scripts/build_app.sh")"
-echo "$BUILD_OUTPUT"
+BUILD_OUTPUT_FILE="$(mktemp)"
+set +e
+"$ROOT_DIR/scripts/build_app.sh" 2>&1 | tee "$BUILD_OUTPUT_FILE"
+BUILD_STATUS=${PIPESTATUS[0]}
+set -e
+
+if [[ $BUILD_STATUS -ne 0 ]]; then
+  rm -f "$BUILD_OUTPUT_FILE"
+  exit "$BUILD_STATUS"
+fi
+
+BUILD_OUTPUT="$(cat "$BUILD_OUTPUT_FILE")"
+rm -f "$BUILD_OUTPUT_FILE"
 APP_PATH="$(echo "$BUILD_OUTPUT" | tail -n 1 | sed -E 's/^Built: //')"
 if [[ ! -d "$APP_PATH" ]]; then
   echo "Failed to find built app bundle at: $APP_PATH"

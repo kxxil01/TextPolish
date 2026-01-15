@@ -192,7 +192,7 @@ final class CorrectionController {
         let inputText = try await self.copySelectedText(timings: timings)
         try Task.checkCancellation()
 
-        let corrected: String
+        var corrected: String
         do {
           corrected = try await self.runCorrector(corrector, text: inputText)
         } catch {
