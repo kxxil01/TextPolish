@@ -57,6 +57,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
+  private let session: URLSession
   private let maxAttempts: Int
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
@@ -77,6 +78,11 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
       self.model = rawModel
     }
     self.timeoutSeconds = settings.requestTimeoutSeconds
+    let configuration = URLSessionConfiguration.default
+    configuration.waitsForConnectivity = true
+    configuration.timeoutIntervalForRequest = timeoutSeconds
+    configuration.timeoutIntervalForResource = timeoutSeconds
+    self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
     self.extraInstruction = settings.geminiExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -166,54 +172,95 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
     let versionsToTry = ["v1beta", "v1"]
+    let maxNetworkAttempts = 3
     var lastError: Error?
 
     for (index, version) in versionsToTry.enumerated() {
-      let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
-      var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-      request.httpMethod = "POST"
-      request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-      request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+      var shouldTryNextVersion = false
 
-      let body = GeminiGenerateContentRequest(
-        contents: [
-          .init(role: "user", parts: [.init(text: prompt)]),
-        ],
-        generationConfig: .init(temperature: 0.0, maxOutputTokens: 1024)
-      )
-      request.httpBody = try JSONEncoder().encode(body)
+      for attempt in 0..<maxNetworkAttempts {
+        let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
+        var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse else {
-        lastError = GeminiError.requestFailed(-1, nil)
-        continue
-      }
+        let body = GeminiGenerateContentRequest(
+          contents: [
+            .init(role: "user", parts: [.init(text: prompt)]),
+          ],
+          generationConfig: .init(temperature: 0.0, maxOutputTokens: 1024)
+        )
+        request.httpBody = try JSONEncoder().encode(body)
 
-      if (200..<300).contains(http.statusCode) {
-        let decoded = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
-        if let blockReason = decoded.promptFeedback?.blockReason, !blockReason.isEmpty {
-          throw GeminiError.blocked(blockReason)
+        do {
+          let (data, response) = try await session.data(for: request)
+          guard let http = response as? HTTPURLResponse else {
+            let error = GeminiError.requestFailed(-1, nil)
+            lastError = error
+            if attempt < maxNetworkAttempts - 1 {
+              try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+              continue
+            }
+            throw error
+          }
+
+          if (200..<300).contains(http.statusCode) {
+            let decoded = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
+            if let blockReason = decoded.promptFeedback?.blockReason, !blockReason.isEmpty {
+              throw GeminiError.blocked(blockReason)
+            }
+
+            let textParts = decoded.candidates?
+              .first?
+              .content?
+              .parts?
+              .compactMap(\.text)
+              ?? []
+
+            return textParts.joined()
+          }
+
+          let message = parseErrorMessage(data: data)
+          NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
+
+          if http.statusCode == 404, index < versionsToTry.count - 1 {
+            lastError = GeminiError.requestFailed(http.statusCode, message)
+            shouldTryNextVersion = true
+            break
+          }
+
+          if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
+            lastError = GeminiError.requestFailed(http.statusCode, message)
+            let retryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
+            try await Task.sleep(for: .seconds(retryAfter))
+            continue
+          }
+
+          if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
+            lastError = GeminiError.requestFailed(http.statusCode, message)
+            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+            continue
+          }
+
+          throw GeminiError.requestFailed(http.statusCode, message)
+        } catch {
+          if error is CancellationError { throw error }
+          if let geminiError = error as? GeminiError { throw geminiError }
+
+          let wrapped = GeminiError.requestFailed(-1, error.localizedDescription)
+          lastError = wrapped
+          if attempt < maxNetworkAttempts - 1 {
+            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+            continue
+          }
+          throw wrapped
         }
-
-        let textParts = decoded.candidates?
-          .first?
-          .content?
-          .parts?
-          .compactMap(\.text)
-          ?? []
-
-        return textParts.joined()
       }
 
-      let message = parseErrorMessage(data: data)
-      NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
-
-      if http.statusCode == 404, index < versionsToTry.count - 1 {
-        lastError = GeminiError.requestFailed(http.statusCode, message)
+      if shouldTryNextVersion {
         continue
       }
-
-      throw GeminiError.requestFailed(http.statusCode, message)
     }
 
     throw lastError ?? GeminiError.requestFailed(-1, nil)
@@ -243,6 +290,29 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
     }
 
     return nil
+  }
+
+  private func retryAfterSeconds(from response: HTTPURLResponse, data: Data) -> Double? {
+    if let header = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines),
+       let value = Double(header) {
+      return value
+    }
+    return extractRetryAfter(from: data)
+  }
+
+  private func extractRetryAfter(from data: Data) -> Double? {
+    guard let string = String(data: data, encoding: .utf8) else { return nil }
+    guard let range = string.range(of: #""retryAfter"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
+    let match = string[range]
+    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
+    if let number = Int(numberString) {
+      return Double(number)
+    }
+    return nil
+  }
+
+  private func retryDelaySeconds(attempt: Int) -> Double {
+    min(pow(2.0, Double(attempt)), 10.0)
   }
 
   private func sanitize(_ url: URL) -> String {
@@ -293,7 +363,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
   private func isAcceptable(original: String, candidate: String) -> Bool {
     guard candidate != original else { return true }
     guard newlineCount(in: candidate) == newlineCount(in: original) else { return false }
-    return similarity(original, candidate) >= minSimilarity
+    return isSimilarEnough(original: original, candidate: candidate, minimum: minSimilarity)
   }
 }
 

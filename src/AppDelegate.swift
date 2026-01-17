@@ -116,6 +116,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let self else { return nil }
         return await self.recoverFromError(error)
       },
+      shouldAttemptFallback: { [weak self] error in
+        guard let self else { return false }
+        return self.shouldAttemptFallback(for: error)
+      },
       onSuccess: { [weak self] in
         self?.incrementCorrectionCount()
       }
@@ -447,7 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     preferencesMenu.addItem(languageItem)
 
     let fallbackToOpenRouterItem = NSMenuItem(
-      title: "Fallback to OpenRouter on Gemini errors",
+      title: "Fallback to alternate provider on errors",
       action: #selector(toggleFallbackToOpenRouter),
       keyEquivalent: ""
     )
@@ -849,21 +853,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
       }
 
-      if settings.fallbackToOpenRouterOnGeminiError,
-         shouldFallbackFromGeminiError(geminiError),
-         currentOpenRouterApiKey() != nil
-      {
-        do {
-          let fallback = try OpenRouterCorrector(settings: settings)
-          return CorrectionController.RecoveryAction(
-            message: "Gemini error. Retrying with OpenRouter.",
-            corrector: fallback
-          )
-        } catch {
-          NSLog("[TextPolish] OpenRouter fallback unavailable: \(error)")
-          return nil
-        }
-      }
       return nil
     case .openRouter:
       guard let openRouterError = error as? OpenRouterCorrector.OpenRouterError else { return nil }
@@ -897,6 +886,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  private func shouldAttemptFallback(for error: Error) -> Bool {
+    guard settings.fallbackToOpenRouterOnGeminiError else { return false }
+    guard shouldFallbackFromError(error) else { return false }
+
+    switch settings.provider {
+    case .gemini:
+      return currentOpenRouterApiKey() != nil
+    case .openRouter:
+      return currentGeminiApiKey() != nil
+    }
+  }
+
+  private func shouldFallbackFromError(_ error: Error) -> Bool {
+    if let geminiError = error as? GeminiCorrector.GeminiError {
+      return shouldFallbackFromGeminiError(geminiError)
+    }
+    if let openRouterError = error as? OpenRouterCorrector.OpenRouterError {
+      return shouldFallbackFromOpenRouterError(openRouterError)
+    }
+    if let urlError = error as? URLError {
+      return shouldFallbackFromURLError(urlError)
+    }
+    return false
+  }
+
   private func shouldFallbackFromGeminiError(_ error: GeminiCorrector.GeminiError) -> Bool {
     guard case .requestFailed(let status, _) = error else { return false }
     if status == 429 {
@@ -906,6 +920,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return true
     }
     return (500...599).contains(status)
+  }
+
+  private func shouldFallbackFromOpenRouterError(_ error: OpenRouterCorrector.OpenRouterError) -> Bool {
+    guard case .requestFailed(let status, _) = error else { return false }
+    if status == 429 {
+      return true
+    }
+    if status <= 0 {
+      return true
+    }
+    return (500...599).contains(status)
+  }
+
+  private func shouldFallbackFromURLError(_ error: URLError) -> Bool {
+    switch error.code {
+    case .timedOut,
+         .cannotFindHost,
+         .cannotConnectToHost,
+         .networkConnectionLost,
+         .dnsLookupFailed,
+         .notConnectedToInternet:
+      return true
+    default:
+      return false
+    }
   }
 
   private func setupHotKeys() {

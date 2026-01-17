@@ -88,6 +88,7 @@ final class CorrectionController {
   private let pasteboard: PasteboardControlling
   private let settings: Settings
   private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
+  private let shouldAttemptFallback: (@MainActor (Error) -> Bool)?
   private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
@@ -103,6 +104,7 @@ final class CorrectionController {
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
     recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil,
+    shouldAttemptFallback: (@MainActor (Error) -> Bool)? = nil,
     onSuccess: (@MainActor () -> Void)? = nil
   ) {
     self.corrector = corrector
@@ -112,6 +114,7 @@ final class CorrectionController {
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
     self.recoverer = recoverer
+    self.shouldAttemptFallback = shouldAttemptFallback
     self.onSuccess = onSuccess
   }
 
@@ -174,8 +177,10 @@ final class CorrectionController {
         return nil
       }()
       if let appToActivate {
-        _ = appToActivate.activate(options: [])
-        try? await Task.sleep(for: timings.activationDelay)
+        if !appToActivate.isActive {
+          _ = appToActivate.activate(options: [])
+          try? await Task.sleep(for: timings.activationDelay)
+        }
       }
 
       let snapshot = self.pasteboard.snapshot()
@@ -197,10 +202,10 @@ final class CorrectionController {
           corrected = try await self.runCorrector(corrector, text: inputText)
         } catch {
           // Check if we should try fallback provider
-          if settings.fallbackToOpenRouterOnGeminiError,
+          if shouldAttemptFallback?(error) == true,
              let fallbackCorrector = createFallbackCorrector()
           {
-            self.feedback.showInfo("Primary provider failed, trying fallback...")
+            self.feedback.showInfo("Primary provider failed, trying fallback provider...")
             do {
               corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
             } catch {

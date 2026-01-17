@@ -9,6 +9,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
+  private let session: URLSession
   private let config: ToneAnalysisConfig
 
   init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
@@ -35,6 +36,11 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
     }
 
     self.timeoutSeconds = settings.requestTimeoutSeconds
+    let configuration = URLSessionConfiguration.default
+    configuration.waitsForConnectivity = true
+    configuration.timeoutIntervalForRequest = timeoutSeconds
+    configuration.timeoutIntervalForResource = timeoutSeconds
+    self.session = URLSession(configuration: configuration)
     self.config = config
   }
 
@@ -109,7 +115,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
       request.httpBody = try JSONEncoder().encode(body)
 
       do {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
           lastError = ToneAnalysisError.requestFailed(-1, nil)
           continue

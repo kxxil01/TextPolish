@@ -180,6 +180,60 @@ extension TextProcessor {
     return 1.0 - (Double(distance) / Double(maxLen))
   }
 
+  /// Checks similarity against a minimum threshold with early exits for large inputs
+  func isSimilarEnough(original: String, candidate: String, minimum: Double) -> Bool {
+    let originalScalars = Array(original.unicodeScalars)
+    let candidateScalars = Array(candidate.unicodeScalars)
+    let maxLen = max(originalScalars.count, candidateScalars.count)
+    guard maxLen > 0 else { return true }
+
+    let clampedMinimum = max(0.0, min(1.0, minimum))
+    let allowedDistance = Int(Double(maxLen) * (1.0 - clampedMinimum))
+    if allowedDistance <= 0 { return original == candidate }
+
+    let lengthDiff = abs(originalScalars.count - candidateScalars.count)
+    if lengthDiff > allowedDistance { return false }
+
+    let distance = boundedLevenshteinDistance(
+      originalScalars,
+      candidateScalars,
+      maxDistance: allowedDistance
+    )
+    return distance <= allowedDistance
+  }
+
+  /// Calculates Levenshtein distance with early exit when exceeding maxDistance
+  func boundedLevenshteinDistance(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar], maxDistance: Int) -> Int {
+    if a.isEmpty { return b.count }
+    if b.isEmpty { return a.count }
+
+    let (longer, shorter) = a.count >= b.count ? (a, b) : (b, a)
+    let m = shorter.count
+
+    var previous = Array(0...m)
+    var current = Array(repeating: 0, count: m + 1)
+
+    for (i, longerScalar) in longer.enumerated() {
+      current[0] = i + 1
+      var rowMin = current[0]
+      for (j, shorterScalar) in shorter.enumerated() {
+        let cost = longerScalar == shorterScalar ? 0 : 1
+        current[j + 1] = min(
+          previous[j + 1] + 1,
+          current[j] + 1,
+          previous[j] + cost
+        )
+        if current[j + 1] < rowMin {
+          rowMin = current[j + 1]
+        }
+      }
+      if rowMin > maxDistance { return maxDistance + 1 }
+      swap(&previous, &current)
+    }
+
+    return previous[m]
+  }
+
   /// Calculates Levenshtein distance between two string scalar arrays
   func levenshteinDistance(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int {
     if a.isEmpty { return b.count }

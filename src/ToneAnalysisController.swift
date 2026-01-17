@@ -111,8 +111,10 @@ final class ToneAnalysisController {
         return nil
       }()
       if let appToActivate {
-        _ = appToActivate.activate(options: [])
-        try? await Task.sleep(for: timings.activationDelay)
+        if !appToActivate.isActive {
+          _ = appToActivate.activate(options: [])
+          try? await Task.sleep(for: timings.activationDelay)
+        }
       }
 
       let snapshot = self.pasteboard.snapshot()
