@@ -683,7 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateStatusItemIcon() {
-    let icon = makeIconWithBadge(count: todayCorrectionCount)
+    let icon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
     statusItem.button?.image = icon
     feedback?.updateBaseImage(icon)
   }
