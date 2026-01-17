@@ -1860,8 +1860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
       let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
-      let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
-      let header = build.isEmpty ? "\(appDisplayName) \(version)" : "\(appDisplayName) \(version) (\(build))"
+      let header = "\(appDisplayName) \(version)"
 
       let providerName: String
       let providerModel: String
