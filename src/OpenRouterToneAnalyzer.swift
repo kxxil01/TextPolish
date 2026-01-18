@@ -1,6 +1,6 @@
 import Foundation
 
-final class OpenRouterToneAnalyzer: ToneAnalyzer {
+final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProviderReporting {
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -11,6 +11,10 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
   private let timeoutSeconds: Double
   private let session: URLSession
   private let config: ToneAnalysisConfig
+  private(set) var lastRetryCount: Int = 0
+
+  var diagnosticsProvider: Settings.Provider { .openRouter }
+  var diagnosticsModel: String { model }
 
   init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
     keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -38,6 +42,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
+    lastRetryCount = 0
     // Validate original text length before trimming
     guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
     guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
@@ -83,6 +88,8 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
     // Try up to 3 times with rate limit backoff
+    var retryCount = 0
+    defer { lastRetryCount = retryCount }
     for attempt in 0..<3 {
       do {
         let url = try makeChatCompletionsURL()
@@ -123,6 +130,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
         // Handle rate limiting with exponential backoff
         if http.statusCode == 429 {
           let retryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
+          retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           // Continue to next attempt
           continue
@@ -137,6 +145,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer {
           throw error
         }
         // For other errors on non-last attempts, continue
+        retryCount += 1
         continue
       }
     }

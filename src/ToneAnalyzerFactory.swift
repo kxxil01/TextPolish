@@ -11,9 +11,20 @@ enum ToneAnalyzerFactory {
         let fallback = LazyAnalyzer {
           try OpenRouterToneAnalyzer(settings: settings)
         }
-        return FallbackToneAnalyzer(primary: primary, fallback: fallback)
+        return FallbackToneAnalyzer(
+          primary: primary,
+          fallback: fallback,
+          primaryProvider: .gemini,
+          primaryModel: settings.geminiModel,
+          fallbackProvider: .openRouter,
+          fallbackModel: settings.openRouterModel
+        )
       } catch {
-        return FailingToneAnalyzer(underlyingError: error)
+        return FailingToneAnalyzer(
+          underlyingError: error,
+          diagnosticsProvider: .gemini,
+          diagnosticsModel: settings.geminiModel
+        )
       }
     case .openRouter:
       do {
@@ -22,9 +33,20 @@ enum ToneAnalyzerFactory {
         let fallback = LazyAnalyzer {
           try GeminiToneAnalyzer(settings: settings)
         }
-        return FallbackToneAnalyzer(primary: primary, fallback: fallback)
+        return FallbackToneAnalyzer(
+          primary: primary,
+          fallback: fallback,
+          primaryProvider: .openRouter,
+          primaryModel: settings.openRouterModel,
+          fallbackProvider: .gemini,
+          fallbackModel: settings.geminiModel
+        )
       } catch {
-        return FailingToneAnalyzer(underlyingError: error)
+        return FailingToneAnalyzer(
+          underlyingError: error,
+          diagnosticsProvider: .openRouter,
+          diagnosticsModel: settings.openRouterModel
+        )
       }
     }
   }
@@ -50,19 +72,60 @@ final class LazyAnalyzer: ToneAnalyzer, @unchecked Sendable {
 }
 
 /// Analyzer that tries primary first, then falls back to secondary on failure
-struct FallbackToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
+final class FallbackToneAnalyzer: ToneAnalyzer, DiagnosticsProviderReporting, RetryReporting, @unchecked Sendable {
   private let primary: ToneAnalyzer
   private let fallback: ToneAnalyzer
+  private let primaryProvider: Settings.Provider
+  private let primaryModel: String
+  private let fallbackProvider: Settings.Provider
+  private let fallbackModel: String
+  private var lastProvider: Settings.Provider
+  private var lastModel: String
+  private var lastRetryCountValue = 0
 
-  init(primary: ToneAnalyzer, fallback: ToneAnalyzer) {
+  init(
+    primary: ToneAnalyzer,
+    fallback: ToneAnalyzer,
+    primaryProvider: Settings.Provider,
+    primaryModel: String,
+    fallbackProvider: Settings.Provider,
+    fallbackModel: String
+  ) {
     self.primary = primary
     self.fallback = fallback
+    self.primaryProvider = primaryProvider
+    self.primaryModel = primaryModel
+    self.fallbackProvider = fallbackProvider
+    self.fallbackModel = fallbackModel
+    self.lastProvider = primaryProvider
+    self.lastModel = primaryModel
+  }
+
+  var diagnosticsProvider: Settings.Provider {
+    lastProvider
+  }
+
+  var diagnosticsModel: String {
+    lastModel
+  }
+
+  var lastRetryCount: Int {
+    lastRetryCountValue
+  }
+
+  private func updateRetryCount(from analyzer: ToneAnalyzer) {
+    lastRetryCountValue = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     do {
-      return try await primary.analyze(text)
+      lastProvider = primaryProvider
+      lastModel = primaryModel
+      let result = try await primary.analyze(text)
+      updateRetryCount(from: primary)
+      return result
     } catch {
+      updateRetryCount(from: primary)
       // Don't fallback on cancellation errors
       if error is CancellationError {
         throw error
@@ -81,13 +144,24 @@ struct FallbackToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
         }
       }
       // Fallback on network errors, API errors, or any other error (except CancellationError)
-      return try await fallback.analyze(text)
+      lastProvider = fallbackProvider
+      lastModel = fallbackModel
+      do {
+        let result = try await fallback.analyze(text)
+        updateRetryCount(from: fallback)
+        return result
+      } catch {
+        updateRetryCount(from: fallback)
+        throw error
+      }
     }
   }
 }
 
-struct FailingToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
+struct FailingToneAnalyzer: ToneAnalyzer, DiagnosticsProviderReporting, @unchecked Sendable {
   let underlyingError: Error
+  let diagnosticsProvider: Settings.Provider
+  let diagnosticsModel: String
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     throw underlyingError

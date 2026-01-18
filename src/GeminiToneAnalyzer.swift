@@ -1,6 +1,6 @@
 import Foundation
 
-final class GeminiToneAnalyzer: ToneAnalyzer {
+final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProviderReporting {
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -11,6 +11,10 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
   private let timeoutSeconds: Double
   private let session: URLSession
   private let config: ToneAnalysisConfig
+  private(set) var lastRetryCount: Int = 0
+
+  var diagnosticsProvider: Settings.Provider { .gemini }
+  var diagnosticsModel: String { model }
 
   init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -45,6 +49,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
+    lastRetryCount = 0
     // Validate original text length before trimming
     guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
     guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
@@ -98,6 +103,8 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
   private func generate(prompt: String, apiKey: String) async throws -> String {
     let versionsToTry = ["v1beta", "v1"]
     var lastError: Error?
+    var retryCount = 0
+    defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
       let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
@@ -118,6 +125,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
           lastError = ToneAnalysisError.requestFailed(-1, nil)
+          retryCount += 1
           continue
         }
 
@@ -144,6 +152,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
         // Handle rate limiting with exponential backoff
         if http.statusCode == 429 {
           let retryAfter = extractRetryAfter(from: data) ?? 2
+          retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           // Don't set lastError, just retry this same version
           continue
@@ -162,6 +171,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer {
         }
         // Otherwise, treat as a network error
         lastError = error
+        retryCount += 1
         continue
       }
     }

@@ -160,6 +160,12 @@ final class CorrectionController {
     let timings = timingsOverride ?? timings
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
+      let operationStartedAt = Date()
+      var activeProvider = self.settings.provider
+      var activeModel = self.modelName(for: activeProvider)
+      var fallbackCount = 0
+      var usedCorrector = corrector
+      self.updateProviderModel(for: corrector, provider: &activeProvider, model: &activeModel)
       defer {
         self.isRunning = false
         self.currentTask = nil
@@ -167,6 +173,16 @@ final class CorrectionController {
 
       guard self.keyboard.isAccessibilityTrusted(prompt: true) else {
         self.feedback.showError("Enable Accessibility")
+        DiagnosticsStore.shared.recordFailure(
+          operation: .correction,
+          provider: activeProvider,
+          model: activeModel,
+          latencySeconds: nil,
+          retryCount: 0,
+          fallbackCount: 0,
+          message: "Accessibility permission required",
+          error: nil
+        )
         return
       }
 
@@ -207,6 +223,9 @@ final class CorrectionController {
           {
             self.feedback.showInfo("Primary provider failed, trying fallback provider...")
             do {
+              fallbackCount += 1
+              usedCorrector = fallbackCorrector
+              self.updateProviderModel(for: fallbackCorrector, provider: &activeProvider, model: &activeModel)
               corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
             } catch {
               // Both failed, show fallback alert
@@ -233,6 +252,8 @@ final class CorrectionController {
           if let recoverer, let action = await recoverer(error) {
             self.feedback.showInfo(action.message)
             let retryCorrector = action.corrector ?? self.corrector
+            usedCorrector = retryCorrector
+            self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
             corrected = try await self.runCorrector(retryCorrector, text: inputText)
           } else {
             throw error
@@ -240,6 +261,16 @@ final class CorrectionController {
         }
         guard corrected != inputText else {
           self.feedback.showInfo("No changes")
+          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+          DiagnosticsStore.shared.recordSuccess(
+            operation: .correction,
+            provider: activeProvider,
+            model: activeModel,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: retryCount,
+            fallbackCount: fallbackCount,
+            note: "No changes"
+          )
           return
         }
 
@@ -251,19 +282,60 @@ final class CorrectionController {
         didPaste = true
         try await Task.sleep(for: timings.postPasteDelay)
         self.feedback.showSuccess()
+        let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+        DiagnosticsStore.shared.recordSuccess(
+          operation: .correction,
+          provider: activeProvider,
+          model: activeModel,
+          latencySeconds: Date().timeIntervalSince(operationStartedAt),
+          retryCount: retryCount,
+          fallbackCount: fallbackCount
+        )
         self.onSuccess?()
       } catch is CancellationError {
         if didPaste {
           self.feedback.showSuccess()
+          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+          DiagnosticsStore.shared.recordSuccess(
+            operation: .correction,
+            provider: activeProvider,
+            model: activeModel,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: retryCount,
+            fallbackCount: fallbackCount,
+            note: "Canceled after paste"
+          )
           self.onSuccess?()
         } else {
           self.feedback.showInfo("Canceled")
+          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+          DiagnosticsStore.shared.recordNote(
+            operation: .correction,
+            provider: activeProvider,
+            model: activeModel,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: retryCount,
+            fallbackCount: fallbackCount,
+            message: "Canceled",
+            updateHealth: false
+          )
         }
       } catch {
         let message =
           (error as? LocalizedError)?.errorDescription ??
           (error as NSError).localizedDescription
         self.feedback.showError(message)
+        let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+        DiagnosticsStore.shared.recordFailure(
+          operation: .correction,
+          provider: activeProvider,
+          model: activeModel,
+          latencySeconds: Date().timeIntervalSince(operationStartedAt),
+          retryCount: retryCount,
+          fallbackCount: fallbackCount,
+          message: message,
+          error: error
+        )
         NSLog("[TextPolish] \(error)")
       }
     }
@@ -360,5 +432,33 @@ final class CorrectionController {
     )
 
     return CorrectorFactory.make(settings: fallbackSettings)
+  }
+
+  private func modelName(for provider: Settings.Provider) -> String {
+    switch provider {
+    case .gemini:
+      return settings.geminiModel
+    case .openRouter:
+      return settings.openRouterModel
+    }
+  }
+
+  private func updateProviderModel(
+    for corrector: GrammarCorrector,
+    provider: inout Settings.Provider,
+    model: inout String
+  ) {
+    if let reporting = corrector as? DiagnosticsProviderReporting {
+      provider = reporting.diagnosticsProvider
+      model = reporting.diagnosticsModel
+      return
+    }
+    if corrector is GeminiCorrector {
+      provider = .gemini
+      model = modelName(for: .gemini)
+    } else if corrector is OpenRouterCorrector {
+      provider = .openRouter
+      model = modelName(for: .openRouter)
+    }
   }
 }

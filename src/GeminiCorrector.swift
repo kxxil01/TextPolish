@@ -1,6 +1,6 @@
 import Foundation
 
-final class GeminiCorrector: GrammarCorrector, TextProcessor {
+final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, DiagnosticsProviderReporting {
   enum GeminiError: Error, LocalizedError {
     case missingApiKey
     case invalidBaseURL
@@ -61,6 +61,10 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
   private let maxAttempts: Int
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
+  private(set) var lastRetryCount: Int = 0
+
+  var diagnosticsProvider: Settings.Provider { .gemini }
+  var diagnosticsModel: String { model }
 
   init(settings: Settings) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -90,6 +94,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
   }
 
   func correct(_ text: String) async throws -> String {
+    lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
 
@@ -174,6 +179,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
     let versionsToTry = ["v1beta", "v1"]
     let maxNetworkAttempts = 3
     var lastError: Error?
+    var retryCount = 0
+    defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
       var shouldTryNextVersion = false
@@ -199,6 +206,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
             let error = GeminiError.requestFailed(-1, nil)
             lastError = error
             if attempt < maxNetworkAttempts - 1 {
+              retryCount += 1
               try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
               continue
             }
@@ -233,12 +241,14 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
           if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
             lastError = GeminiError.requestFailed(http.statusCode, message)
             let retryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
+            retryCount += 1
             try await Task.sleep(for: .seconds(retryAfter))
             continue
           }
 
           if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
             lastError = GeminiError.requestFailed(http.statusCode, message)
+            retryCount += 1
             try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
             continue
           }
@@ -251,6 +261,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor {
           let wrapped = GeminiError.requestFailed(-1, error.localizedDescription)
           lastError = wrapped
           if attempt < maxNetworkAttempts - 1 {
+            retryCount += 1
             try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
             continue
           }

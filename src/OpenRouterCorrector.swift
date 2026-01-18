@@ -1,6 +1,6 @@
 import Foundation
 
-final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
+final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting, DiagnosticsProviderReporting {
   enum OpenRouterError: Error, LocalizedError {
     case missingApiKey
     case invalidBaseURL
@@ -64,6 +64,10 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
   private let maxAttempts: Int
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
+  private(set) var lastRetryCount: Int = 0
+
+  var diagnosticsProvider: Settings.Provider { .openRouter }
+  var diagnosticsModel: String { model }
 
   init(settings: Settings) throws {
     keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -86,6 +90,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
   }
 
   func correct(_ text: String) async throws -> String {
+    lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
 
@@ -162,6 +167,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
   private func generate(prompt: String, apiKey: String) async throws -> String {
     let maxNetworkAttempts = 3
     var lastError: Error?
+    var retryCount = 0
+    defer { lastRetryCount = retryCount }
 
     for attempt in 0..<maxNetworkAttempts {
       let url = try makeChatCompletionsURL()
@@ -189,6 +196,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
           let error = OpenRouterError.requestFailed(-1, nil)
           lastError = error
           if attempt < maxNetworkAttempts - 1 {
+            retryCount += 1
             try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
             continue
           }
@@ -207,12 +215,14 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
         if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
           lastError = OpenRouterError.requestFailed(http.statusCode, message)
           let retryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
+          retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           continue
         }
 
         if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
           lastError = OpenRouterError.requestFailed(http.statusCode, message)
+          retryCount += 1
           try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
           continue
         }
@@ -225,6 +235,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor {
         let wrapped = OpenRouterError.requestFailed(-1, error.localizedDescription)
         lastError = wrapped
         if attempt < maxNetworkAttempts - 1 {
+          retryCount += 1
           try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
           continue
         }

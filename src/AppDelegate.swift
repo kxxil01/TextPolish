@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var correctionController: CorrectionController?
   private var toneAnalysisController: ToneAnalysisController?
   private var toneResultWindow: ToneAnalysisResultWindow?
+  private var diagnosticsWindow: DiagnosticsWindow?
   private var feedback: StatusItemFeedback?
   private var statusMenu: NSMenu?
   private var lastTargetApplication: NSRunningApplication?
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var setOpenRouterKeyItem: NSMenuItem?
   private var setOpenRouterModelItem: NSMenuItem?
   private var detectOpenRouterModelItem: NSMenuItem?
+  private var providerHealthItem: NSMenuItem?
   private var launchAtLoginItem: NSMenuItem?
   private var languageAutoItem: NSMenuItem?
   private var languageEnglishItem: NSMenuItem?
@@ -169,6 +171,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     setupMenu()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(diagnosticsDidUpdate),
+      name: .diagnosticsUpdated,
+      object: nil
+    )
     setupHotKeys()
     _ = updaterController
     if isUpdaterAvailable {
@@ -192,6 +200,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     button.highlight(true)
     statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
     button.highlight(false)
+  }
+
+  @objc private func diagnosticsDidUpdate() {
+    syncProviderHealthItem()
+    diagnosticsWindow?.update(with: DiagnosticsStore.shared.lastSnapshot)
   }
 
   @objc private func checkForUpdates(_ sender: Any?) {
@@ -344,6 +357,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     providerMenu.addItem(openRouterItem)
     providerMenu.addItem(.separator())
 
+    let providerHealthItem = NSMenuItem(
+      title: "Health: Unknown",
+      action: nil,
+      keyEquivalent: ""
+    )
+    providerHealthItem.isEnabled = false
+    self.providerHealthItem = providerHealthItem
+    providerMenu.addItem(providerHealthItem)
+    providerMenu.addItem(.separator())
+
     let setGeminiKeyItem = NSMenuItem(
       title: "Set Gemini API Key…",
       action: #selector(setGeminiApiKey),
@@ -478,6 +501,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     preferencesItem.submenu = preferencesMenu
     menu.addItem(preferencesItem)
 
+    let diagnosticsItem = NSMenuItem(
+      title: "Diagnostics…",
+      action: #selector(openDiagnostics),
+      keyEquivalent: ""
+    )
+    diagnosticsItem.target = self
+    menu.addItem(diagnosticsItem)
+
     let aboutItem = NSMenuItem(
       title: "About & Privacy",
       action: #selector(showAboutAndPrivacy),
@@ -522,6 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     syncLaunchAtLoginMenuState()
     syncFallbackMenuState()
     syncProviderMenuStates()
+    syncProviderHealthItem()
     syncLanguageMenuState()
     syncHotKeyMenuItems()
     syncCancelMenuState()
@@ -531,6 +563,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     isMenuOpen = true
     syncCancelMenuState()
+    syncProviderHealthItem()
   }
 
   func menuDidClose(_ menu: NSMenu) {
@@ -558,6 +591,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     } else {
       statusItem.button?.toolTip = appDisplayName
     }
+  }
+
+  private func syncProviderHealthItem() {
+    guard let providerHealthItem else { return }
+    providerHealthItem.title = DiagnosticsStore.shared.healthMenuTitle()
+    providerHealthItem.toolTip = DiagnosticsStore.shared.healthToolTip()
   }
 
   private func syncLaunchAtLoginMenuState() {
@@ -1260,6 +1299,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     settingsWindowController = SettingsWindowController()
     settingsWindowController?.window?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  @objc private func openDiagnostics() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      if self.diagnosticsWindow == nil {
+        self.diagnosticsWindow = DiagnosticsWindow()
+      }
+      self.diagnosticsWindow?.show()
+      NSApp.activate(ignoringOtherApps: true)
+    }
   }
 
   private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {

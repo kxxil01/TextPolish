@@ -94,6 +94,13 @@ final class ToneAnalysisController {
     let timings = timingsOverride ?? timings
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
+      let operationStartedAt = Date()
+      let resolveProviderModel: () -> (Settings.Provider, String) = {
+        if let reporting = analyzer as? DiagnosticsProviderReporting {
+          return (reporting.diagnosticsProvider, reporting.diagnosticsModel)
+        }
+        return (.gemini, "Unknown")
+      }
       defer {
         self.isRunning = false
         self.currentTask = nil
@@ -101,6 +108,17 @@ final class ToneAnalysisController {
 
       guard self.keyboard.isAccessibilityTrusted(prompt: true) else {
         self.feedback.showError("Enable Accessibility")
+        let (provider, model) = resolveProviderModel()
+        DiagnosticsStore.shared.recordFailure(
+          operation: .toneAnalysis,
+          provider: provider,
+          model: model,
+          latencySeconds: nil,
+          retryCount: 0,
+          fallbackCount: 0,
+          message: "Accessibility permission required",
+          error: nil
+        )
         return
       }
 
@@ -127,6 +145,17 @@ final class ToneAnalysisController {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
           self.feedback.showError("No text selected")
+          let (provider, model) = resolveProviderModel()
+          DiagnosticsStore.shared.recordFailure(
+            operation: .toneAnalysis,
+            provider: provider,
+            model: model,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: 0,
+            fallbackCount: 0,
+            message: "No text selected",
+            error: nil
+          )
           return
         }
 
@@ -136,14 +165,48 @@ final class ToneAnalysisController {
         try Task.checkCancellation()
 
         self.resultPresenter.showResult(result)
+        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
+        let (provider, model) = resolveProviderModel()
+        DiagnosticsStore.shared.recordSuccess(
+          operation: .toneAnalysis,
+          provider: provider,
+          model: model,
+          latencySeconds: Date().timeIntervalSince(operationStartedAt),
+          retryCount: retryCount,
+          fallbackCount: 0
+        )
         self.onSuccess?()
       } catch is CancellationError {
         self.feedback.showInfo("Canceled")
+        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
+        let (provider, model) = resolveProviderModel()
+        DiagnosticsStore.shared.recordNote(
+          operation: .toneAnalysis,
+          provider: provider,
+          model: model,
+          latencySeconds: Date().timeIntervalSince(operationStartedAt),
+          retryCount: retryCount,
+          fallbackCount: 0,
+          message: "Canceled",
+          updateHealth: false
+        )
       } catch {
         let message =
           (error as? LocalizedError)?.errorDescription ??
           (error as NSError).localizedDescription
         self.resultPresenter.showError(message)
+        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
+        let (provider, model) = resolveProviderModel()
+        DiagnosticsStore.shared.recordFailure(
+          operation: .toneAnalysis,
+          provider: provider,
+          model: model,
+          latencySeconds: Date().timeIntervalSince(operationStartedAt),
+          retryCount: retryCount,
+          fallbackCount: 0,
+          message: message,
+          error: error
+        )
         NSLog("[TextPolish] Tone analysis error: \(error)")
       }
     }
