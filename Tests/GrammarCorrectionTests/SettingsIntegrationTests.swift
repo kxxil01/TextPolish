@@ -92,8 +92,8 @@ final class SettingsIntegrationTests: XCTestCase {
         settingsWindowViewController?.geminiApiKeyField?.stringValue = testApiKey
         settingsWindowViewController?.saveSettings()
 
-        // Then
-        XCTAssertEqual(settingsWindowViewController?.settings.geminiApiKey, testApiKey, "API key should be updated")
+        // Then - API keys are not persisted to settings.json
+        XCTAssertNil(settingsWindowViewController?.settings.geminiApiKey, "API key should not be persisted in settings")
     }
 
     func testModelFieldUpdate() {
@@ -163,7 +163,7 @@ final class SettingsIntegrationTests: XCTestCase {
         settingsWindowViewController?.saveSettings()
 
         // Then
-        XCTAssertEqual(settingsWindowViewController?.settings.openRouterApiKey, testApiKey, "OpenRouter API key should be updated")
+        XCTAssertNil(settingsWindowViewController?.settings.openRouterApiKey, "OpenRouter API key should not be persisted in settings")
         XCTAssertEqual(settingsWindowViewController?.settings.openRouterModel, testModel, "OpenRouter model should be updated")
     }
 
@@ -259,7 +259,7 @@ final class SettingsIntegrationTests: XCTestCase {
         // Then
         XCTAssertEqual(settingsWindowViewController?.settings.provider, .gemini, "Provider should be updated")
         XCTAssertTrue(settingsWindowViewController?.settings.fallbackToOpenRouterOnGeminiError ?? false, "Fallback should be enabled")
-        XCTAssertEqual(settingsWindowViewController?.settings.geminiApiKey, "TEST_GEMINI_KEY_FOR_TESTING", "API key should be updated")
+        XCTAssertNil(settingsWindowViewController?.settings.geminiApiKey, "API key should not be persisted in settings")
         XCTAssertEqual(settingsWindowViewController?.settings.geminiModel, "test-model", "Model should be updated")
     }
 

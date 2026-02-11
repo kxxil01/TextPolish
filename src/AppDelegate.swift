@@ -834,6 +834,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func refreshCorrector() {
+    correctionController?.updateSettings(settings)
     correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
     correctionController?.updateTimings(.init(settings: settings))
     toneAnalysisController?.updateAnalyzer(ToneAnalyzerFactory.make(settings: settings))
@@ -951,25 +952,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func shouldFallbackFromGeminiError(_ error: GeminiCorrector.GeminiError) -> Bool {
-    guard case .requestFailed(let status, _) = error else { return false }
-    if status == 429 {
+    switch error {
+    case .missingApiKey, .invalidBaseURL:
+      return false
+    case .blocked, .emptyResponse, .overRewrite:
+      // Provider returned an unusable response; fallback can still salvage the user flow.
       return true
+    case .requestFailed(let status, _):
+      if status == 401 || status == 403 {
+        return false
+      }
+      if status == 429 {
+        return true
+      }
+      if status <= 0 {
+        return true
+      }
+      return (500...599).contains(status)
     }
-    if status <= 0 {
-      return true
-    }
-    return (500...599).contains(status)
   }
 
   private func shouldFallbackFromOpenRouterError(_ error: OpenRouterCorrector.OpenRouterError) -> Bool {
-    guard case .requestFailed(let status, _) = error else { return false }
-    if status == 429 {
+    switch error {
+    case .missingApiKey, .invalidBaseURL:
+      return false
+    case .emptyResponse, .overRewrite:
       return true
+    case .requestFailed(let status, _):
+      if status == 401 || status == 403 || status == 402 {
+        return false
+      }
+      if status == 429 {
+        return true
+      }
+      if status <= 0 {
+        return true
+      }
+      return (500...599).contains(status)
     }
-    if status <= 0 {
-      return true
-    }
-    return (500...599).contains(status)
   }
 
   private func shouldFallbackFromURLError(_ error: URLError) -> Bool {

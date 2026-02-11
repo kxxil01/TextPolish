@@ -8,6 +8,7 @@ class SettingsWindowController: NSWindowController {
         self.init(window: window)
         self.window?.title = "TextPolish Settings"
         self.window?.isReleasedWhenClosed = false
+        self.window?.delegate = self
 
         // Set up view controller immediately when window is created
         setupViewController()
@@ -46,13 +47,6 @@ class SettingsWindowController: NSWindowController {
 
 extension SettingsWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        if let settings = viewController?.settings {
-            do {
-                try Settings.save(settings)
-                NotificationCenter.default.post(name: .settingsDidChange, object: settings)
-            } catch {
-                print("Failed to save settings: \(error)")
-            }
-        }
+        // Settings are persisted via Apply (saveAndNotify); closing behaves like cancel.
     }
 }

@@ -62,6 +62,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   private let timeoutSeconds: Double
   private let session: URLSession
   private let maxAttempts: Int
+  private let maxRateLimitBackoffSeconds: Double
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
@@ -84,6 +85,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.openRouterMaxAttempts)
+    self.maxRateLimitBackoffSeconds = 12
     self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
     self.extraInstruction = settings.openRouterExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
     self.correctionLanguage = settings.correctionLanguage
@@ -214,7 +216,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
         if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
           lastError = OpenRouterError.requestFailed(http.statusCode, message)
-          let retryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
+          let requestedRetryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
+          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
           retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           continue
@@ -291,6 +294,11 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
   private func retryDelaySeconds(attempt: Int) -> Double {
     min(pow(2.0, Double(attempt)), 10.0)
+  }
+
+  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
+    let sanitized = requested.isFinite ? requested : 1
+    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private func makePrompt(text: String, attempt: Int) -> String {

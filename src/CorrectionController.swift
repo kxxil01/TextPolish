@@ -86,9 +86,10 @@ final class CorrectionController {
   private let feedback: FeedbackPresenter
   private let keyboard: KeyboardControlling
   private let pasteboard: PasteboardControlling
-  private let settings: Settings
+  private var settings: Settings
   private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
   private let shouldAttemptFallback: (@MainActor (Error) -> Bool)?
+  private let fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)?
   private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
@@ -105,6 +106,7 @@ final class CorrectionController {
     pasteboard: PasteboardControlling? = nil,
     recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil,
     shouldAttemptFallback: (@MainActor (Error) -> Bool)? = nil,
+    fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)? = nil,
     onSuccess: (@MainActor () -> Void)? = nil
   ) {
     self.corrector = corrector
@@ -115,6 +117,7 @@ final class CorrectionController {
     self.pasteboard = pasteboard ?? PasteboardController()
     self.recoverer = recoverer
     self.shouldAttemptFallback = shouldAttemptFallback
+    self.fallbackCorrectorFactory = fallbackCorrectorFactory
     self.onSuccess = onSuccess
   }
 
@@ -124,6 +127,10 @@ final class CorrectionController {
 
   func updateTimings(_ timings: Timings) {
     self.timings = timings
+  }
+
+  func updateSettings(_ settings: Settings) {
+    self.settings = settings
   }
 
   var isBusy: Bool {
@@ -213,12 +220,15 @@ final class CorrectionController {
         let inputText = try await self.copySelectedText(timings: timings)
         try Task.checkCancellation()
 
-        var corrected: String
+        var corrected: String?
         do {
           corrected = try await self.runCorrector(corrector, text: inputText)
         } catch {
+          let primaryError = error
+          var unresolvedError: Error? = primaryError
+
           // Check if we should try fallback provider
-          if shouldAttemptFallback?(error) == true,
+          if shouldAttemptFallback?(primaryError) == true,
              let fallbackCorrector = createFallbackCorrector()
           {
             self.feedback.showInfo("Primary provider failed, trying fallback provider...")
@@ -227,14 +237,13 @@ final class CorrectionController {
               usedCorrector = fallbackCorrector
               self.updateProviderModel(for: fallbackCorrector, provider: &activeProvider, model: &activeModel)
               corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
+              unresolvedError = nil
             } catch {
-              // Both failed, show fallback alert
+              unresolvedError = error
+
               let fallback = FallbackController(
                 fallbackProvider: fallbackCorrector,
-                showSuccess: { [weak self] in
-                  self?.feedback.showSuccess()
-                  self?.onSuccess?()
-                },
+                showSuccess: {},
                 showInfo: { [weak self] message in
                   self?.feedback.showInfo(message)
                 },
@@ -243,21 +252,38 @@ final class CorrectionController {
                 }
               )
 
-              fallback.showFallbackAlert(for: error, corrector: corrector, text: inputText)
-              throw error
+              if fallback.shouldAttemptFallback(for: error, corrector: corrector) {
+                fallbackCount += 1
+                switch await fallback.performFallback(text: inputText, corrector: corrector) {
+                case .success(let manualCorrection):
+                  corrected = manualCorrection
+                  unresolvedError = nil
+                case .failure(let manualError):
+                  unresolvedError = manualError
+                }
+              }
             }
           }
 
           // Use recoverer if available
-          if let recoverer, let action = await recoverer(error) {
-            self.feedback.showInfo(action.message)
-            let retryCorrector = action.corrector ?? self.corrector
-            usedCorrector = retryCorrector
-            self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
-            corrected = try await self.runCorrector(retryCorrector, text: inputText)
-          } else {
-            throw error
+          if let unresolvedError {
+            if let recoverer, let action = await recoverer(unresolvedError) {
+              self.feedback.showInfo(action.message)
+              let retryCorrector = action.corrector ?? self.corrector
+              usedCorrector = retryCorrector
+              self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
+              corrected = try await self.runCorrector(retryCorrector, text: inputText)
+            } else {
+              throw unresolvedError
+            }
           }
+        }
+        guard let corrected else {
+          throw NSError(
+            domain: "TextPolish",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Correction failed before producing output"]
+          )
         }
         guard corrected != inputText else {
           self.feedback.showInfo("No changes")
@@ -402,6 +428,10 @@ final class CorrectionController {
   }
 
   private func createFallbackCorrector() -> GrammarCorrector? {
+    if let fallbackCorrectorFactory {
+      return fallbackCorrectorFactory()
+    }
+
     let fallbackSettings = Settings(
       provider: settings.provider == .gemini ? .openRouter : .gemini,
       requestTimeoutSeconds: settings.requestTimeoutSeconds,

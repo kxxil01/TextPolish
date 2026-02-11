@@ -3,7 +3,6 @@ import AppKit
 
 final class FallbackController {
     public let fallbackProvider: GrammarCorrector
-    private var originalCorrector: GrammarCorrector?
     private let showSuccess: () -> Void
     private let showInfo: (String) -> Void
     private let showError: (String) -> Void
@@ -23,12 +22,12 @@ final class FallbackController {
         self.onFallbackComplete = onFallbackComplete
     }
 
-    func showFallbackAlert(for error: Error, corrector: GrammarCorrector, text: String) {
+    func shouldAttemptFallback(for error: Error, corrector: GrammarCorrector) -> Bool {
         // Don't show alert in test environment to avoid blocking CI/CD
         #if DEBUG
         if NSClassFromString("XCTestCase") != nil {
             NSLog("[TextPolish] Fallback alert suppressed in test environment: \(error)")
-            return
+            return false
         }
         #endif
 
@@ -45,27 +44,34 @@ final class FallbackController {
         cancelButton.keyEquivalent = "\u{1b}" // Escape key
 
         let response = alert.runModal()
+        return response == .alertFirstButtonReturn
+    }
 
-        if response == .alertFirstButtonReturn {
+    func showFallbackAlert(for error: Error, corrector: GrammarCorrector, text: String) {
+        if shouldAttemptFallback(for: error, corrector: corrector) {
             Task {
-                await performFallback(text: text, corrector: corrector)
+                _ = await performFallback(text: text, corrector: corrector)
             }
         }
     }
 
-    func performFallback(text: String, corrector: GrammarCorrector) async {
+    @discardableResult
+    func performFallback(text: String, corrector: GrammarCorrector) async -> Result<String, Error> {
         do {
-            _ = try await fallbackProvider.correct(text)
+            let corrected = try await fallbackProvider.correct(text)
 
             await MainActor.run {
+                showSuccess()
                 showInfo("Used \(providerName(for: fallbackProvider)) as fallback")
                 onFallbackComplete?(true)
             }
+            return .success(corrected)
         } catch {
             await MainActor.run {
                 showError("Fallback also failed: \(error.localizedDescription)")
                 onFallbackComplete?(false)
             }
+            return .failure(error)
         }
     }
 

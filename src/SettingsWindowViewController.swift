@@ -394,12 +394,12 @@ class SettingsWindowViewController: NSViewController {
         fallbackCheckbox.state = settings.fallbackToOpenRouterOnGeminiError ? .on : .off
 
         // Gemini tab
-        geminiApiKeyField.stringValue = settings.geminiApiKey ?? ""
+        geminiApiKeyField.stringValue = ""
         geminiModelField.stringValue = settings.geminiModel
         geminiBaseURLField.stringValue = settings.geminiBaseURL
 
         // OpenRouter tab
-        openRouterApiKeyField.stringValue = settings.openRouterApiKey ?? ""
+        openRouterApiKeyField.stringValue = ""
         openRouterModelField.stringValue = settings.openRouterModel
         openRouterBaseURLField.stringValue = settings.openRouterBaseURL
 
@@ -447,12 +447,13 @@ class SettingsWindowViewController: NSViewController {
         newSettings.fallbackToOpenRouterOnGeminiError = fallbackCheckbox.state == .on
 
         // Gemini
-        newSettings.geminiApiKey = geminiApiKeyField.stringValue.isEmpty ? nil : geminiApiKeyField.stringValue
+        // API keys are managed via Keychain and should not be persisted in settings.json.
+        newSettings.geminiApiKey = nil
         newSettings.geminiModel = geminiModelField.stringValue
         newSettings.geminiBaseURL = geminiBaseURLField.stringValue
 
         // OpenRouter
-        newSettings.openRouterApiKey = openRouterApiKeyField.stringValue.isEmpty ? nil : openRouterApiKeyField.stringValue
+        newSettings.openRouterApiKey = nil
         newSettings.openRouterModel = openRouterModelField.stringValue
         newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
 
@@ -487,6 +488,11 @@ class SettingsWindowViewController: NSViewController {
         newSettings.geminiExtraInstruction = extraInstructionField.stringValue.isEmpty ? nil : extraInstructionField.stringValue
 
         settings = newSettings
+        do {
+            try Settings.saveAndNotify(newSettings)
+        } catch {
+            NSLog("[TextPolish] Failed to save settings from Settings window: \(error)")
+        }
         delegate?.settingsDidChange(settings)
     }
 

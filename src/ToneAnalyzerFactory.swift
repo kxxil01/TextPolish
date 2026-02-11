@@ -7,6 +7,9 @@ enum ToneAnalyzerFactory {
     case .gemini:
       do {
         let primary = try GeminiToneAnalyzer(settings: settings)
+        guard settings.fallbackToOpenRouterOnGeminiError else {
+          return primary
+        }
         // Lazy fallback - only initialize if actually needed
         let fallback = LazyAnalyzer {
           try OpenRouterToneAnalyzer(settings: settings)
@@ -29,6 +32,9 @@ enum ToneAnalyzerFactory {
     case .openRouter:
       do {
         let primary = try OpenRouterToneAnalyzer(settings: settings)
+        guard settings.fallbackToOpenRouterOnGeminiError else {
+          return primary
+        }
         // Lazy fallback - only initialize if actually needed
         let fallback = LazyAnalyzer {
           try GeminiToneAnalyzer(settings: settings)

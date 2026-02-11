@@ -4,12 +4,14 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let legacyKeychainService = "com.kxxil01.TextPolish"
+  private let legacyKeychainService = "com.ilham.GrammarCorrection"
   private let keychainAccount = "openRouterApiKey"
+  private let keychainLabel = "TextPolish — OpenRouter API Key"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let maxRateLimitBackoffSeconds: Double
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
 
@@ -38,6 +40,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
     configuration.timeoutIntervalForRequest = timeoutSeconds
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
+    self.maxRateLimitBackoffSeconds = 12
     self.config = config
   }
 
@@ -56,15 +59,37 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   }
 
   private func resolveApiKey() throws -> String {
-    let keyFromPrimaryKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccount))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromPrimaryKeychain.isEmpty { return keyFromPrimaryKeychain }
+    // Try primary keychain
+    do {
+      if let keyFromPrimaryKeychain = try Keychain.getPassword(service: keychainService, account: keychainAccount)?
+        .trimmingCharacters(in: .whitespacesAndNewlines), !keyFromPrimaryKeychain.isEmpty {
+        return keyFromPrimaryKeychain
+      }
+    } catch {
+      NSLog("[TextPolish] Failed to read primary keychain: \(error)")
+    }
 
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccount))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+    // Try legacy keychain and migrate
+    do {
+      if let keyFromLegacyKeychain = try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)?
+        .trimmingCharacters(in: .whitespacesAndNewlines), !keyFromLegacyKeychain.isEmpty {
+        if legacyKeychainService != keychainService {
+          do {
+            try Keychain.setPassword(
+              keyFromLegacyKeychain,
+              service: keychainService,
+              account: keychainAccount,
+              label: keychainLabel
+            )
+          } catch {
+            NSLog("[TextPolish] Failed to migrate legacy keychain: \(error)")
+          }
+        }
+        return keyFromLegacyKeychain
+      }
+    } catch {
+      NSLog("[TextPolish] Failed to read legacy keychain: \(error)")
+    }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
     let env = keyFromEnv?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -129,7 +154,8 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
         // Handle rate limiting with exponential backoff
         if http.statusCode == 429 {
-          let retryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
+          let requestedRetryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
+          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
           retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           // Continue to next attempt
@@ -155,13 +181,18 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
   private func extractRetryAfter(from data: Data) -> Double? {
     guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #"retry_after"\s*:\s*(\d+)"#, options: .regularExpression) else { return nil }
+    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
     let match = string[range]
     let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
     if let number = Int(numberString) {
       return Double(number)
     }
     return nil
+  }
+
+  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
+    let sanitized = requested.isFinite ? requested : 1
+    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private struct OpenAIErrorEnvelope: Decodable {
