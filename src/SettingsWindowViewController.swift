@@ -10,6 +10,8 @@ class SettingsWindowViewController: NSViewController {
     // Provider Tab
     var geminiProviderButton: NSButton!
     var openRouterProviderButton: NSButton!
+    var openAIProviderButton: NSButton!
+    var anthropicProviderButton: NSButton!
     var fallbackCheckbox: NSButton!
 
     // Gemini Tab
@@ -115,6 +117,10 @@ class SettingsWindowViewController: NSViewController {
         geminiProviderButton.target = self
         openRouterProviderButton.action = #selector(providerChanged(_:))
         openRouterProviderButton.target = self
+        openAIProviderButton.action = #selector(providerChanged(_:))
+        openAIProviderButton.target = self
+        anthropicProviderButton.action = #selector(providerChanged(_:))
+        anthropicProviderButton.target = self
         fallbackCheckbox.action = #selector(fallbackChanged(_:))
         fallbackCheckbox.target = self
 
@@ -153,9 +159,21 @@ class SettingsWindowViewController: NSViewController {
         openRouterProviderButton.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterProviderButton)
 
+        // OpenAI provider radio button
+        openAIProviderButton = NSButton(radioButtonWithTitle: "OpenAI", target: self, action: #selector(providerChanged(_:)))
+        openAIProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 160, width: contentWidth, height: 24)
+        openAIProviderButton.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(openAIProviderButton)
+
+        // Anthropic provider radio button
+        anthropicProviderButton = NSButton(radioButtonWithTitle: "Anthropic", target: self, action: #selector(providerChanged(_:)))
+        anthropicProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 190, width: contentWidth, height: 24)
+        anthropicProviderButton.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(anthropicProviderButton)
+
         // Fallback checkbox
         fallbackCheckbox = NSButton(checkboxWithTitle: "Enable automatic fallback to alternative provider", target: self, action: #selector(fallbackChanged(_:)))
-        fallbackCheckbox.frame = NSRect(x: padding, y: container.frame.height - 170, width: contentWidth, height: 24)
+        fallbackCheckbox.frame = NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 24)
         fallbackCheckbox.autoresizingMask = [.width, .minYMargin]
         container.addSubview(fallbackCheckbox)
 
@@ -443,7 +461,15 @@ class SettingsWindowViewController: NSViewController {
         guard var newSettings = settings else { return }
 
         // Provider
-        newSettings.provider = geminiProviderButton.state == .on ? .gemini : .openRouter
+        if geminiProviderButton.state == .on {
+            newSettings.provider = .gemini
+        } else if openRouterProviderButton.state == .on {
+            newSettings.provider = .openRouter
+        } else if openAIProviderButton.state == .on {
+            newSettings.provider = .openAI
+        } else if anthropicProviderButton.state == .on {
+            newSettings.provider = .anthropic
+        }
         newSettings.fallbackToOpenRouterOnGeminiError = fallbackCheckbox.state == .on
 
         // Gemini
@@ -497,18 +523,27 @@ class SettingsWindowViewController: NSViewController {
     }
 
     func updateProviderButtons() {
-        let isGemini = settings.provider == .gemini
-        geminiProviderButton.state = isGemini ? .on : .off
-        openRouterProviderButton.state = isGemini ? .off : .on
+        let provider = settings.provider
+        geminiProviderButton.state = provider == .gemini ? .on : .off
+        openRouterProviderButton.state = provider == .openRouter ? .on : .off
+        openAIProviderButton.state = provider == .openAI ? .on : .off
+        anthropicProviderButton.state = provider == .anthropic ? .on : .off
     }
 
     @objc func providerChanged(_ sender: NSButton) {
+        geminiProviderButton.state = .off
+        openRouterProviderButton.state = .off
+        openAIProviderButton.state = .off
+        anthropicProviderButton.state = .off
+
         if sender == geminiProviderButton {
             geminiProviderButton.state = .on
-            openRouterProviderButton.state = .off
-        } else {
-            geminiProviderButton.state = .off
+        } else if sender == openRouterProviderButton {
             openRouterProviderButton.state = .on
+        } else if sender == openAIProviderButton {
+            openAIProviderButton.state = .on
+        } else if sender == anthropicProviderButton {
+            anthropicProviderButton.state = .on
         }
     }
 

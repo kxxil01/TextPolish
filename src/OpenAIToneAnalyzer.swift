@@ -105,7 +105,15 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    if basePath.hasSuffix("/chat/completions") {
+      basePath.removeLast("/chat/completions".count)
+    }
+
+    if basePath.isEmpty {
+      components.path = "/chat/completions"
+    } else {
+      components.path = basePath + "/chat/completions"
+    }
 
     guard let url = components.url else { throw ToneAnalysisError.invalidBaseURL }
     return url
@@ -164,6 +172,14 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
         NSLog("[TextPolish] OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
+        if error is CancellationError {
+          throw error
+        }
+        if case ToneAnalysisError.requestFailed(let status, _) = error,
+           (400..<500).contains(status)
+        {
+          throw error
+        }
         // If it's the last attempt, throw the error
         if attempt == 2 {
           throw error

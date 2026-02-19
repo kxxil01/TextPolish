@@ -248,6 +248,51 @@ final class DiagnosticsStore {
       }
     }
 
+    if let openAIError = error as? OpenAICorrector.OpenAIError {
+      switch openAIError {
+      case .missingApiKey:
+        return ProviderHealthStatus(state: .error, message: "Missing API key", updatedAt: now)
+      case .invalidBaseURL:
+        return ProviderHealthStatus(state: .error, message: "Invalid base URL", updatedAt: now)
+      case .invalidModel:
+        return ProviderHealthStatus(state: .error, message: "Invalid model", updatedAt: now)
+      case .requestFailed(let status, _):
+        if status == 401 || status == 403 {
+          return ProviderHealthStatus(state: .error, message: "Unauthorized", updatedAt: now)
+        }
+        if status == 402 {
+          return ProviderHealthStatus(state: .error, message: "Payment required", updatedAt: now)
+        }
+        if status == 404 {
+          return ProviderHealthStatus(state: .error, message: "Model not found", updatedAt: now)
+        }
+        return statusHealth(status: status, updatedAt: now)
+      case .emptyResponse, .overRewrite:
+        return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
+      }
+    }
+
+    if let anthropicError = error as? AnthropicCorrector.AnthropicError {
+      switch anthropicError {
+      case .missingApiKey:
+        return ProviderHealthStatus(state: .error, message: "Missing API key", updatedAt: now)
+      case .invalidBaseURL:
+        return ProviderHealthStatus(state: .error, message: "Invalid base URL", updatedAt: now)
+      case .invalidModel:
+        return ProviderHealthStatus(state: .error, message: "Invalid model", updatedAt: now)
+      case .requestFailed(let status, _):
+        if status == 401 || status == 403 {
+          return ProviderHealthStatus(state: .error, message: "Unauthorized", updatedAt: now)
+        }
+        if status == 404 {
+          return ProviderHealthStatus(state: .error, message: "Model not found", updatedAt: now)
+        }
+        return statusHealth(status: status, updatedAt: now)
+      case .emptyResponse, .overRewrite:
+        return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
+      }
+    }
+
     if let toneError = error as? ToneAnalysisError {
       switch toneError {
       case .missingApiKey:

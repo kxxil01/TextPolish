@@ -174,6 +174,14 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         NSLog("[TextPolish] Anthropic Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
+        if error is CancellationError {
+          throw error
+        }
+        if case ToneAnalysisError.requestFailed(let status, _) = error,
+           (400..<500).contains(status)
+        {
+          throw error
+        }
         // If it's the last attempt, throw the error
         if attempt == 2 {
           throw error

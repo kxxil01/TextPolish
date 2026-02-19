@@ -470,6 +470,10 @@ final class CorrectionController {
       return settings.geminiModel
     case .openRouter:
       return settings.openRouterModel
+    case .openAI:
+      return settings.openAIModel
+    case .anthropic:
+      return settings.anthropicModel
     }
   }
 

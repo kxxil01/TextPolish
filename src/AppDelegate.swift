@@ -29,12 +29,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private var providerGeminiItem: NSMenuItem?
   private var providerOpenRouterItem: NSMenuItem?
+  private var providerOpenAIItem: NSMenuItem?
+  private var providerAnthropicItem: NSMenuItem?
   private var setGeminiKeyItem: NSMenuItem?
   private var setGeminiModelItem: NSMenuItem?
   private var detectGeminiModelItem: NSMenuItem?
   private var setOpenRouterKeyItem: NSMenuItem?
   private var setOpenRouterModelItem: NSMenuItem?
   private var detectOpenRouterModelItem: NSMenuItem?
+  private var setOpenAIKeyItem: NSMenuItem?
+  private var setOpenAIModelItem: NSMenuItem?
+  private var setAnthropicKeyItem: NSMenuItem?
+  private var setAnthropicModelItem: NSMenuItem?
   private var providerHealthItem: NSMenuItem?
   private var launchAtLoginItem: NSMenuItem?
   private var languageAutoItem: NSMenuItem?
@@ -351,12 +357,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     openRouterItem.target = self
 
+    let openAIItem = NSMenuItem(
+      title: "OpenAI",
+      action: #selector(selectOpenAIProvider),
+      keyEquivalent: ""
+    )
+    openAIItem.target = self
+
+    let anthropicItem = NSMenuItem(
+      title: "Anthropic",
+      action: #selector(selectAnthropicProvider),
+      keyEquivalent: ""
+    )
+    anthropicItem.target = self
+
     providerGeminiItem = geminiItem
     providerOpenRouterItem = openRouterItem
+    providerOpenAIItem = openAIItem
+    providerAnthropicItem = anthropicItem
     syncProviderMenuStates()
 
     providerMenu.addItem(geminiItem)
     providerMenu.addItem(openRouterItem)
+    providerMenu.addItem(openAIItem)
+    providerMenu.addItem(anthropicItem)
     providerMenu.addItem(.separator())
 
     let providerHealthItem = NSMenuItem(
@@ -411,12 +435,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     detectOpenRouterModelItem.target = self
 
+    let setOpenAIKeyItem = NSMenuItem(
+      title: "Set OpenAI API Key…",
+      action: #selector(setOpenAIApiKey),
+      keyEquivalent: ""
+    )
+    setOpenAIKeyItem.target = self
+
+    let setOpenAIModelItem = NSMenuItem(
+      title: "Set OpenAI Model…",
+      action: #selector(setOpenAIModel),
+      keyEquivalent: ""
+    )
+    setOpenAIModelItem.target = self
+
+    let setAnthropicKeyItem = NSMenuItem(
+      title: "Set Anthropic API Key…",
+      action: #selector(setAnthropicApiKey),
+      keyEquivalent: ""
+    )
+    setAnthropicKeyItem.target = self
+
+    let setAnthropicModelItem = NSMenuItem(
+      title: "Set Anthropic Model…",
+      action: #selector(setAnthropicModel),
+      keyEquivalent: ""
+    )
+    setAnthropicModelItem.target = self
+
     self.setGeminiKeyItem = setGeminiKeyItem
     self.setGeminiModelItem = setGeminiModelItem
     self.detectGeminiModelItem = detectGeminiModelItem
     self.setOpenRouterKeyItem = setOpenRouterKeyItem
     self.setOpenRouterModelItem = setOpenRouterModelItem
     self.detectOpenRouterModelItem = detectOpenRouterModelItem
+    self.setOpenAIKeyItem = setOpenAIKeyItem
+    self.setOpenAIModelItem = setOpenAIModelItem
+    self.setAnthropicKeyItem = setAnthropicKeyItem
+    self.setAnthropicModelItem = setAnthropicModelItem
 
     providerMenu.addItem(setGeminiKeyItem)
     providerMenu.addItem(setGeminiModelItem)
@@ -424,6 +480,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     providerMenu.addItem(setOpenRouterKeyItem)
     providerMenu.addItem(setOpenRouterModelItem)
     providerMenu.addItem(detectOpenRouterModelItem)
+    providerMenu.addItem(setOpenAIKeyItem)
+    providerMenu.addItem(setOpenAIModelItem)
+    providerMenu.addItem(setAnthropicKeyItem)
+    providerMenu.addItem(setAnthropicModelItem)
 
     providerItem.submenu = providerMenu
     menu.addItem(providerItem)
@@ -580,16 +640,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func syncProviderMenuStates() {
     providerGeminiItem?.state = settings.provider == .gemini ? .on : .off
     providerOpenRouterItem?.state = settings.provider == .openRouter ? .on : .off
+    providerOpenAIItem?.state = settings.provider == .openAI ? .on : .off
+    providerAnthropicItem?.state = settings.provider == .anthropic ? .on : .off
     setGeminiKeyItem?.isEnabled = settings.provider == .gemini
     setGeminiModelItem?.isEnabled = settings.provider == .gemini
     detectGeminiModelItem?.isEnabled = settings.provider == .gemini
     setOpenRouterKeyItem?.isEnabled = settings.provider == .openRouter
     setOpenRouterModelItem?.isEnabled = settings.provider == .openRouter
     detectOpenRouterModelItem?.isEnabled = settings.provider == .openRouter
+    setOpenAIKeyItem?.isEnabled = settings.provider == .openAI
+    setOpenAIModelItem?.isEnabled = settings.provider == .openAI
+    setAnthropicKeyItem?.isEnabled = settings.provider == .anthropic
+    setAnthropicModelItem?.isEnabled = settings.provider == .anthropic
     if settings.provider == .gemini {
       statusItem.button?.toolTip = "\(appDisplayName) (Gemini: \(settings.geminiModel))"
     } else if settings.provider == .openRouter {
       statusItem.button?.toolTip = "\(appDisplayName) (OpenRouter: \(settings.openRouterModel))"
+    } else if settings.provider == .openAI {
+      statusItem.button?.toolTip = "\(appDisplayName) (OpenAI: \(settings.openAIModel))"
+    } else if settings.provider == .anthropic {
+      statusItem.button?.toolTip = "\(appDisplayName) (Anthropic: \(settings.anthropicModel))"
     } else {
       statusItem.button?.toolTip = appDisplayName
     }
@@ -1126,6 +1196,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  @objc private func selectOpenAIProvider() {
+    settings.provider = .openAI
+    persistSettings()
+    syncProviderMenuStates()
+    refreshCorrector()
+
+    let keyFromKeychain =
+      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenAI))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let keyFromLegacyKeychain =
+      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenAI))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    if !hasKey,
+       settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+    {
+      setOpenAIApiKey()
+    }
+  }
+
+  @objc private func selectAnthropicProvider() {
+    settings.provider = .anthropic
+    persistSettings()
+    syncProviderMenuStates()
+    refreshCorrector()
+
+    let keyFromKeychain =
+      (try? Keychain.getPassword(service: keychainService, account: keychainAccountAnthropic))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let keyFromLegacyKeychain =
+      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountAnthropic))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    if !hasKey,
+       settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+    {
+      setAnthropicApiKey()
+    }
+  }
+
   @objc private func setGeminiApiKey() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
@@ -1216,6 +1326,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  @objc private func setOpenAIApiKey() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let result = self.promptForApiKey(
+        title: "OpenAI API Key",
+        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+      )
+      NSLog("[TextPolish] OpenAI key prompt result=\(self.apiKeyPromptResultKind(result))")
+
+      switch result {
+      case .canceled:
+        return
+      case .clear:
+        self.feedback?.showInfo("Clearing OpenAI key…")
+        do {
+          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenAI)
+          if self.legacyKeychainService != self.keychainService {
+            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountOpenAI)
+          }
+          self.settings.openAIApiKey = nil
+          self.persistSettings()
+          self.syncProviderMenuStates()
+          self.feedback?.showInfo("OpenAI key cleared")
+          self.refreshCorrector()
+        } catch {
+          NSLog("[TextPolish] Failed to clear key: \(error)")
+          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+        }
+      case .save(let value):
+        self.feedback?.showInfo("Saving OpenAI key… (check for a Keychain prompt)")
+        do {
+          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenAI)
+          self.settings.openAIApiKey = nil
+          self.persistSettings()
+          self.syncProviderMenuStates()
+          self.feedback?.showInfo("OpenAI key saved")
+          self.refreshCorrector()
+        } catch {
+          NSLog("[TextPolish] Failed to save key: \(error)")
+          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+        }
+      }
+    }
+  }
+
+  @objc private func setAnthropicApiKey() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let result = self.promptForApiKey(
+        title: "Anthropic API Key",
+        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+      )
+      NSLog("[TextPolish] Anthropic key prompt result=\(self.apiKeyPromptResultKind(result))")
+
+      switch result {
+      case .canceled:
+        return
+      case .clear:
+        self.feedback?.showInfo("Clearing Anthropic key…")
+        do {
+          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountAnthropic)
+          if self.legacyKeychainService != self.keychainService {
+            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountAnthropic)
+          }
+          self.settings.anthropicApiKey = nil
+          self.persistSettings()
+          self.syncProviderMenuStates()
+          self.feedback?.showInfo("Anthropic key cleared")
+          self.refreshCorrector()
+        } catch {
+          NSLog("[TextPolish] Failed to clear key: \(error)")
+          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+        }
+      case .save(let value):
+        self.feedback?.showInfo("Saving Anthropic key… (check for a Keychain prompt)")
+        do {
+          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountAnthropic)
+          self.settings.anthropicApiKey = nil
+          self.persistSettings()
+          self.syncProviderMenuStates()
+          self.feedback?.showInfo("Anthropic key saved")
+          self.refreshCorrector()
+        } catch {
+          NSLog("[TextPolish] Failed to save key: \(error)")
+          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+        }
+      }
+    }
+  }
+
   @objc private func setGeminiModel() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
@@ -1248,6 +1448,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { return }
       self.settings.openRouterModel = trimmed
+      self.persistSettings()
+      self.syncProviderMenuStates()
+      self.refreshCorrector()
+    }
+  }
+
+  @objc private func setOpenAIModel() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let value = self.promptForText(
+        title: "OpenAI Model",
+        message: "Examples: gpt-4o-mini, gpt-4o (depends on your OpenAI account).",
+        placeholder: "Model name",
+        initialValue: self.settings.openAIModel
+      )
+      guard let value, !value.isEmpty else { return }
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else { return }
+      self.settings.openAIModel = trimmed
+      self.persistSettings()
+      self.syncProviderMenuStates()
+      self.refreshCorrector()
+    }
+  }
+
+  @objc private func setAnthropicModel() {
+    runAfterMenuDismissed { [weak self] in
+      guard let self else { return }
+      let value = self.promptForText(
+        title: "Anthropic Model",
+        message: "Examples: claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022 (depends on your Anthropic account).",
+        placeholder: "Model name",
+        initialValue: self.settings.anthropicModel
+      )
+      guard let value, !value.isEmpty else { return }
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else { return }
+      self.settings.anthropicModel = trimmed
       self.persistSettings()
       self.syncProviderMenuStates()
       self.refreshCorrector()

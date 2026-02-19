@@ -4,6 +4,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   enum OpenAIError: Error, LocalizedError {
     case missingApiKey
     case invalidBaseURL
+    case invalidModel
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
@@ -14,6 +15,8 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return "Missing OpenAI API key"
       case .invalidBaseURL:
         return "Invalid OpenAI base URL"
+      case .invalidModel:
+        return "Invalid OpenAI model"
       case .requestFailed(let status, let message):
         if status == 401 {
           return "OpenAI unauthorized (401) — check API key"
@@ -67,7 +70,9 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     guard let baseURL = URL(string: settings.openAIBaseURL) else { throw OpenAIError.invalidBaseURL }
 
     self.baseURL = baseURL
-    self.model = settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedModel = settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.model = trimmedModel
+    guard !trimmedModel.isEmpty else { throw OpenAIError.invalidModel }
     self.timeoutSeconds = settings.requestTimeoutSeconds
     let configuration = URLSessionConfiguration.default
     configuration.waitsForConnectivity = true
@@ -150,7 +155,15 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    if basePath.hasSuffix("/chat/completions") {
+      basePath.removeLast("/chat/completions".count)
+    }
+
+    if basePath.isEmpty {
+      components.path = "/chat/completions"
+    } else {
+      components.path = basePath + "/chat/completions"
+    }
 
     guard let url = components.url else { throw OpenAIError.invalidBaseURL }
     return url

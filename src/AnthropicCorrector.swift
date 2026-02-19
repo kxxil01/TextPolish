@@ -4,6 +4,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
   enum AnthropicError: Error, LocalizedError {
     case missingApiKey
     case invalidBaseURL
+    case invalidModel
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
@@ -14,6 +15,8 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         return "Missing Anthropic API key"
       case .invalidBaseURL:
         return "Invalid Anthropic base URL"
+      case .invalidModel:
+        return "Invalid Anthropic model"
       case .requestFailed(let status, let message):
         if status == 401 {
           return "Anthropic unauthorized (401) — check API key"
@@ -67,7 +70,9 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     guard let baseURL = URL(string: settings.anthropicBaseURL) else { throw AnthropicError.invalidBaseURL }
 
     self.baseURL = baseURL
-    self.model = settings.anthropicModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedModel = settings.anthropicModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.model = trimmedModel
+    guard !trimmedModel.isEmpty else { throw AnthropicError.invalidModel }
     self.timeoutSeconds = settings.requestTimeoutSeconds
     let configuration = URLSessionConfiguration.default
     configuration.waitsForConnectivity = true
