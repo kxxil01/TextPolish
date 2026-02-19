@@ -24,6 +24,26 @@ enum CorrectorFactory {
           diagnosticsModel: settings.openRouterModel
         )
       }
+    case .openAI:
+      do {
+        return try OpenAICorrector(settings: settings)
+      } catch {
+        return FailingCorrector(
+          underlyingError: error,
+          diagnosticsProvider: .openAI,
+          diagnosticsModel: settings.openAIModel
+        )
+      }
+    case .anthropic:
+      do {
+        return try AnthropicCorrector(settings: settings)
+      } catch {
+        return FailingCorrector(
+          underlyingError: error,
+          diagnosticsProvider: .anthropic,
+          diagnosticsModel: settings.anthropicModel
+        )
+      }
     }
   }
 }

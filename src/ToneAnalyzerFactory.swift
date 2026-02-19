@@ -54,6 +54,26 @@ enum ToneAnalyzerFactory {
           diagnosticsModel: settings.openRouterModel
         )
       }
+    case .openAI:
+      do {
+        return try OpenAIToneAnalyzer(settings: settings)
+      } catch {
+        return FailingToneAnalyzer(
+          underlyingError: error,
+          diagnosticsProvider: .openAI,
+          diagnosticsModel: settings.openAIModel
+        )
+      }
+    case .anthropic:
+      do {
+        return try AnthropicToneAnalyzer(settings: settings)
+      } catch {
+        return FailingToneAnalyzer(
+          underlyingError: error,
+          diagnosticsProvider: .anthropic,
+          diagnosticsModel: settings.anthropicModel
+        )
+      }
     }
   }
 }

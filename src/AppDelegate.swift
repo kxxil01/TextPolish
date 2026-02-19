@@ -923,6 +923,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSLog("[TextPolish] Auto-detect OpenRouter model failed: \(error)")
         return nil
       }
+    case .openAI:
+      return nil
+    case .anthropic:
+      return nil
     }
   }
 
@@ -935,6 +939,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return currentOpenRouterApiKey() != nil
     case .openRouter:
       return currentGeminiApiKey() != nil
+    case .openAI:
+      return false
+    case .anthropic:
+      return false
     }
   }
 
@@ -1944,6 +1952,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         providerName = "OpenRouter"
         providerModel = self.settings.openRouterModel
         providerURL = self.settings.openRouterBaseURL
+      case .openAI:
+        providerName = "OpenAI"
+        providerModel = self.settings.openAIModel
+        providerURL = self.settings.openAIBaseURL
+      case .anthropic:
+        providerName = "Anthropic"
+        providerModel = self.settings.anthropicModel
+        providerURL = self.settings.anthropicBaseURL
       }
 
       let settingsPath = Settings.settingsFileURL().path

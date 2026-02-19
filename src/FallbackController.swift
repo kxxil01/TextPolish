@@ -80,6 +80,10 @@ final class FallbackController {
             return "Gemini"
         } else if corrector is OpenRouterCorrector {
             return "OpenRouter"
+        } else if corrector is OpenAICorrector {
+            return "OpenAI"
+        } else if corrector is AnthropicCorrector {
+            return "Anthropic"
         }
         return "Provider"
     }

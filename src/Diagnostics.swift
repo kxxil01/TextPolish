@@ -201,6 +201,10 @@ final class DiagnosticsStore {
       return "Gemini"
     case .openRouter:
       return "OpenRouter"
+    case .openAI:
+      return "OpenAI"
+    case .anthropic:
+      return "Anthropic"
     }
   }
 
