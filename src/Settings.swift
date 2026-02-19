@@ -246,6 +246,8 @@ struct Settings: Codable {
   enum Provider: String, Codable {
     case gemini
     case openRouter
+    case openAI
+    case anthropic
 
     init(from decoder: Decoder) throws {
       let container = try decoder.singleValueContainer()
@@ -285,6 +287,18 @@ struct Settings: Codable {
   var openRouterMaxAttempts: Int
   var openRouterMinSimilarity: Double
   var openRouterExtraInstruction: String?
+  var openAIApiKey: String?
+  var openAIModel: String
+  var openAIBaseURL: String
+  var openAIMaxAttempts: Int
+  var openAIMinSimilarity: Double
+  var openAIExtraInstruction: String?
+  var anthropicApiKey: String?
+  var anthropicModel: String
+  var anthropicBaseURL: String
+  var anthropicMaxAttempts: Int
+  var anthropicMinSimilarity: Double
+  var anthropicExtraInstruction: String?
 
   init(
     provider: Provider = .gemini,
@@ -312,7 +326,19 @@ struct Settings: Codable {
     openRouterBaseURL: String = "https://openrouter.ai/api/v1",
     openRouterMaxAttempts: Int = 2,
     openRouterMinSimilarity: Double = 0.65,
-    openRouterExtraInstruction: String? = nil
+    openRouterExtraInstruction: String? = nil,
+    openAIApiKey: String? = nil,
+    openAIModel: String = "gpt-4o-mini",
+    openAIBaseURL: String = "https://api.openai.com/v1",
+    openAIMaxAttempts: Int = 2,
+    openAIMinSimilarity: Double = 0.65,
+    openAIExtraInstruction: String? = nil,
+    anthropicApiKey: String? = nil,
+    anthropicModel: String = "claude-haiku-4-5",
+    anthropicBaseURL: String = "https://api.anthropic.com",
+    anthropicMaxAttempts: Int = 2,
+    anthropicMinSimilarity: Double = 0.65,
+    anthropicExtraInstruction: String? = nil
   ) {
     self.provider = provider
     self.requestTimeoutSeconds = requestTimeoutSeconds
@@ -340,6 +366,18 @@ struct Settings: Codable {
     self.openRouterMaxAttempts = openRouterMaxAttempts
     self.openRouterMinSimilarity = openRouterMinSimilarity
     self.openRouterExtraInstruction = openRouterExtraInstruction
+    self.openAIApiKey = openAIApiKey
+    self.openAIModel = openAIModel
+    self.openAIBaseURL = openAIBaseURL
+    self.openAIMaxAttempts = openAIMaxAttempts
+    self.openAIMinSimilarity = openAIMinSimilarity
+    self.openAIExtraInstruction = openAIExtraInstruction
+    self.anthropicApiKey = anthropicApiKey
+    self.anthropicModel = anthropicModel
+    self.anthropicBaseURL = anthropicBaseURL
+    self.anthropicMaxAttempts = anthropicMaxAttempts
+    self.anthropicMinSimilarity = anthropicMinSimilarity
+    self.anthropicExtraInstruction = anthropicExtraInstruction
   }
 
   init(from decoder: Decoder) throws {
@@ -373,6 +411,18 @@ struct Settings: Codable {
     openRouterMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openRouterMaxAttempts) ?? 2
     openRouterMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openRouterMinSimilarity) ?? 0.65
     openRouterExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openRouterExtraInstruction)
+    openAIApiKey = try container.decodeIfPresent(String.self, forKey: .openAIApiKey)
+    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-4o-mini"
+    openAIBaseURL = try container.decodeIfPresent(String.self, forKey: .openAIBaseURL) ?? "https://api.openai.com/v1"
+    openAIMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openAIMaxAttempts) ?? 2
+    openAIMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openAIMinSimilarity) ?? 0.65
+    openAIExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openAIExtraInstruction)
+    anthropicApiKey = try container.decodeIfPresent(String.self, forKey: .anthropicApiKey)
+    anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? "claude-haiku-4-5"
+    anthropicBaseURL = try container.decodeIfPresent(String.self, forKey: .anthropicBaseURL) ?? "https://api.anthropic.com"
+    anthropicMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .anthropicMaxAttempts) ?? 2
+    anthropicMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .anthropicMinSimilarity) ?? 0.65
+    anthropicExtraInstruction = try container.decodeIfPresent(String.self, forKey: .anthropicExtraInstruction)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -402,6 +452,18 @@ struct Settings: Codable {
     case openRouterMaxAttempts
     case openRouterMinSimilarity
     case openRouterExtraInstruction
+    case openAIApiKey
+    case openAIModel
+    case openAIBaseURL
+    case openAIMaxAttempts
+    case openAIMinSimilarity
+    case openAIExtraInstruction
+    case anthropicApiKey
+    case anthropicModel
+    case anthropicBaseURL
+    case anthropicMaxAttempts
+    case anthropicMinSimilarity
+    case anthropicExtraInstruction
   }
 
   func timingProfile(bundleIdentifier: String?, appName: String?) -> TimingProfile? {
