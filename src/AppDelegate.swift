@@ -944,11 +944,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     case .gemini:
       return currentOpenRouterApiKey() != nil
     case .openRouter:
-      return currentGeminiApiKey() != nil
+      return currentOpenRouterApiKey() != nil
     case .openAI:
-      return currentOpenAIApiKey() != nil
+      return false
     case .anthropic:
-      return currentAnthropicApiKey() != nil
+      return false
     }
   }
 

@@ -105,7 +105,17 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
 
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/v1/messages"
+    if basePath.hasSuffix("/v1/messages") {
+      basePath.removeLast("/v1/messages".count)
+    } else if basePath.hasSuffix("/v1") {
+      basePath.removeLast("/v1".count)
+    }
+
+    if basePath.isEmpty {
+      components.path = "/v1/messages"
+    } else {
+      components.path = basePath + "/v1/messages"
+    }
 
     guard let url = components.url else { throw ToneAnalysisError.invalidBaseURL }
     return url
