@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private let keychainAccountGemini = "geminiApiKey"
   private let keychainAccountOpenRouter = "openRouterApiKey"
+  private let keychainAccountOpenAI = "openAIApiKey"
+  private let keychainAccountAnthropic = "anthropicApiKey"
   private let legacyKeychainService = "com.ilham.GrammarCorrection"
   private let expectedBundleIdentifier = "com.kxxil01.TextPolish"
   private var keychainService: String {
@@ -793,6 +795,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return "\(expectedAppName) — Gemini API Key"
     case keychainAccountOpenRouter:
       return "\(expectedAppName) — OpenRouter API Key"
+    case keychainAccountOpenAI:
+      return "\(expectedAppName) — OpenAI API Key"
+    case keychainAccountAnthropic:
+      return "\(expectedAppName) — Anthropic API Key"
     default:
       return "\(expectedAppName) — Secret"
     }
@@ -940,9 +946,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     case .openRouter:
       return currentGeminiApiKey() != nil
     case .openAI:
-      return false
+      return currentOpenAIApiKey() != nil
     case .anthropic:
-      return false
+      return currentAnthropicApiKey() != nil
     }
   }
 
@@ -1501,6 +1507,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     if !keyFromSettings.isEmpty { return keyFromSettings }
 
     let env = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"] ?? ""
+    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+    return keyFromEnv.isEmpty ? nil : keyFromEnv
+  }
+
+  private func currentOpenAIApiKey() -> String? {
+    let keyFromKeychain =
+      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenAI))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromKeychain.isEmpty { return keyFromKeychain }
+
+    let keyFromLegacyKeychain =
+      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenAI))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+
+    let keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromSettings.isEmpty { return keyFromSettings }
+
+    let env = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+    return keyFromEnv.isEmpty ? nil : keyFromEnv
+  }
+
+  private func currentAnthropicApiKey() -> String? {
+    let keyFromKeychain =
+      (try? Keychain.getPassword(service: keychainService, account: keychainAccountAnthropic))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromKeychain.isEmpty { return keyFromKeychain }
+
+    let keyFromLegacyKeychain =
+      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountAnthropic))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+
+    let keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !keyFromSettings.isEmpty { return keyFromSettings }
+
+    let env = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
     let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
     return keyFromEnv.isEmpty ? nil : keyFromEnv
   }

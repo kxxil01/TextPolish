@@ -170,6 +170,7 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         }
         // For other errors on non-last attempts, continue
         retryCount += 1
+        try await Task.sleep(for: .seconds(1))
         continue
       }
     }

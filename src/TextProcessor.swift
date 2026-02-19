@@ -5,7 +5,7 @@ protocol TextProcessor {
   /// The minimum similarity threshold for accepting corrections
   var minSimilarity: Double { get }
 
-  /// Regex patterns for text protection (should be provided by implementer)
+  /// Regex patterns for text protection
   static var fencedCodeBlockRegex: NSRegularExpression { get }
   static var inlineCodeRegex: NSRegularExpression { get }
   static var discordTokenRegex: NSRegularExpression { get }
@@ -20,7 +20,30 @@ struct ProtectedText {
 
 // MARK: - Default Implementation
 
+private enum TextProcessorRegexDefaults {
+  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
+  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
+  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
+  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
+}
+
 extension TextProcessor {
+
+  static var fencedCodeBlockRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.fencedCodeBlockRegex
+  }
+
+  static var inlineCodeRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.inlineCodeRegex
+  }
+
+  static var discordTokenRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.discordTokenRegex
+  }
+
+  static var urlRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.urlRegex
+  }
 
   /// Protects special text patterns (code blocks, URLs, etc.) by replacing them with placeholders
   func protect(_ text: String) -> ProtectedText {

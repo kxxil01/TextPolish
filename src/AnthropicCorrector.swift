@@ -40,10 +40,6 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
   let minSimilarity: Double
 
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
 
   private let baseURL: URL
   private let model: String

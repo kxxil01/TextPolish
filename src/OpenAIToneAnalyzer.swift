@@ -170,6 +170,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
         }
         // For other errors on non-last attempts, continue
         retryCount += 1
+        try await Task.sleep(for: .seconds(1))
         continue
       }
     }
