@@ -281,6 +281,67 @@ final class SettingsIntegrationTests: XCTestCase {
     }
 }
 
+// MARK: - OpenAI and Anthropic Provider Tests
+
+extension SettingsIntegrationTests {
+    func testOpenAIDefaultModel() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.openAIModel, "gpt-4o-mini", "Default OpenAI model should be gpt-4o-mini")
+    }
+
+    func testAnthropicDefaultModel() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.anthropicModel, "claude-haiku-4-5", "Default Anthropic model should be claude-haiku-4-5")
+    }
+
+    func testOpenAIProviderRoundTrip() throws {
+        // Given
+        var settings = Settings()
+        settings.provider = .openAI
+
+        // When
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+        // Then
+        XCTAssertEqual(decoded.provider, .openAI, "Provider should round-trip as .openAI")
+    }
+
+    func testAnthropicProviderRoundTrip() throws {
+        // Given
+        var settings = Settings()
+        settings.provider = .anthropic
+
+        // When
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+        // Then
+        XCTAssertEqual(decoded.provider, .anthropic, "Provider should round-trip as .anthropic")
+    }
+
+    func testNewSettingsFieldsHaveDefaults() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.openAIBaseURL, "https://api.openai.com/v1",
+            "openAIBaseURL should have default value")
+        XCTAssertEqual(settings.anthropicBaseURL, "https://api.anthropic.com",
+            "anthropicBaseURL should have default value")
+        XCTAssertEqual(settings.openAIMaxAttempts, 2,
+            "openAIMaxAttempts should default to 2")
+        XCTAssertEqual(settings.anthropicMaxAttempts, 2,
+            "anthropicMaxAttempts should default to 2")
+    }
+}
+
 // MARK: - Notification Tests
 
 extension SettingsIntegrationTests {
