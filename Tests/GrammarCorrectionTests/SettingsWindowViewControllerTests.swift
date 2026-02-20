@@ -28,7 +28,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
     func testTabViewCreation() {
         XCTAssertNotNil(viewController.tabView, "Tab view should be created")
-        XCTAssertEqual(viewController.tabView?.tabViewItems.count, 5, "Should have 5 tabs")
+        XCTAssertEqual(viewController.tabView?.tabViewItems.count, 7, "Should have 7 tabs")
     }
 
     func testAllTabsCreated() {
@@ -36,6 +36,8 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
         XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
         XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
+        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
+        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
         XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
         XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
     }
@@ -58,6 +60,24 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNotNil(viewController.openRouterModelField, "OpenRouter model field should exist")
         XCTAssertNotNil(viewController.openRouterBaseURLField, "OpenRouter base URL field should exist")
         XCTAssertNotNil(viewController.detectOpenRouterModelButton, "Detect OpenRouter model button should exist")
+    }
+
+    func testOpenAITabElements() {
+        XCTAssertNotNil(viewController.openAIApiKeyField, "OpenAI API key field should exist")
+        XCTAssertNotNil(viewController.openAIModelField, "OpenAI model field should exist")
+        XCTAssertNotNil(viewController.openAIBaseURLField, "OpenAI base URL field should exist")
+        XCTAssertNotNil(viewController.openAIMaxAttemptsField, "OpenAI max attempts field should exist")
+        XCTAssertNotNil(viewController.openAIMinSimilarityField, "OpenAI min similarity field should exist")
+        XCTAssertNotNil(viewController.openAIExtraInstructionField, "OpenAI extra instruction field should exist")
+    }
+
+    func testAnthropicTabElements() {
+        XCTAssertNotNil(viewController.anthropicApiKeyField, "Anthropic API key field should exist")
+        XCTAssertNotNil(viewController.anthropicModelField, "Anthropic model field should exist")
+        XCTAssertNotNil(viewController.anthropicBaseURLField, "Anthropic base URL field should exist")
+        XCTAssertNotNil(viewController.anthropicMaxAttemptsField, "Anthropic max attempts field should exist")
+        XCTAssertNotNil(viewController.anthropicMinSimilarityField, "Anthropic min similarity field should exist")
+        XCTAssertNotNil(viewController.anthropicExtraInstructionField, "Anthropic extra instruction field should exist")
     }
 
     func testHotkeysTabElements() {
@@ -92,7 +112,22 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
         // Then
         XCTAssertEqual(viewController.settings.provider, .gemini, "Provider should be saved")
-        XCTAssertTrue(viewController.settings.fallbackToOpenRouterOnGeminiError, "Fallback setting should be saved")
+        XCTAssertTrue(viewController.settings.enableGeminiOpenRouterFallback, "Fallback setting should be saved")
+    }
+
+    func testSaveSettingsClearsAllProviderApiKeys() {
+        viewController.loadSettings()
+        viewController.geminiApiKeyField.stringValue = "gemini-key"
+        viewController.openRouterApiKeyField.stringValue = "or-key"
+        viewController.openAIApiKeyField.stringValue = "oa-key"
+        viewController.anthropicApiKeyField.stringValue = "anthropic-key"
+
+        viewController.saveSettings()
+
+        XCTAssertNil(viewController.settings.geminiApiKey)
+        XCTAssertNil(viewController.settings.openRouterApiKey)
+        XCTAssertNil(viewController.settings.openAIApiKey)
+        XCTAssertNil(viewController.settings.anthropicApiKey)
     }
 
     func testProviderChanged() {

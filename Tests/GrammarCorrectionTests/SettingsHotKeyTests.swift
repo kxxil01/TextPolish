@@ -117,12 +117,24 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.pasteSettleDelayMilliseconds, 25)
     XCTAssertEqual(decoded.postPasteDelayMilliseconds, 180)
     XCTAssertEqual(decoded.timingProfiles, [:])
-    XCTAssertEqual(decoded.fallbackToOpenRouterOnGeminiError, false)
+    XCTAssertEqual(decoded.enableGeminiOpenRouterFallback, false)
     XCTAssertEqual(decoded.correctionLanguage, .auto)
     XCTAssertEqual(decoded.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(decoded.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
     XCTAssertEqual(decoded.hotKeyCorrectSelection, .correctSelectionDefault)
     XCTAssertEqual(decoded.hotKeyCorrectAll, .correctAllDefault)
+  }
+
+  func testDecodeLegacyFallbackKeyStillWorks() throws {
+    let json = """
+    {
+      "fallbackToOpenRouterOnGeminiError": true
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertTrue(decoded.enableGeminiOpenRouterFallback)
   }
 
   func testDecodeUnknownProviderDefaultsToGemini() throws {
@@ -158,7 +170,7 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(defaults.pasteSettleDelayMilliseconds, 25)
     XCTAssertEqual(defaults.postPasteDelayMilliseconds, 180)
     XCTAssertEqual(defaults.timingProfiles, [:])
-    XCTAssertEqual(defaults.fallbackToOpenRouterOnGeminiError, false)
+    XCTAssertEqual(defaults.enableGeminiOpenRouterFallback, false)
     XCTAssertEqual(defaults.correctionLanguage, .auto)
     XCTAssertEqual(defaults.geminiModel, "gemini-2.0-flash-lite-001")
     XCTAssertEqual(defaults.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
