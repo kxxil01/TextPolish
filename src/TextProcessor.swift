@@ -46,7 +46,7 @@ extension TextProcessor {
   }
 
   /// Safety cap to avoid O(n*m) Levenshtein work on very large payloads.
-  private static let MAX_SIMILARITY_CHECK_SIZE = 256_000
+  private static var maxSimilarityCheckSize: Int { 256_000 }
 
   /// Protects special text patterns (code blocks, URLs, etc.) by replacing them with placeholders
   func protect(_ text: String) -> ProtectedText {
@@ -209,7 +209,7 @@ extension TextProcessor {
   /// Checks similarity against a minimum threshold with early exits for large inputs
   func isSimilarEnough(original: String, candidate: String, minimum: Double) -> Bool {
     // Avoid expensive distance computation for extremely large inputs.
-    if original.utf8.count > Self.MAX_SIMILARITY_CHECK_SIZE || candidate.utf8.count > Self.MAX_SIMILARITY_CHECK_SIZE {
+    if original.utf8.count > Self.maxSimilarityCheckSize || candidate.utf8.count > Self.maxSimilarityCheckSize {
       return false
     }
 
