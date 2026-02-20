@@ -167,7 +167,7 @@ enum ToneAnalyzerFactory {
     guard let key = try? Keychain.getPassword(service: service, account: account) else {
       return false
     }
-    let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
     return !trimmed.isEmpty
   }
 }
