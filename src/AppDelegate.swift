@@ -1333,7 +1333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "OpenAI API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] OpenAI key prompt result=\(self.apiKeyPromptResultKind(result))")
+      NSLog("[TextPolish] OpenAI key prompt completed")
 
       switch result {
       case .canceled:
@@ -1378,7 +1378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "Anthropic API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] Anthropic key prompt result=\(self.apiKeyPromptResultKind(result))")
+      NSLog("[TextPolish] Anthropic key prompt completed")
 
       switch result {
       case .canceled:
