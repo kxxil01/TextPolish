@@ -274,7 +274,7 @@ struct Settings: Codable {
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
   var hotKeyAnalyzeTone: HotKey
-  var fallbackToOpenRouterOnGeminiError: Bool
+  var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
   var geminiBaseURL: String
@@ -314,7 +314,7 @@ struct Settings: Codable {
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
-    fallbackToOpenRouterOnGeminiError: Bool = false,
+    enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.0-flash-lite-001",
     geminiBaseURL: String = "https://generativelanguage.googleapis.com",
@@ -353,7 +353,7 @@ struct Settings: Codable {
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
-    self.fallbackToOpenRouterOnGeminiError = fallbackToOpenRouterOnGeminiError
+    self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
     self.geminiBaseURL = geminiBaseURL
@@ -395,8 +395,10 @@ struct Settings: Codable {
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
-    fallbackToOpenRouterOnGeminiError =
-      try container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError) ?? false
+    enableGeminiOpenRouterFallback =
+      try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
+      ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
+      ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
     geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.0-flash-lite-001"
     geminiBaseURL =
@@ -439,6 +441,7 @@ struct Settings: Codable {
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
     case hotKeyAnalyzeTone
+    case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey
     case geminiModel

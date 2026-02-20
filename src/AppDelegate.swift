@@ -688,7 +688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func syncFallbackMenuState() {
-    fallbackToOpenRouterItem?.state = settings.fallbackToOpenRouterOnGeminiError ? .on : .off
+    fallbackToOpenRouterItem?.state = settings.enableGeminiOpenRouterFallback ? .on : .off
   }
 
   private func syncLanguageMenuState() {
@@ -1007,7 +1007,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func shouldAttemptFallback(for error: Error) -> Bool {
-    guard settings.fallbackToOpenRouterOnGeminiError else { return false }
+    guard settings.enableGeminiOpenRouterFallback else { return false }
     guard shouldFallbackFromError(error) else { return false }
 
     switch settings.provider {
@@ -1543,7 +1543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @objc private func toggleFallbackToOpenRouter() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
-      self.settings.fallbackToOpenRouterOnGeminiError.toggle()
+      self.settings.enableGeminiOpenRouterFallback.toggle()
       self.persistSettings()
       self.syncFallbackMenuState()
     }

@@ -7,7 +7,7 @@ enum ToneAnalyzerFactory {
     case .gemini:
       do {
         let primary = try GeminiToneAnalyzer(settings: settings)
-        guard settings.fallbackToOpenRouterOnGeminiError else {
+        guard settings.enableGeminiOpenRouterFallback else {
           return primary
         }
         // Lazy fallback - only initialize if actually needed
@@ -32,7 +32,7 @@ enum ToneAnalyzerFactory {
     case .openRouter:
       do {
         let primary = try OpenRouterToneAnalyzer(settings: settings)
-        guard settings.fallbackToOpenRouterOnGeminiError else {
+        guard settings.enableGeminiOpenRouterFallback else {
           return primary
         }
         // Lazy fallback - only initialize if actually needed
@@ -78,7 +78,8 @@ enum ToneAnalyzerFactory {
   }
 }
 
-/// Wrapper for lazy initialization of analyzer
+/// Wrapper for lazy initialization of analyzer.
+/// Safety: accessed through controller-owned analyzer instances; no concurrent calls are made.
 final class LazyAnalyzer: ToneAnalyzer, @unchecked Sendable {
   private let factory: () throws -> ToneAnalyzer
   private var cached: ToneAnalyzer?
@@ -97,7 +98,8 @@ final class LazyAnalyzer: ToneAnalyzer, @unchecked Sendable {
   }
 }
 
-/// Analyzer that tries primary first, then falls back to secondary on failure
+/// Analyzer that tries primary first, then falls back to secondary on failure.
+/// Safety: mutable state tracks the latest request only; callers do not invoke `analyze` concurrently.
 final class FallbackToneAnalyzer: ToneAnalyzer, DiagnosticsProviderReporting, RetryReporting, @unchecked Sendable {
   private let primary: ToneAnalyzer
   private let fallback: ToneAnalyzer
