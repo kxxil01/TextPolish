@@ -140,10 +140,40 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
   }
 
   private static func extractPrompt(from request: URLRequest) throws -> String {
-    guard let body = request.httpBody else { return "" }
+    guard let body = requestBodyData(from: request) else { return "" }
     let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
     let messages = json?["messages"] as? [[String: Any]]
     return messages?.first?["content"] as? String ?? ""
+  }
+
+  private static func requestBodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody {
+      return body
+    }
+
+    guard let stream = request.httpBodyStream else {
+      return nil
+    }
+
+    stream.open()
+    defer { stream.close() }
+
+    var data = Data()
+    let bufferSize = 1024
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+
+    while stream.hasBytesAvailable {
+      let count = stream.read(&buffer, maxLength: bufferSize)
+      if count < 0 {
+        return nil
+      }
+      if count == 0 {
+        break
+      }
+      data.append(contentsOf: buffer.prefix(count))
+    }
+
+    return data.isEmpty ? nil : data
   }
 
   private static func extractProtectedText(from prompt: String) -> String {
