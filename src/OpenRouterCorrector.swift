@@ -215,7 +215,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
           return content
         }
 
-        let message = parseErrorMessage(data: data)
+        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
         NSLog("[TextPolish] OpenRouter HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
         if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
@@ -239,7 +239,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
         if error is CancellationError { throw error }
         if let openRouterError = error as? OpenRouterError { throw openRouterError }
 
-        let wrapped = OpenRouterError.requestFailed(-1, error.localizedDescription)
+        let sanitizedErrorDescription = ErrorLogSanitizer.sanitize(error.localizedDescription)
+        let wrapped = OpenRouterError.requestFailed(-1, sanitizedErrorDescription)
         lastError = wrapped
         if attempt < maxNetworkAttempts - 1 {
           retryCount += 1
@@ -264,14 +265,12 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil

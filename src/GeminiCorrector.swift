@@ -235,7 +235,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             return textParts.joined()
           }
 
-          let message = parseErrorMessage(data: data)
+          let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
           NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
 
           if http.statusCode == 404, index < versionsToTry.count - 1 {
@@ -265,7 +265,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           if error is CancellationError { throw error }
           if let geminiError = error as? GeminiError { throw geminiError }
 
-          let wrapped = GeminiError.requestFailed(-1, error.localizedDescription)
+          let sanitizedErrorDescription = ErrorLogSanitizer.sanitize(error.localizedDescription)
+          let wrapped = GeminiError.requestFailed(-1, sanitizedErrorDescription)
           lastError = wrapped
           if attempt < maxNetworkAttempts - 1 {
             retryCount += 1
@@ -295,16 +296,14 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(GoogleErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
-      let status = decoded.error?.status?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let status = ErrorLogSanitizer.sanitize(decoded.error?.status)
       if let status, !status.isEmpty { return status }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil

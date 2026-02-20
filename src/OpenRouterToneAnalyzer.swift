@@ -166,7 +166,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
           continue
         }
 
-        let message = parseErrorMessage(data: data)
+        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
         NSLog("[TextPolish] OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
@@ -210,14 +210,12 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil

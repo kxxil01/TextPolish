@@ -1823,14 +1823,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func parseOpenRouterErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil
@@ -1881,7 +1879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return !content.isEmpty
     }
 
-    let message = parseOpenRouterErrorMessage(data: data)
+    let message = ErrorLogSanitizer.sanitize(parseOpenRouterErrorMessage(data: data))
     NSLog("[TextPolish] OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     if http.statusCode == 401 {
       throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
