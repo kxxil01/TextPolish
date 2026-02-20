@@ -62,7 +62,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   private let timeoutSeconds: Double
   private let session: URLSession
   private let maxAttempts: Int
-  private let maxRateLimitBackoffSeconds: Double
+  private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
@@ -85,7 +85,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.openRouterMaxAttempts)
-    self.maxRateLimitBackoffSeconds = 12
+    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
     self.extraInstruction = settings.openRouterExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
     self.correctionLanguage = settings.correctionLanguage
@@ -171,12 +171,13 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
-    let maxNetworkAttempts = 3
-    var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }
 
-    for attempt in 0..<maxNetworkAttempts {
+    return try await retryPolicy.performWithBackoff(
+      maxAttempts: retryPolicy.maxNetworkAttempts,
+      onRetry: { retryCount += 1 }
+    ) { attempt, isLastAttempt in
       let url = try makeChatCompletionsURL()
       var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
       request.httpMethod = "POST"
@@ -200,58 +201,49 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
           let error = OpenRouterError.requestFailed(-1, nil)
-          lastError = error
-          if attempt < maxNetworkAttempts - 1 {
-            retryCount += 1
-            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-            continue
+          if isLastAttempt {
+            return .fail(error)
           }
-          throw error
+          return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: error)
         }
 
         if (200..<300).contains(http.statusCode) {
           let decoded = try JSONDecoder().decode(OpenRouterChatCompletionsResponse.self, from: data)
           let content = decoded.choices?.first?.message?.content ?? ""
-          return content
+          return .success(content)
         }
 
         let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
         NSLog("[TextPolish] OpenRouter HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
-        if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
-          lastError = OpenRouterError.requestFailed(http.statusCode, message)
-          let requestedRetryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
-          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryAfter))
-          continue
+        let requestError = OpenRouterError.requestFailed(http.statusCode, message)
+
+        if http.statusCode == 429, !isLastAttempt {
+          let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
+            ?? retryPolicy.retryDelaySeconds(attempt: attempt)
+          let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
+          return .retry(after: retryAfter, lastError: requestError)
         }
 
-        if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
-          lastError = OpenRouterError.requestFailed(http.statusCode, message)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-          continue
+        if (500...599).contains(http.statusCode), !isLastAttempt {
+          return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: requestError)
         }
 
-        throw OpenRouterError.requestFailed(http.statusCode, message)
+        return .fail(requestError)
       } catch {
         if error is CancellationError { throw error }
-        if let openRouterError = error as? OpenRouterError { throw openRouterError }
+        if let openRouterError = error as? OpenRouterError {
+          return .fail(openRouterError)
+        }
 
         let sanitizedErrorDescription = ErrorLogSanitizer.sanitize(error.localizedDescription)
         let wrapped = OpenRouterError.requestFailed(-1, sanitizedErrorDescription)
-        lastError = wrapped
-        if attempt < maxNetworkAttempts - 1 {
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-          continue
+        if isLastAttempt {
+          return .fail(wrapped)
         }
-        throw wrapped
+        return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: wrapped)
       }
     }
-
-    throw lastError ?? OpenRouterError.requestFailed(-1, nil)
   }
 
   private struct OpenAIErrorEnvelope: Decodable {
@@ -274,34 +266,6 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     }
 
     return nil
-  }
-
-  private func retryAfterSeconds(from response: HTTPURLResponse, data: Data) -> Double? {
-    if let header = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines),
-       let value = Double(header) {
-      return value
-    }
-    return extractRetryAfter(from: data)
-  }
-
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func retryDelaySeconds(attempt: Int) -> Double {
-    min(pow(2.0, Double(attempt)), 10.0)
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private func makePrompt(text: String, attempt: Int) -> String {

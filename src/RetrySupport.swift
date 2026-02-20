@@ -19,6 +19,45 @@ struct RetryPolicy: Sendable {
     let sanitized = requested.isFinite ? requested : 1
     return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
+
+
+  func performWithBackoff<Result>(
+    maxAttempts: Int? = nil,
+    onRetry: (() -> Void)? = nil,
+    operation: (Int, Bool) async throws -> RetryDecision<Result>
+  ) async throws -> Result {
+    let attemptCount = max(1, maxAttempts ?? maxNetworkAttempts)
+    var lastError: Error?
+
+    for attempt in 0..<attemptCount {
+      let isLastAttempt = attempt == attemptCount - 1
+      switch try await operation(attempt, isLastAttempt) {
+      case .success(let value):
+        return value
+      case .retry(let delay, let error):
+        lastError = error
+        if isLastAttempt {
+          throw error
+        }
+        onRetry?()
+        try await Task.sleep(for: .seconds(delay))
+      case .fail(let error):
+        throw error
+      }
+    }
+
+    throw lastError ?? RetryPolicyError.exhaustedWithoutError
+  }
+}
+
+enum RetryDecision<Result> {
+  case success(Result)
+  case retry(after: Double, lastError: Error)
+  case fail(Error)
+}
+
+enum RetryPolicyError: Error {
+  case exhaustedWithoutError
 }
 
 enum RetryAfterParser {
