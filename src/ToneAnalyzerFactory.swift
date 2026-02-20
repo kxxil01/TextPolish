@@ -7,10 +7,11 @@ enum ToneAnalyzerFactory {
     case .gemini:
       do {
         let primary = try GeminiToneAnalyzer(settings: settings)
-        guard settings.enableGeminiOpenRouterFallback else {
+        guard settings.enableGeminiOpenRouterFallback,
+              hasFallbackCredentials(for: .gemini, settings: settings)
+        else {
           return primary
         }
-        // Lazy fallback - only initialize if actually needed
         let fallback = LazyAnalyzer {
           try OpenRouterToneAnalyzer(settings: settings)
         }
@@ -32,10 +33,11 @@ enum ToneAnalyzerFactory {
     case .openRouter:
       do {
         let primary = try OpenRouterToneAnalyzer(settings: settings)
-        guard settings.enableGeminiOpenRouterFallback else {
+        guard settings.enableGeminiOpenRouterFallback,
+              hasFallbackCredentials(for: .openRouter, settings: settings)
+        else {
           return primary
         }
-        // Lazy fallback - only initialize if actually needed
         let fallback = LazyAnalyzer {
           try GeminiToneAnalyzer(settings: settings)
         }
@@ -56,7 +58,23 @@ enum ToneAnalyzerFactory {
       }
     case .openAI:
       do {
-        return try OpenAIToneAnalyzer(settings: settings)
+        let primary = try OpenAIToneAnalyzer(settings: settings)
+        guard settings.enableGeminiOpenRouterFallback,
+              hasFallbackCredentials(for: .openAI, settings: settings)
+        else {
+          return primary
+        }
+        let fallback = LazyAnalyzer {
+          try AnthropicToneAnalyzer(settings: settings)
+        }
+        return FallbackToneAnalyzer(
+          primary: primary,
+          fallback: fallback,
+          primaryProvider: .openAI,
+          primaryModel: settings.openAIModel,
+          fallbackProvider: .anthropic,
+          fallbackModel: settings.anthropicModel
+        )
       } catch {
         return FailingToneAnalyzer(
           underlyingError: error,
@@ -66,7 +84,23 @@ enum ToneAnalyzerFactory {
       }
     case .anthropic:
       do {
-        return try AnthropicToneAnalyzer(settings: settings)
+        let primary = try AnthropicToneAnalyzer(settings: settings)
+        guard settings.enableGeminiOpenRouterFallback,
+              hasFallbackCredentials(for: .anthropic, settings: settings)
+        else {
+          return primary
+        }
+        let fallback = LazyAnalyzer {
+          try OpenAIToneAnalyzer(settings: settings)
+        }
+        return FallbackToneAnalyzer(
+          primary: primary,
+          fallback: fallback,
+          primaryProvider: .anthropic,
+          primaryModel: settings.anthropicModel,
+          fallbackProvider: .openAI,
+          fallbackModel: settings.openAIModel
+        )
       } catch {
         return FailingToneAnalyzer(
           underlyingError: error,
@@ -75,6 +109,66 @@ enum ToneAnalyzerFactory {
         )
       }
     }
+  }
+
+  private static func hasFallbackCredentials(for primary: Settings.Provider, settings: Settings) -> Bool {
+    switch primary {
+    case .openAI:
+      return hasCredentials(for: .anthropic, settings: settings)
+    case .anthropic:
+      return hasCredentials(for: .openAI, settings: settings)
+    case .gemini:
+      return hasCredentials(for: .openRouter, settings: settings)
+    case .openRouter:
+      return hasCredentials(for: .gemini, settings: settings)
+    }
+  }
+
+  private static func hasCredentials(for provider: Settings.Provider, settings: Settings) -> Bool {
+    let keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    let legacyKeychainService = "com.ilham.GrammarCorrection"
+
+    let credentialSource: (account: String, envKeys: [String], settingsValue: String?)
+    switch provider {
+    case .gemini:
+      credentialSource = ("geminiApiKey", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], settings.geminiApiKey)
+    case .openRouter:
+      credentialSource = ("openRouterApiKey", ["OPENROUTER_API_KEY"], settings.openRouterApiKey)
+    case .openAI:
+      credentialSource = ("openAIApiKey", ["OPENAI_API_KEY"], settings.openAIApiKey)
+    case .anthropic:
+      credentialSource = ("anthropicApiKey", ["ANTHROPIC_API_KEY"], settings.anthropicApiKey)
+    }
+
+    if hasKeychainCredential(service: keychainService, account: credentialSource.account) {
+      return true
+    }
+
+    if hasKeychainCredential(service: legacyKeychainService, account: credentialSource.account) {
+      return true
+    }
+
+    if let settingsValue = credentialSource.settingsValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !settingsValue.isEmpty {
+      return true
+    }
+
+    for envKey in credentialSource.envKeys {
+      let envValue = ProcessInfo.processInfo.environment[envKey]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      if !envValue.isEmpty {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private static func hasKeychainCredential(service: String, account: String) -> Bool {
+    guard let key = try? Keychain.getPassword(service: service, account: account) else {
+      return false
+    }
+    let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return !trimmed.isEmpty
   }
 }
 
