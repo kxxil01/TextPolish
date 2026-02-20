@@ -55,7 +55,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let timeoutSeconds: Double
   private let session: URLSession
   private let maxAttempts: Int
-  private let maxRateLimitBackoffSeconds: Double
+  private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
@@ -80,10 +80,14 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.openAIMaxAttempts)
-    self.maxRateLimitBackoffSeconds = 12
+    self.retryPolicy = RetryPolicy()
     self.minSimilarity = max(0.0, min(1.0, settings.openAIMinSimilarity))
     self.extraInstruction = settings.openAIExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
     self.correctionLanguage = settings.correctionLanguage
+  }
+
+  deinit {
+    session.invalidateAndCancel()
   }
 
   func correct(_ text: String) async throws -> String {
@@ -170,7 +174,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
-    let maxNetworkAttempts = 3
+    let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
     var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }
@@ -200,7 +204,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           lastError = error
           if attempt < maxNetworkAttempts - 1 {
             retryCount += 1
-            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+            try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
             continue
           }
           throw error
@@ -217,8 +221,9 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
         if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
           lastError = OpenAIError.requestFailed(http.statusCode, message)
-          let requestedRetryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
-          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
+          let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
+            ?? retryPolicy.retryDelaySeconds(attempt: attempt)
+          let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
           retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
           continue
@@ -227,7 +232,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
           lastError = OpenAIError.requestFailed(http.statusCode, message)
           retryCount += 1
-          try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+          try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
           continue
         }
 
@@ -240,7 +245,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         lastError = wrapped
         if attempt < maxNetworkAttempts - 1 {
           retryCount += 1
-          try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
+          try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
           continue
         }
         throw wrapped
@@ -261,45 +266,15 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil
-  }
-
-  private func retryAfterSeconds(from response: HTTPURLResponse, data: Data) -> Double? {
-    if let header = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines),
-       let value = Double(header) {
-      return value
-    }
-    return extractRetryAfter(from: data)
-  }
-
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func retryDelaySeconds(attempt: Int) -> Double {
-    min(pow(2.0, Double(attempt)), 10.0)
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private func makePrompt(text: String, attempt: Int) -> String {
@@ -373,4 +348,6 @@ private struct OpenAIChatCompletionsResponse: Decodable {
   let choices: [Choice]?
 }
 
+// Safety: `lastRetryCount` is mutated only inside a single in-flight request path.
+// `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
 extension OpenAICorrector: @unchecked Sendable {}

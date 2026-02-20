@@ -11,7 +11,7 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
-  private let maxRateLimitBackoffSeconds: Double
+  private let retryPolicy: RetryPolicy
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
 
@@ -40,8 +40,12 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
     configuration.timeoutIntervalForRequest = timeoutSeconds
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
-    self.maxRateLimitBackoffSeconds = 12
+    self.retryPolicy = RetryPolicy()
     self.config = config
+  }
+
+  deinit {
+    session.invalidateAndCancel()
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
@@ -122,10 +126,10 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
-    // Try up to 3 times with rate limit backoff
     var retryCount = 0
     defer { lastRetryCount = retryCount }
-    for attempt in 0..<3 {
+
+    for attempt in 0..<retryPolicy.maxNetworkAttempts {
       do {
         let url = try makeMessagesURL()
         var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
@@ -152,64 +156,44 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         if (200..<300).contains(http.statusCode) {
           let decoded = try JSONDecoder().decode(AnthropicToneResponse.self, from: data)
           let content = decoded.content.first(where: { $0.type == "text" })?.text ?? ""
-
-          // Check if response is empty
-          guard !content.isEmpty else {
-            throw ToneAnalysisError.emptyResponse
-          }
+          guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
           return content
-        }
-
-        // Handle rate limiting with exponential backoff
-        if http.statusCode == 429 {
-          let requestedRetryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
-          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryAfter))
-          // Continue to next attempt
-          continue
         }
 
         let message = parseErrorMessage(data: data)
         NSLog("[TextPolish] Anthropic Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+
+        let canRetry = attempt < retryPolicy.maxNetworkAttempts - 1
+        if canRetry && (http.statusCode == 429 || (500...599).contains(http.statusCode)) {
+          let retryAfterRaw = http.statusCode == 429
+            ? (RetryAfterParser.retryAfterSeconds(from: http, data: data)
+                ?? retryPolicy.retryDelaySeconds(attempt: attempt))
+            : retryPolicy.retryDelaySeconds(attempt: attempt)
+          let retryAfter = http.statusCode == 429
+            ? retryPolicy.clampedRateLimitBackoff(retryAfterRaw)
+            : retryAfterRaw
+          retryCount += 1
+          try await Task.sleep(for: .seconds(retryAfter))
+          continue
+        }
+
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
-        if error is CancellationError {
-          throw error
-        }
+        if error is CancellationError { throw error }
         if case ToneAnalysisError.requestFailed(let status, _) = error,
-           (400..<500).contains(status)
+           (400..<500).contains(status), status != 429
         {
           throw error
         }
-        // If it's the last attempt, throw the error
-        if attempt == 2 {
+        if attempt == retryPolicy.maxNetworkAttempts - 1 {
           throw error
         }
-        // For other errors on non-last attempts, continue
         retryCount += 1
-        try await Task.sleep(for: .seconds(1))
-        continue
+        try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
       }
     }
 
     throw ToneAnalysisError.requestFailed(-1, nil)
-  }
-
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private struct AnthropicAPIErrorEnvelopeTone: Decodable {
@@ -222,14 +206,12 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(AnthropicAPIErrorEnvelopeTone.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil
@@ -281,4 +263,6 @@ private struct AnthropicToneResponse: Decodable {
   let content: [ContentBlock]
 }
 
+// Safety: `lastRetryCount` is only mutated during one analysis call at a time.
+// Controllers own a single analyzer instance and do not issue concurrent requests.
 extension AnthropicToneAnalyzer: @unchecked Sendable {}

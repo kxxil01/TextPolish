@@ -44,6 +44,10 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
     self.config = config
   }
 
+  deinit {
+    session.invalidateAndCancel()
+  }
+
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     lastRetryCount = 0
     // Validate original text length before trimming

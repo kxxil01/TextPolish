@@ -95,6 +95,10 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     self.correctionLanguage = settings.correctionLanguage
   }
 
+  deinit {
+    session.invalidateAndCancel()
+  }
+
   func correct(_ text: String) async throws -> String {
     lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
