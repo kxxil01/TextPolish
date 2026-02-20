@@ -18,7 +18,7 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
   var diagnosticsProvider: Settings.Provider { .anthropic }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
+  init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
     keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
     keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
@@ -35,11 +35,15 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
     }
 
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
+    if let session {
+      self.session = session
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+    }
     self.retryPolicy = RetryPolicy()
     self.config = config
   }

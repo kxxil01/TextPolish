@@ -2,16 +2,6 @@ import XCTest
 @testable import GrammarCorrection
 
 final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
-  override class func setUp() {
-    super.setUp()
-    URLProtocol.registerClass(ToneMockURLProtocol.self)
-  }
-
-  override class func tearDown() {
-    URLProtocol.unregisterClass(ToneMockURLProtocol.self)
-    super.tearDown()
-  }
-
   override func tearDown() {
     ToneMockURLProtocol.handler = nil
     ToneMockURLProtocol.requestObserver = nil
@@ -43,10 +33,16 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       )
     }
 
-    let settings = Settings(provider: .openAI, openAIApiKey: "test", openAIBaseURL: "https://mock.local")
-    let analyzer = try OpenAIToneAnalyzer(settings: settings)
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test",
+      openAIBaseURL: "https://mock.local"
+    )
+    let analyzer = try OpenAIToneAnalyzer(settings: settings, session: Self.makeMockSession())
     _ = try await analyzer.analyze("This text is long enough.")
 
+    XCTAssertEqual(callCount, 2)
     XCTAssertEqual(timestamps.count, 2)
     XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
   }
@@ -77,24 +73,50 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       )
     }
 
-    let settings = Settings(provider: .anthropic, anthropicApiKey: "test", anthropicBaseURL: "https://mock.local")
-    let analyzer = try AnthropicToneAnalyzer(settings: settings)
+    let settings = Settings(
+      provider: .anthropic,
+      requestTimeoutSeconds: 1,
+      anthropicApiKey: "test",
+      anthropicBaseURL: "https://mock.local"
+    )
+    let analyzer = try AnthropicToneAnalyzer(settings: settings, session: Self.makeMockSession())
     _ = try await analyzer.analyze("This text is long enough.")
 
+    XCTAssertEqual(callCount, 2)
     XCTAssertEqual(timestamps.count, 2)
     XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
   }
 
   @MainActor
   func testToneAnalyzerFactoryFallbackGating() {
-    let disabled = Settings(provider: .gemini, enableGeminiOpenRouterFallback: false)
-    let enabled = Settings(provider: .gemini, enableGeminiOpenRouterFallback: true)
+    let disabled = Settings(
+      provider: .gemini,
+      enableGeminiOpenRouterFallback: false,
+      openRouterApiKey: "fallback-key"
+    )
+    let enabledWithoutCredentials = Settings(provider: .gemini, enableGeminiOpenRouterFallback: true)
+    let enabledWithCredentials = Settings(
+      provider: .gemini,
+      enableGeminiOpenRouterFallback: true,
+      openRouterApiKey: "fallback-key"
+    )
 
     let disabledAnalyzer = ToneAnalyzerFactory.make(settings: disabled)
-    let enabledAnalyzer = ToneAnalyzerFactory.make(settings: enabled)
+    let enabledWithoutCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithoutCredentials)
+    let enabledWithCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithCredentials)
 
     XCTAssertFalse(disabledAnalyzer is FallbackToneAnalyzer)
-    XCTAssertTrue(enabledAnalyzer is FallbackToneAnalyzer)
+    XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
+    XCTAssertTrue(enabledWithCredentialsAnalyzer is FallbackToneAnalyzer)
+  }
+
+  private static func makeMockSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ToneMockURLProtocol.self]
+    configuration.waitsForConnectivity = false
+    configuration.timeoutIntervalForRequest = 1
+    configuration.timeoutIntervalForResource = 1
+    return URLSession(configuration: configuration)
   }
 
   private static func httpResponse(
