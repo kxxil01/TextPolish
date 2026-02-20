@@ -24,21 +24,66 @@ struct RetryPolicy: Sendable {
 enum RetryAfterParser {
   static func retryAfterSeconds(from response: HTTPURLResponse, data: Data) -> Double? {
     if let header = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines),
-       let value = Double(header) {
-      return value
+       !header.isEmpty {
+      return parseRetryAfterValue(header) ?? 5
     }
     return extractRetryAfter(from: data)
   }
 
   static func extractRetryAfter(from data: Data) -> Double? {
     guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else {
+    guard let range = string.range(of: #""retry_after"\s*:\s*"?([^",}\s]+)"?"#, options: .regularExpression) else {
       return nil
     }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    guard let number = Int(numberString) else { return nil }
-    return Double(number)
+
+    let match = String(string[range])
+    let rawValue = match
+      .replacingOccurrences(of: #"^\s*"retry_after"\s*:\s*"?#, with: "", options: .regularExpression)
+      .replacingOccurrences(of: #""?$"#, with: "", options: .regularExpression)
+
+    return parseRetryAfterValue(rawValue) ?? 5
+  }
+
+  private static func parseRetryAfterValue(_ rawValue: String) -> Double? {
+    let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty else { return nil }
+
+    if let seconds = Int(value) {
+      return Double(max(0, seconds))
+    }
+
+    if let seconds = Double(value) {
+      return Double(max(0, Int(seconds)))
+    }
+
+    if let date = parseHTTPDate(value) {
+      return max(0, ceil(date.timeIntervalSinceNow))
+    }
+
+    return nil
+  }
+
+  private static func parseHTTPDate(_ value: String) -> Date? {
+    let formatters: [DateFormatter] = [
+      makeHTTPDateFormatter("EEE',' dd MMM yyyy HH':'mm':'ss zzz"),
+      makeHTTPDateFormatter("EEEE',' dd-MMM-yy HH':'mm':'ss zzz"),
+      makeHTTPDateFormatter("EEE MMM d HH':'mm':'ss yyyy"),
+    ]
+
+    for formatter in formatters {
+      if let date = formatter.date(from: value) {
+        return date
+      }
+    }
+    return nil
+  }
+
+  private static func makeHTTPDateFormatter(_ format: String) -> DateFormatter {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = format
+    return formatter
   }
 }
 
