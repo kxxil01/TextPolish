@@ -79,6 +79,28 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertEqual(name, "OpenRouter", "Should return 'OpenRouter' for OpenRouterCorrector")
     }
 
+    func testProviderNameForOpenAICorrector() {
+        // Given
+        let openAIProvider = try! OpenAICorrector(settings: Settings.loadOrCreateDefault())
+
+        // When
+        let name = fallbackController.providerName(for: openAIProvider)
+
+        // Then
+        XCTAssertEqual(name, "OpenAI", "Should return 'OpenAI' for OpenAICorrector")
+    }
+
+    func testProviderNameForAnthropicCorrector() {
+        // Given
+        let anthropicProvider = try! AnthropicCorrector(settings: Settings.loadOrCreateDefault())
+
+        // When
+        let name = fallbackController.providerName(for: anthropicProvider)
+
+        // Then
+        XCTAssertEqual(name, "Anthropic", "Should return 'Anthropic' for AnthropicCorrector")
+    }
+
     func testProviderNameForUnknownCorrector() {
         // Given
         let unknownProvider = MockGrammarCorrector()
@@ -154,6 +176,8 @@ final class FallbackControllerTests: XCTestCase {
         let providers: [(GrammarCorrector, String)] = [
             (try! GeminiCorrector(settings: Settings.loadOrCreateDefault()), "Gemini"),
             (try! OpenRouterCorrector(settings: Settings.loadOrCreateDefault()), "OpenRouter"),
+            (try! OpenAICorrector(settings: Settings.loadOrCreateDefault()), "OpenAI"),
+            (try! AnthropicCorrector(settings: Settings.loadOrCreateDefault()), "Anthropic"),
             (MockGrammarCorrector(), "Provider")
         ]
 

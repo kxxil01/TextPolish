@@ -5,7 +5,7 @@ protocol TextProcessor {
   /// The minimum similarity threshold for accepting corrections
   var minSimilarity: Double { get }
 
-  /// Regex patterns for text protection (should be provided by implementer)
+  /// Regex patterns for text protection
   static var fencedCodeBlockRegex: NSRegularExpression { get }
   static var inlineCodeRegex: NSRegularExpression { get }
   static var discordTokenRegex: NSRegularExpression { get }
@@ -20,7 +20,33 @@ struct ProtectedText {
 
 // MARK: - Default Implementation
 
+private enum TextProcessorRegexDefaults {
+  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
+  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
+  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
+  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
+}
+
 extension TextProcessor {
+
+  static var fencedCodeBlockRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.fencedCodeBlockRegex
+  }
+
+  static var inlineCodeRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.inlineCodeRegex
+  }
+
+  static var discordTokenRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.discordTokenRegex
+  }
+
+  static var urlRegex: NSRegularExpression {
+    TextProcessorRegexDefaults.urlRegex
+  }
+
+  /// Safety cap to avoid O(n*m) Levenshtein work on very large payloads.
+  private static var maxSimilarityCheckSize: Int { 256_000 }
 
   /// Protects special text patterns (code blocks, URLs, etc.) by replacing them with placeholders
   func protect(_ text: String) -> ProtectedText {
@@ -182,6 +208,11 @@ extension TextProcessor {
 
   /// Checks similarity against a minimum threshold with early exits for large inputs
   func isSimilarEnough(original: String, candidate: String, minimum: Double) -> Bool {
+    // Avoid expensive distance computation for extremely large inputs.
+    if original.utf8.count > Self.maxSimilarityCheckSize || candidate.utf8.count > Self.maxSimilarityCheckSize {
+      return false
+    }
+
     let originalScalars = Array(original.unicodeScalars)
     let candidateScalars = Array(candidate.unicodeScalars)
     let maxLen = max(originalScalars.count, candidateScalars.count)

@@ -59,7 +59,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let timeoutSeconds: Double
   private let session: URLSession
   private let maxAttempts: Int
-  private let maxRateLimitBackoffSeconds: Double
+  private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
@@ -89,10 +89,14 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
-    self.maxRateLimitBackoffSeconds = 12
+    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
     self.extraInstruction = settings.geminiExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
     self.correctionLanguage = settings.correctionLanguage
+  }
+
+  deinit {
+    session.invalidateAndCancel()
   }
 
   func correct(_ text: String) async throws -> String {
@@ -177,103 +181,110 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return url
   }
 
+  private enum GeminiVersionFallback: Error {
+    case tryNextVersion
+  }
+
   private func generate(prompt: String, apiKey: String) async throws -> String {
     let versionsToTry = ["v1beta", "v1"]
-    let maxNetworkAttempts = 3
     var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
-      var shouldTryNextVersion = false
+      do {
+        let response: String = try await retryPolicy.performWithBackoff(
+          maxAttempts: retryPolicy.maxNetworkAttempts,
+          onRetry: { retryCount += 1 }
+        ) { attempt, isLastAttempt in
+          let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
+          var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+          request.httpMethod = "POST"
+          request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+          request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
-      for attempt in 0..<maxNetworkAttempts {
-        let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
-        var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-        request.httpMethod = "POST"
-        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+          let body = GeminiGenerateContentRequest(
+            contents: [
+              .init(role: "user", parts: [.init(text: prompt)]),
+            ],
+            generationConfig: .init(temperature: 0.0, maxOutputTokens: 1024)
+          )
+          request.httpBody = try JSONEncoder().encode(body)
 
-        let body = GeminiGenerateContentRequest(
-          contents: [
-            .init(role: "user", parts: [.init(text: prompt)]),
-          ],
-          generationConfig: .init(temperature: 0.0, maxOutputTokens: 1024)
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        do {
-          let (data, response) = try await session.data(for: request)
-          guard let http = response as? HTTPURLResponse else {
-            let error = GeminiError.requestFailed(-1, nil)
-            lastError = error
-            if attempt < maxNetworkAttempts - 1 {
-              retryCount += 1
-              try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-              continue
-            }
-            throw error
-          }
-
-          if (200..<300).contains(http.statusCode) {
-            let decoded = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
-            if let blockReason = decoded.promptFeedback?.blockReason, !blockReason.isEmpty {
-              throw GeminiError.blocked(blockReason)
+          do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+              let error = GeminiError.requestFailed(-1, nil)
+              lastError = error
+              if isLastAttempt {
+                return .fail(error)
+              }
+              return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: error)
             }
 
-            let textParts = decoded.candidates?
-              .first?
-              .content?
-              .parts?
-              .compactMap(\.text)
-              ?? []
+            if (200..<300).contains(http.statusCode) {
+              let decoded = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
+              if let blockReason = decoded.promptFeedback?.blockReason, !blockReason.isEmpty {
+                return .fail(GeminiError.blocked(blockReason))
+              }
 
-            return textParts.joined()
+              let textParts = decoded.candidates?
+                .first?
+                .content?
+                .parts?
+                .compactMap(\.text)
+                ?? []
+
+              return .success(textParts.joined())
+            }
+
+            let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
+            NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
+
+            if http.statusCode == 404, index < versionsToTry.count - 1 {
+              let error = GeminiError.requestFailed(http.statusCode, message)
+              lastError = error
+              return .fail(GeminiVersionFallback.tryNextVersion)
+            }
+
+            let requestError = GeminiError.requestFailed(http.statusCode, message)
+
+            if http.statusCode == 429, !isLastAttempt {
+              lastError = requestError
+              let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
+                ?? retryPolicy.retryDelaySeconds(attempt: attempt)
+              let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
+              return .retry(after: retryAfter, lastError: requestError)
+            }
+
+            if (500...599).contains(http.statusCode), !isLastAttempt {
+              lastError = requestError
+              return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: requestError)
+            }
+
+            return .fail(requestError)
+          } catch {
+            if error is CancellationError { throw error }
+            if let geminiError = error as? GeminiError {
+              return .fail(geminiError)
+            }
+
+            let sanitizedErrorDescription = ErrorLogSanitizer.sanitize(error.localizedDescription)
+            let wrapped = GeminiError.requestFailed(-1, sanitizedErrorDescription)
+            lastError = wrapped
+            if isLastAttempt {
+              return .fail(wrapped)
+            }
+            return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: wrapped)
           }
-
-          let message = parseErrorMessage(data: data)
-          NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
-
-          if http.statusCode == 404, index < versionsToTry.count - 1 {
-            lastError = GeminiError.requestFailed(http.statusCode, message)
-            shouldTryNextVersion = true
-            break
-          }
-
-          if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
-            lastError = GeminiError.requestFailed(http.statusCode, message)
-            let requestedRetryAfter = retryAfterSeconds(from: http, data: data) ?? retryDelaySeconds(attempt: attempt)
-            let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
-            retryCount += 1
-            try await Task.sleep(for: .seconds(retryAfter))
-            continue
-          }
-
-          if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
-            lastError = GeminiError.requestFailed(http.statusCode, message)
-            retryCount += 1
-            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-            continue
-          }
-
-          throw GeminiError.requestFailed(http.statusCode, message)
-        } catch {
-          if error is CancellationError { throw error }
-          if let geminiError = error as? GeminiError { throw geminiError }
-
-          let wrapped = GeminiError.requestFailed(-1, error.localizedDescription)
-          lastError = wrapped
-          if attempt < maxNetworkAttempts - 1 {
-            retryCount += 1
-            try await Task.sleep(for: .seconds(retryDelaySeconds(attempt: attempt)))
-            continue
-          }
-          throw wrapped
         }
-      }
 
-      if shouldTryNextVersion {
+        return response
+      } catch GeminiVersionFallback.tryNextVersion {
         continue
+      } catch {
+        if error is CancellationError { throw error }
+        lastError = error
       }
     }
 
@@ -291,47 +302,17 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(GoogleErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
-      let status = decoded.error?.status?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let status = ErrorLogSanitizer.sanitize(decoded.error?.status)
       if let status, !status.isEmpty { return status }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil
-  }
-
-  private func retryAfterSeconds(from response: HTTPURLResponse, data: Data) -> Double? {
-    if let header = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines),
-       let value = Double(header) {
-      return value
-    }
-    return extractRetryAfter(from: data)
-  }
-
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retryAfter"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func retryDelaySeconds(attempt: Int) -> Double {
-    min(pow(2.0, Double(attempt)), 10.0)
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private func sanitize(_ url: URL) -> String {

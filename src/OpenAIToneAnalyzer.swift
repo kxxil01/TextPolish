@@ -1,51 +1,60 @@
 import Foundation
 
-final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProviderReporting {
+final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProviderReporting {
   private let baseURL: URL
   private let model: String
   private let keychainService: String
   private let legacyKeychainService = "com.ilham.GrammarCorrection"
-  private let keychainAccount = "openRouterApiKey"
-  private let keychainLabel = "TextPolish — OpenRouter API Key"
+  private let keychainAccount = "openAIApiKey"
+  private let keychainLabel = "TextPolish — OpenAI API Key"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
-  private let maxRateLimitBackoffSeconds: Double
+  private let ownsSession: Bool
+  private let retryPolicy: RetryPolicy
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
 
-  var diagnosticsProvider: Settings.Provider { .openRouter }
+  var diagnosticsProvider: Settings.Provider { .openAI }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
-    keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-    keyFromEnv = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
+  init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
+    keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+    keyFromEnv = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
     keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
-    guard let baseURL = URL(string: settings.openRouterBaseURL) else {
+    guard let baseURL = URL(string: settings.openAIBaseURL) else {
       throw ToneAnalysisError.invalidBaseURL
     }
 
     self.baseURL = baseURL
-    self.model = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.model = settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
 
     // Validate model name
     if self.model.isEmpty {
-      throw ToneAnalysisError.invalidModelName(settings.openRouterModel)
+      throw ToneAnalysisError.invalidModelName(settings.openAIModel)
     }
 
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
-    self.maxRateLimitBackoffSeconds = 12
+    if let session {
+      self.session = session
+      self.ownsSession = false
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
+    }
+    self.retryPolicy = RetryPolicy()
     self.config = config
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
@@ -99,7 +108,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
     let env = keyFromEnv?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !env.isEmpty { return env }
 
-    throw ToneAnalysisError.missingApiKey("OpenRouter")
+    throw ToneAnalysisError.missingApiKey("OpenAI")
   }
 
   private func makeChatCompletionsURL() throws -> URL {
@@ -109,17 +118,25 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    if basePath.hasSuffix("/chat/completions") {
+      basePath.removeLast("/chat/completions".count)
+    }
+
+    if basePath.isEmpty {
+      components.path = "/chat/completions"
+    } else {
+      components.path = basePath + "/chat/completions"
+    }
 
     guard let url = components.url else { throw ToneAnalysisError.invalidBaseURL }
     return url
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
-    // Try up to 3 times with rate limit backoff
     var retryCount = 0
     defer { lastRetryCount = retryCount }
-    for attempt in 0..<3 {
+
+    for attempt in 0..<retryPolicy.maxNetworkAttempts {
       do {
         let url = try makeChatCompletionsURL()
         var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
@@ -127,10 +144,8 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
-        request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
 
-        let body = OpenRouterToneRequest(
+        let body = OpenAIToneRequest(
           model: model,
           messages: [
             .init(role: "user", content: prompt),
@@ -146,60 +161,49 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
         }
 
         if (200..<300).contains(http.statusCode) {
-          let decoded = try JSONDecoder().decode(OpenRouterToneResponse.self, from: data)
+          let decoded = try JSONDecoder().decode(OpenAIToneResponse.self, from: data)
           let content = decoded.choices?.first?.message?.content ?? ""
-
-          // Check if response is empty
-          guard !content.isEmpty else {
-            throw ToneAnalysisError.emptyResponse
-          }
+          guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
           return content
         }
 
-        // Handle rate limiting with exponential backoff
-        if http.statusCode == 429 {
-          let requestedRetryAfter = extractRetryAfter(from: data) ?? Double(min(2 * (attempt + 1), 10))
-          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
+        let message = parseErrorMessage(data: data)
+        NSLog("[TextPolish] OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+
+        let canRetry = attempt < retryPolicy.maxNetworkAttempts - 1
+        if canRetry && (http.statusCode == 429 || (500...599).contains(http.statusCode)) {
+          let retryAfterRaw = http.statusCode == 429
+            ? (RetryAfterParser.retryAfterSeconds(from: http, data: data)
+                ?? retryPolicy.retryDelaySeconds(attempt: attempt))
+            : retryPolicy.retryDelaySeconds(attempt: attempt)
+          let retryAfter = http.statusCode == 429
+            ? retryPolicy.clampedRateLimitBackoff(retryAfterRaw)
+            : retryAfterRaw
           retryCount += 1
           try await Task.sleep(for: .seconds(retryAfter))
-          // Continue to next attempt
           continue
         }
 
-        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        NSLog("[TextPolish] OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
-        // If it's the last attempt, throw the error
-        if attempt == 2 {
+        if error is CancellationError { throw error }
+        if case ToneAnalysisError.requestFailed(let status, _) = error,
+           (400..<500).contains(status), status != 429
+        {
           throw error
         }
-        // For other errors on non-last attempts, continue
+        if attempt == retryPolicy.maxNetworkAttempts - 1 {
+          throw error
+        }
         retryCount += 1
-        continue
+        try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
       }
     }
 
     throw ToneAnalysisError.requestFailed(-1, nil)
   }
 
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retry_after"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
-  }
-
-  private struct OpenAIErrorEnvelope: Decodable {
+  private struct OpenAIErrorEnvelopeTone: Decodable {
     struct ErrorBody: Decodable {
       let message: String?
       let code: String?
@@ -209,7 +213,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   }
 
   private func parseErrorMessage(data: Data) -> String? {
-    if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
+    if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelopeTone.self, from: data) {
       let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
@@ -241,7 +245,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   }
 }
 
-private struct OpenRouterToneRequest: Encodable {
+private struct OpenAIToneRequest: Encodable {
   struct Message: Encodable {
     let role: String
     let content: String
@@ -260,7 +264,7 @@ private struct OpenRouterToneRequest: Encodable {
   }
 }
 
-private struct OpenRouterToneResponse: Decodable {
+private struct OpenAIToneResponse: Decodable {
   struct Choice: Decodable {
     struct Message: Decodable {
       let content: String?
@@ -271,4 +275,6 @@ private struct OpenRouterToneResponse: Decodable {
   let choices: [Choice]?
 }
 
-extension OpenRouterToneAnalyzer: @unchecked Sendable {}
+// Safety: `lastRetryCount` is only mutated during one analysis call at a time.
+// Controllers own a single analyzer instance and do not issue concurrent requests.
+extension OpenAIToneAnalyzer: @unchecked Sendable {}

@@ -25,7 +25,7 @@ final class SettingsIntegrationTests: XCTestCase {
             hotKeyCorrectSelection: Settings.HotKey.correctSelectionDefault,
             hotKeyCorrectAll: Settings.HotKey.correctAllDefault,
             hotKeyAnalyzeTone: Settings.HotKey.analyzeToneDefault,
-            fallbackToOpenRouterOnGeminiError: false,
+            enableGeminiOpenRouterFallback: false,
             geminiApiKey: "",
             geminiModel: "gemini-1.5-flash",
             geminiBaseURL: "https://generativelanguage.googleapis.com",
@@ -80,7 +80,7 @@ final class SettingsIntegrationTests: XCTestCase {
         settingsWindowViewController?.saveSettings()
 
         // Then
-        XCTAssertTrue(settingsWindowViewController?.settings.fallbackToOpenRouterOnGeminiError ?? false, "Fallback setting should persist")
+        XCTAssertTrue(settingsWindowViewController?.settings.enableGeminiOpenRouterFallback ?? false, "Fallback setting should persist")
     }
 
     func testApiKeyUpdate() {
@@ -183,6 +183,8 @@ final class SettingsIntegrationTests: XCTestCase {
         XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
         XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
         XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
+        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
+        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
         XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
         XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
     }
@@ -258,7 +260,7 @@ final class SettingsIntegrationTests: XCTestCase {
 
         // Then
         XCTAssertEqual(settingsWindowViewController?.settings.provider, .gemini, "Provider should be updated")
-        XCTAssertTrue(settingsWindowViewController?.settings.fallbackToOpenRouterOnGeminiError ?? false, "Fallback should be enabled")
+        XCTAssertTrue(settingsWindowViewController?.settings.enableGeminiOpenRouterFallback ?? false, "Fallback should be enabled")
         XCTAssertNil(settingsWindowViewController?.settings.geminiApiKey, "API key should not be persisted in settings")
         XCTAssertEqual(settingsWindowViewController?.settings.geminiModel, "test-model", "Model should be updated")
     }
@@ -278,6 +280,97 @@ final class SettingsIntegrationTests: XCTestCase {
         _ = settingsWindowViewController?.settings.hotKeyAnalyzeTone
 
         XCTAssertTrue(true, "All settings should be accessible")
+    }
+}
+
+// MARK: - OpenAI and Anthropic Provider Tests
+
+extension SettingsIntegrationTests {
+    func testOpenAIDefaultModel() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.openAIModel, "gpt-4o-mini", "Default OpenAI model should be gpt-4o-mini")
+    }
+
+    func testAnthropicDefaultModel() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.anthropicModel, "claude-haiku-4-5", "Default Anthropic model should be claude-haiku-4-5")
+    }
+
+    func testOpenAIProviderRoundTrip() throws {
+        // Given
+        var settings = Settings()
+        settings.provider = .openAI
+
+        // When
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+        // Then
+        XCTAssertEqual(decoded.provider, .openAI, "Provider should round-trip as .openAI")
+    }
+
+    func testAnthropicProviderRoundTrip() throws {
+        // Given
+        var settings = Settings()
+        settings.provider = .anthropic
+
+        // When
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+        // Then
+        XCTAssertEqual(decoded.provider, .anthropic, "Provider should round-trip as .anthropic")
+    }
+
+    func testSettingsWindowRoundTripOpenAIAnthropicConfiguration() {
+        settingsWindowViewController?.loadSettings()
+
+        settingsWindowViewController?.openAIModelField.stringValue = "gpt-4.1-mini"
+        settingsWindowViewController?.openAIBaseURLField.stringValue = "https://api.openai.com/v1"
+        settingsWindowViewController?.openAIMaxAttemptsField.stringValue = "4"
+        settingsWindowViewController?.openAIMinSimilarityField.stringValue = "0.77"
+        settingsWindowViewController?.openAIExtraInstructionField.stringValue = "Keep contractions"
+
+        settingsWindowViewController?.anthropicModelField.stringValue = "claude-3-7-sonnet"
+        settingsWindowViewController?.anthropicBaseURLField.stringValue = "https://api.anthropic.com"
+        settingsWindowViewController?.anthropicMaxAttemptsField.stringValue = "5"
+        settingsWindowViewController?.anthropicMinSimilarityField.stringValue = "0.82"
+        settingsWindowViewController?.anthropicExtraInstructionField.stringValue = "Prefer concise fixes"
+
+        settingsWindowViewController?.saveSettings()
+
+        XCTAssertEqual(settingsWindowViewController?.settings.openAIModel, "gpt-4.1-mini")
+        XCTAssertEqual(settingsWindowViewController?.settings.openAIBaseURL, "https://api.openai.com/v1")
+        XCTAssertEqual(settingsWindowViewController?.settings.openAIMaxAttempts, 4)
+        XCTAssertEqual(settingsWindowViewController?.settings.openAIMinSimilarity, 0.77)
+        XCTAssertEqual(settingsWindowViewController?.settings.openAIExtraInstruction, "Keep contractions")
+
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicModel, "claude-3-7-sonnet")
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicBaseURL, "https://api.anthropic.com")
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicMaxAttempts, 5)
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicMinSimilarity, 0.82)
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicExtraInstruction, "Prefer concise fixes")
+    }
+
+    func testNewSettingsFieldsHaveDefaults() {
+        // Given
+        let settings = Settings()
+
+        // Then
+        XCTAssertEqual(settings.openAIBaseURL, "https://api.openai.com/v1",
+            "openAIBaseURL should have default value")
+        XCTAssertEqual(settings.anthropicBaseURL, "https://api.anthropic.com",
+            "anthropicBaseURL should have default value")
+        XCTAssertEqual(settings.openAIMaxAttempts, 2,
+            "openAIMaxAttempts should default to 2")
+        XCTAssertEqual(settings.anthropicMaxAttempts, 2,
+            "anthropicMaxAttempts should default to 2")
     }
 }
 

@@ -51,6 +51,10 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     self.config = config
   }
 
+  deinit {
+    session.invalidateAndCancel()
+  }
+
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     lastRetryCount = 0
     // Validate original text length before trimming
@@ -171,7 +175,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
           return joined
         }
 
-        let message = parseErrorMessage(data: data)
+        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
         NSLog("[TextPolish] Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
 
         // Handle rate limiting with exponential backoff
@@ -232,16 +236,14 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
   private func parseErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(GoogleErrorEnvelope.self, from: data) {
-      let message = decoded.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
-      let status = decoded.error?.status?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let status = ErrorLogSanitizer.sanitize(decoded.error?.status)
       if let status, !status.isEmpty { return status }
     }
 
     if let string = String(data: data, encoding: .utf8) {
-      let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { return nil }
-      return String(trimmed.prefix(240))
+      return ErrorLogSanitizer.sanitize(string)
     }
 
     return nil

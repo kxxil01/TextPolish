@@ -76,11 +76,19 @@ final class FallbackController {
     }
 
     public func providerName(for corrector: GrammarCorrector) -> String {
-        if corrector is GeminiCorrector {
-            return "Gemini"
-        } else if corrector is OpenRouterCorrector {
-            return "OpenRouter"
+        guard let reporting = corrector as? DiagnosticsProviderReporting else {
+            return "Provider"
         }
-        return "Provider"
+
+        switch reporting.diagnosticsProvider {
+        case .gemini:
+            return "Gemini"
+        case .openRouter:
+            return "OpenRouter"
+        case .openAI:
+            return "OpenAI"
+        case .anthropic:
+            return "Anthropic"
+        }
     }
 }

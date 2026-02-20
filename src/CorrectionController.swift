@@ -240,28 +240,6 @@ final class CorrectionController {
               unresolvedError = nil
             } catch {
               unresolvedError = error
-
-              let fallback = FallbackController(
-                fallbackProvider: fallbackCorrector,
-                showSuccess: {},
-                showInfo: { [weak self] message in
-                  self?.feedback.showInfo(message)
-                },
-                showError: { [weak self] message in
-                  self?.feedback.showError(message)
-                }
-              )
-
-              if fallback.shouldAttemptFallback(for: error, corrector: corrector) {
-                fallbackCount += 1
-                switch await fallback.performFallback(text: inputText, corrector: corrector) {
-                case .success(let manualCorrection):
-                  corrected = manualCorrection
-                  unresolvedError = nil
-                case .failure(let manualError):
-                  unresolvedError = manualError
-                }
-              }
             }
           }
 
@@ -446,7 +424,7 @@ final class CorrectionController {
       hotKeyCorrectSelection: settings.hotKeyCorrectSelection,
       hotKeyCorrectAll: settings.hotKeyCorrectAll,
       hotKeyAnalyzeTone: settings.hotKeyAnalyzeTone,
-      fallbackToOpenRouterOnGeminiError: settings.fallbackToOpenRouterOnGeminiError,
+      enableGeminiOpenRouterFallback: settings.enableGeminiOpenRouterFallback,
       geminiApiKey: settings.geminiApiKey,
       geminiModel: settings.geminiModel,
       geminiBaseURL: settings.geminiBaseURL,
@@ -470,6 +448,10 @@ final class CorrectionController {
       return settings.geminiModel
     case .openRouter:
       return settings.openRouterModel
+    case .openAI:
+      return settings.openAIModel
+    case .anthropic:
+      return settings.anthropicModel
     }
   }
 
@@ -481,14 +463,6 @@ final class CorrectionController {
     if let reporting = corrector as? DiagnosticsProviderReporting {
       provider = reporting.diagnosticsProvider
       model = reporting.diagnosticsModel
-      return
-    }
-    if corrector is GeminiCorrector {
-      provider = .gemini
-      model = modelName(for: .gemini)
-    } else if corrector is OpenRouterCorrector {
-      provider = .openRouter
-      model = modelName(for: .openRouter)
     }
   }
 }

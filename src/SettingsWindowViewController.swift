@@ -10,6 +10,8 @@ class SettingsWindowViewController: NSViewController {
     // Provider Tab
     var geminiProviderButton: NSButton!
     var openRouterProviderButton: NSButton!
+    var openAIProviderButton: NSButton!
+    var anthropicProviderButton: NSButton!
     var fallbackCheckbox: NSButton!
 
     // Gemini Tab
@@ -23,6 +25,22 @@ class SettingsWindowViewController: NSViewController {
     var openRouterModelField: NSTextField!
     var openRouterBaseURLField: NSTextField!
     var detectOpenRouterModelButton: NSButton!
+
+    // OpenAI Tab
+    var openAIApiKeyField: NSTextField!
+    var openAIModelField: NSTextField!
+    var openAIBaseURLField: NSTextField!
+    var openAIMaxAttemptsField: NSTextField!
+    var openAIMinSimilarityField: NSTextField!
+    var openAIExtraInstructionField: NSTextField!
+
+    // Anthropic Tab
+    var anthropicApiKeyField: NSTextField!
+    var anthropicModelField: NSTextField!
+    var anthropicBaseURLField: NSTextField!
+    var anthropicMaxAttemptsField: NSTextField!
+    var anthropicMinSimilarityField: NSTextField!
+    var anthropicExtraInstructionField: NSTextField!
 
     // Hotkeys Tab
     var correctSelectionField: KeyComboField!
@@ -98,6 +116,18 @@ class SettingsWindowViewController: NSViewController {
         openRouterTab.view = createOpenRouterTab()
         tabView.addTabViewItem(openRouterTab)
 
+        // Create OpenAI tab
+        let openAITab = NSTabViewItem(identifier: "OpenAI")
+        openAITab.label = "OpenAI"
+        openAITab.view = createOpenAITab()
+        tabView.addTabViewItem(openAITab)
+
+        // Create Anthropic tab
+        let anthropicTab = NSTabViewItem(identifier: "Anthropic")
+        anthropicTab.label = "Anthropic"
+        anthropicTab.view = createAnthropicTab()
+        tabView.addTabViewItem(anthropicTab)
+
         // Create Hotkeys tab
         let hotkeysTab = NSTabViewItem(identifier: "Hotkeys")
         hotkeysTab.label = "Hotkeys"
@@ -115,6 +145,10 @@ class SettingsWindowViewController: NSViewController {
         geminiProviderButton.target = self
         openRouterProviderButton.action = #selector(providerChanged(_:))
         openRouterProviderButton.target = self
+        openAIProviderButton.action = #selector(providerChanged(_:))
+        openAIProviderButton.target = self
+        anthropicProviderButton.action = #selector(providerChanged(_:))
+        anthropicProviderButton.target = self
         fallbackCheckbox.action = #selector(fallbackChanged(_:))
         fallbackCheckbox.target = self
 
@@ -153,9 +187,21 @@ class SettingsWindowViewController: NSViewController {
         openRouterProviderButton.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterProviderButton)
 
+        // OpenAI provider radio button
+        openAIProviderButton = NSButton(radioButtonWithTitle: "OpenAI", target: self, action: #selector(providerChanged(_:)))
+        openAIProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 160, width: contentWidth, height: 24)
+        openAIProviderButton.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(openAIProviderButton)
+
+        // Anthropic provider radio button
+        anthropicProviderButton = NSButton(radioButtonWithTitle: "Anthropic", target: self, action: #selector(providerChanged(_:)))
+        anthropicProviderButton.frame = NSRect(x: padding * 2, y: container.frame.height - 190, width: contentWidth, height: 24)
+        anthropicProviderButton.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(anthropicProviderButton)
+
         // Fallback checkbox
         fallbackCheckbox = NSButton(checkboxWithTitle: "Enable automatic fallback to alternative provider", target: self, action: #selector(fallbackChanged(_:)))
-        fallbackCheckbox.frame = NSRect(x: padding, y: container.frame.height - 170, width: contentWidth, height: 24)
+        fallbackCheckbox.frame = NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 24)
         fallbackCheckbox.autoresizingMask = [.width, .minYMargin]
         container.addSubview(fallbackCheckbox)
 
@@ -254,6 +300,126 @@ class SettingsWindowViewController: NSViewController {
         openRouterBaseURLField.placeholderString = "https://openrouter.ai/api/v1"
         openRouterBaseURLField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterBaseURLField)
+
+        return container
+    }
+
+    private func createOpenAITab() -> NSView {
+        let container = NSView(frame: tabView.frame)
+        container.autoresizingMask = [.width, .height]
+
+        let padding: CGFloat = 20
+        let contentWidth = container.frame.width - (padding * 2)
+
+        let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
+        apiKeyLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 20)
+        container.addSubview(apiKeyLabel)
+
+        openAIApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: container.frame.height - 90, width: contentWidth, height: 26))
+        openAIApiKeyField.placeholderString = "Enter your OpenAI API key"
+        container.addSubview(openAIApiKeyField)
+
+        let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
+        modelLabel.frame = NSRect(x: padding, y: container.frame.height - 130, width: contentWidth, height: 20)
+        container.addSubview(modelLabel)
+
+        openAIModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth, height: 26))
+        openAIModelField.placeholderString = "gpt-4o-mini"
+        container.addSubview(openAIModelField)
+
+        let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
+        baseURLLabel.frame = NSRect(x: padding, y: container.frame.height - 200, width: contentWidth, height: 20)
+        container.addSubview(baseURLLabel)
+
+        openAIBaseURLField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 26))
+        openAIBaseURLField.placeholderString = "https://api.openai.com/v1"
+        container.addSubview(openAIBaseURLField)
+
+        let attemptsLabel = createLabel("Max Attempts", fontSize: 12, weight: .medium)
+        attemptsLabel.frame = NSRect(x: padding, y: container.frame.height - 270, width: 160, height: 20)
+        container.addSubview(attemptsLabel)
+
+        openAIMaxAttemptsField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 300, width: 120, height: 26))
+        openAIMaxAttemptsField.placeholderString = "2"
+        container.addSubview(openAIMaxAttemptsField)
+
+        let similarityLabel = createLabel("Min Similarity", fontSize: 12, weight: .medium)
+        similarityLabel.frame = NSRect(x: padding + 180, y: container.frame.height - 270, width: 160, height: 20)
+        container.addSubview(similarityLabel)
+
+        openAIMinSimilarityField = NSTextField(frame: NSRect(x: padding + 180, y: container.frame.height - 300, width: 120, height: 26))
+        openAIMinSimilarityField.placeholderString = "0.65"
+        container.addSubview(openAIMinSimilarityField)
+
+        let extraLabel = createLabel("Extra Instruction (Optional)", fontSize: 12, weight: .medium)
+        extraLabel.frame = NSRect(x: padding, y: container.frame.height - 340, width: contentWidth, height: 20)
+        container.addSubview(extraLabel)
+
+        openAIExtraInstructionField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 420, width: contentWidth, height: 70))
+        openAIExtraInstructionField.placeholderString = "Additional instructions for OpenAI..."
+        openAIExtraInstructionField.cell = NSTextFieldCell()
+        openAIExtraInstructionField.cell?.wraps = true
+        container.addSubview(openAIExtraInstructionField)
+
+        return container
+    }
+
+    private func createAnthropicTab() -> NSView {
+        let container = NSView(frame: tabView.frame)
+        container.autoresizingMask = [.width, .height]
+
+        let padding: CGFloat = 20
+        let contentWidth = container.frame.width - (padding * 2)
+
+        let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
+        apiKeyLabel.frame = NSRect(x: padding, y: container.frame.height - 60, width: contentWidth, height: 20)
+        container.addSubview(apiKeyLabel)
+
+        anthropicApiKeyField = NSSecureTextField(frame: NSRect(x: padding, y: container.frame.height - 90, width: contentWidth, height: 26))
+        anthropicApiKeyField.placeholderString = "Enter your Anthropic API key"
+        container.addSubview(anthropicApiKeyField)
+
+        let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
+        modelLabel.frame = NSRect(x: padding, y: container.frame.height - 130, width: contentWidth, height: 20)
+        container.addSubview(modelLabel)
+
+        anthropicModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth, height: 26))
+        anthropicModelField.placeholderString = "claude-haiku-4-5"
+        container.addSubview(anthropicModelField)
+
+        let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
+        baseURLLabel.frame = NSRect(x: padding, y: container.frame.height - 200, width: contentWidth, height: 20)
+        container.addSubview(baseURLLabel)
+
+        anthropicBaseURLField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 230, width: contentWidth, height: 26))
+        anthropicBaseURLField.placeholderString = "https://api.anthropic.com"
+        container.addSubview(anthropicBaseURLField)
+
+        let attemptsLabel = createLabel("Max Attempts", fontSize: 12, weight: .medium)
+        attemptsLabel.frame = NSRect(x: padding, y: container.frame.height - 270, width: 160, height: 20)
+        container.addSubview(attemptsLabel)
+
+        anthropicMaxAttemptsField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 300, width: 120, height: 26))
+        anthropicMaxAttemptsField.placeholderString = "2"
+        container.addSubview(anthropicMaxAttemptsField)
+
+        let similarityLabel = createLabel("Min Similarity", fontSize: 12, weight: .medium)
+        similarityLabel.frame = NSRect(x: padding + 180, y: container.frame.height - 270, width: 160, height: 20)
+        container.addSubview(similarityLabel)
+
+        anthropicMinSimilarityField = NSTextField(frame: NSRect(x: padding + 180, y: container.frame.height - 300, width: 120, height: 26))
+        anthropicMinSimilarityField.placeholderString = "0.65"
+        container.addSubview(anthropicMinSimilarityField)
+
+        let extraLabel = createLabel("Extra Instruction (Optional)", fontSize: 12, weight: .medium)
+        extraLabel.frame = NSRect(x: padding, y: container.frame.height - 340, width: contentWidth, height: 20)
+        container.addSubview(extraLabel)
+
+        anthropicExtraInstructionField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 420, width: contentWidth, height: 70))
+        anthropicExtraInstructionField.placeholderString = "Additional instructions for Anthropic..."
+        anthropicExtraInstructionField.cell = NSTextFieldCell()
+        anthropicExtraInstructionField.cell?.wraps = true
+        container.addSubview(anthropicExtraInstructionField)
 
         return container
     }
@@ -391,7 +557,7 @@ class SettingsWindowViewController: NSViewController {
 
         // Provider tab
         updateProviderButtons()
-        fallbackCheckbox.state = settings.fallbackToOpenRouterOnGeminiError ? .on : .off
+        fallbackCheckbox.state = settings.enableGeminiOpenRouterFallback ? .on : .off
 
         // Gemini tab
         geminiApiKeyField.stringValue = ""
@@ -402,6 +568,22 @@ class SettingsWindowViewController: NSViewController {
         openRouterApiKeyField.stringValue = ""
         openRouterModelField.stringValue = settings.openRouterModel
         openRouterBaseURLField.stringValue = settings.openRouterBaseURL
+
+        // OpenAI tab
+        openAIApiKeyField.stringValue = ""
+        openAIModelField.stringValue = settings.openAIModel
+        openAIBaseURLField.stringValue = settings.openAIBaseURL
+        openAIMaxAttemptsField.stringValue = String(settings.openAIMaxAttempts)
+        openAIMinSimilarityField.stringValue = String(format: "%.2f", settings.openAIMinSimilarity)
+        openAIExtraInstructionField.stringValue = settings.openAIExtraInstruction ?? ""
+
+        // Anthropic tab
+        anthropicApiKeyField.stringValue = ""
+        anthropicModelField.stringValue = settings.anthropicModel
+        anthropicBaseURLField.stringValue = settings.anthropicBaseURL
+        anthropicMaxAttemptsField.stringValue = String(settings.anthropicMaxAttempts)
+        anthropicMinSimilarityField.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
+        anthropicExtraInstructionField.stringValue = settings.anthropicExtraInstruction ?? ""
 
         // Hotkeys
         correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
@@ -443,8 +625,16 @@ class SettingsWindowViewController: NSViewController {
         guard var newSettings = settings else { return }
 
         // Provider
-        newSettings.provider = geminiProviderButton.state == .on ? .gemini : .openRouter
-        newSettings.fallbackToOpenRouterOnGeminiError = fallbackCheckbox.state == .on
+        if geminiProviderButton.state == .on {
+            newSettings.provider = .gemini
+        } else if openRouterProviderButton.state == .on {
+            newSettings.provider = .openRouter
+        } else if openAIProviderButton.state == .on {
+            newSettings.provider = .openAI
+        } else if anthropicProviderButton.state == .on {
+            newSettings.provider = .anthropic
+        }
+        newSettings.enableGeminiOpenRouterFallback = fallbackCheckbox.state == .on
 
         // Gemini
         // API keys are managed via Keychain and should not be persisted in settings.json.
@@ -456,6 +646,22 @@ class SettingsWindowViewController: NSViewController {
         newSettings.openRouterApiKey = nil
         newSettings.openRouterModel = openRouterModelField.stringValue
         newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
+
+        // OpenAI
+        newSettings.openAIApiKey = nil
+        newSettings.openAIModel = openAIModelField.stringValue
+        newSettings.openAIBaseURL = openAIBaseURLField.stringValue
+        newSettings.openAIMaxAttempts = Int(openAIMaxAttemptsField.stringValue) ?? 2
+        newSettings.openAIMinSimilarity = Double(openAIMinSimilarityField.stringValue) ?? 0.65
+        newSettings.openAIExtraInstruction = openAIExtraInstructionField.stringValue.isEmpty ? nil : openAIExtraInstructionField.stringValue
+
+        // Anthropic
+        newSettings.anthropicApiKey = nil
+        newSettings.anthropicModel = anthropicModelField.stringValue
+        newSettings.anthropicBaseURL = anthropicBaseURLField.stringValue
+        newSettings.anthropicMaxAttempts = Int(anthropicMaxAttemptsField.stringValue) ?? 2
+        newSettings.anthropicMinSimilarity = Double(anthropicMinSimilarityField.stringValue) ?? 0.65
+        newSettings.anthropicExtraInstruction = anthropicExtraInstructionField.stringValue.isEmpty ? nil : anthropicExtraInstructionField.stringValue
 
         // Hotkeys
         if let selectionHotKey = correctSelectionField.hotKey {
@@ -497,18 +703,27 @@ class SettingsWindowViewController: NSViewController {
     }
 
     func updateProviderButtons() {
-        let isGemini = settings.provider == .gemini
-        geminiProviderButton.state = isGemini ? .on : .off
-        openRouterProviderButton.state = isGemini ? .off : .on
+        let provider = settings.provider
+        geminiProviderButton.state = provider == .gemini ? .on : .off
+        openRouterProviderButton.state = provider == .openRouter ? .on : .off
+        openAIProviderButton.state = provider == .openAI ? .on : .off
+        anthropicProviderButton.state = provider == .anthropic ? .on : .off
     }
 
     @objc func providerChanged(_ sender: NSButton) {
+        geminiProviderButton.state = .off
+        openRouterProviderButton.state = .off
+        openAIProviderButton.state = .off
+        anthropicProviderButton.state = .off
+
         if sender == geminiProviderButton {
             geminiProviderButton.state = .on
-            openRouterProviderButton.state = .off
-        } else {
-            geminiProviderButton.state = .off
+        } else if sender == openRouterProviderButton {
             openRouterProviderButton.state = .on
+        } else if sender == openAIProviderButton {
+            openAIProviderButton.state = .on
+        } else if sender == anthropicProviderButton {
+            anthropicProviderButton.state = .on
         }
     }
 

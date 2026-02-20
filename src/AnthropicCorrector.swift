@@ -1,9 +1,10 @@
 import Foundation
 
-final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting, DiagnosticsProviderReporting {
-  enum OpenRouterError: Error, LocalizedError {
+final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting, DiagnosticsProviderReporting {
+  enum AnthropicError: Error, LocalizedError {
     case missingApiKey
     case invalidBaseURL
+    case invalidModel
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
@@ -11,33 +12,29 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     var errorDescription: String? {
       switch self {
       case .missingApiKey:
-        return "Missing OpenRouter API key"
+        return "Missing Anthropic API key"
       case .invalidBaseURL:
-        return "Invalid OpenRouter base URL"
+        return "Invalid Anthropic base URL"
+      case .invalidModel:
+        return "Invalid Anthropic model"
       case .requestFailed(let status, let message):
         if status == 401 {
-          return "OpenRouter unauthorized (401) — check API key"
-        }
-        if status == 402 {
-          return "OpenRouter payment required (402) — add credits or use a free model (Provider → Set OpenRouter Model… / Detect OpenRouter Model…)"
-        }
-        if status == 404 {
-          if let message, !message.isEmpty {
-            return "OpenRouter request failed (404): \(message) — try Provider → Detect OpenRouter Model… (or Set OpenRouter Model…)"
-          }
-          return "OpenRouter model not found (404) — try Provider → Detect OpenRouter Model… (or Set OpenRouter Model…)"
+          return "Anthropic unauthorized (401) — check API key"
         }
         if status == 429 {
-          return "OpenRouter rate limited (429) — try again later"
+          return "Anthropic rate limited (429) — try again later"
+        }
+        if status == 529 {
+          return "Anthropic overloaded (529) — try again later"
         }
         if let message, !message.isEmpty {
-          return "OpenRouter request failed (\(status)): \(message)"
+          return "Anthropic request failed (\(status)): \(message)"
         }
-        return "OpenRouter request failed (\(status))"
+        return "Anthropic request failed (\(status))"
       case .emptyResponse:
-        return "OpenRouter returned no text"
+        return "Anthropic returned no text"
       case .overRewrite:
-        return "OpenRouter rewrote too much (try again or adjust model)"
+        return "Anthropic rewrote too much (try again or adjust model)"
       }
     }
   }
@@ -46,53 +43,60 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
   let minSimilarity: Double
 
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
 
   private let baseURL: URL
   private let model: String
   private let keychainService: String
   private let legacyKeychainService = "com.ilham.GrammarCorrection"
-  private let keychainAccount = "openRouterApiKey"
-  private let keychainLabel = "TextPolish — OpenRouter API Key"
+  private let keychainAccount = "anthropicApiKey"
+  private let keychainLabel = "TextPolish — Anthropic API Key"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let ownsSession: Bool
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
 
-  var diagnosticsProvider: Settings.Provider { .openRouter }
+  var diagnosticsProvider: Settings.Provider { .anthropic }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings) throws {
-    keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-    keyFromEnv = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
+  init(settings: Settings, session: URLSession? = nil) throws {
+    keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+    keyFromEnv = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
     keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
-    guard let baseURL = URL(string: settings.openRouterBaseURL) else { throw OpenRouterError.invalidBaseURL }
+    guard let baseURL = URL(string: settings.anthropicBaseURL) else { throw AnthropicError.invalidBaseURL }
 
     self.baseURL = baseURL
-    self.model = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedModel = settings.anthropicModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.model = trimmedModel
+    guard !trimmedModel.isEmpty else { throw AnthropicError.invalidModel }
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
-    self.maxAttempts = max(1, settings.openRouterMaxAttempts)
-    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
-    self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
-    self.extraInstruction = settings.openRouterExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let session {
+      self.session = session
+      self.ownsSession = false
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
+    }
+    self.maxAttempts = max(1, settings.anthropicMaxAttempts)
+    self.retryPolicy = RetryPolicy()
+    self.minSimilarity = max(0.0, min(1.0, settings.anthropicMinSimilarity))
+    self.extraInstruction = settings.anthropicExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
     self.correctionLanguage = settings.correctionLanguage
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func correct(_ text: String) async throws -> String {
@@ -107,7 +111,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       let prompt = makePrompt(text: protected.text, attempt: attempt)
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
-      guard !cleaned.isEmpty else { throw OpenRouterError.emptyResponse }
+      guard !cleaned.isEmpty else { throw AnthropicError.emptyResponse }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
@@ -121,7 +125,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       }
     }
 
-    throw OpenRouterError.overRewrite
+    throw AnthropicError.overRewrite
   }
 
   private func resolveApiKey() throws -> String {
@@ -154,109 +158,124 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     let env = keyFromEnv?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !env.isEmpty { return env }
 
-    throw OpenRouterError.missingApiKey
+    throw AnthropicError.missingApiKey
   }
 
-  private func makeChatCompletionsURL() throws -> URL {
+  private func makeMessagesURL() throws -> URL {
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw OpenRouterError.invalidBaseURL
+      throw AnthropicError.invalidBaseURL
     }
 
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    if basePath.hasSuffix("/v1/messages") {
+      basePath.removeLast("/v1/messages".count)
+    } else if basePath.hasSuffix("/v1") {
+      basePath.removeLast("/v1".count)
+    }
 
-    guard let url = components.url else { throw OpenRouterError.invalidBaseURL }
+    if basePath.isEmpty {
+      components.path = "/v1/messages"
+    } else {
+      components.path = basePath + "/v1/messages"
+    }
+
+    guard let url = components.url else { throw AnthropicError.invalidBaseURL }
     return url
   }
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
+    let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
+    var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }
 
-    return try await retryPolicy.performWithBackoff(
-      maxAttempts: retryPolicy.maxNetworkAttempts,
-      onRetry: { retryCount += 1 }
-    ) { attempt, isLastAttempt in
-      let url = try makeChatCompletionsURL()
+    for attempt in 0..<maxNetworkAttempts {
+      let url = try makeMessagesURL()
       var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
       request.httpMethod = "POST"
-      request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+      request.setValue("application/json", forHTTPHeaderField: "content-type")
       request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-      request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
-      request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
+      request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+      request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
-      let body = OpenRouterChatCompletionsRequest(
+      let body = AnthropicMessagesRequest(
         model: model,
+        maxTokens: 1024,
         messages: [
           .init(role: "user", content: prompt),
-        ],
-        temperature: 0.0,
-        maxTokens: 1024
+        ]
       )
       request.httpBody = try JSONEncoder().encode(body)
 
       do {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-          let error = OpenRouterError.requestFailed(-1, nil)
-          if isLastAttempt {
-            return .fail(error)
+          let error = AnthropicError.requestFailed(-1, nil)
+          lastError = error
+          if attempt < maxNetworkAttempts - 1 {
+            retryCount += 1
+            try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
+            continue
           }
-          return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: error)
+          throw error
         }
 
         if (200..<300).contains(http.statusCode) {
-          let decoded = try JSONDecoder().decode(OpenRouterChatCompletionsResponse.self, from: data)
-          let content = decoded.choices?.first?.message?.content ?? ""
-          return .success(content)
+          let decoded = try JSONDecoder().decode(AnthropicMessagesResponse.self, from: data)
+          let content = decoded.content.first(where: { $0.type == "text" })?.text ?? ""
+          return content
         }
 
-        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        NSLog("[TextPolish] OpenRouter HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        let message = parseErrorMessage(data: data)
+        NSLog("[TextPolish] Anthropic HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
-        let requestError = OpenRouterError.requestFailed(http.statusCode, message)
-
-        if http.statusCode == 429, !isLastAttempt {
+        if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
+          lastError = AnthropicError.requestFailed(http.statusCode, message)
           let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
             ?? retryPolicy.retryDelaySeconds(attempt: attempt)
           let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
-          return .retry(after: retryAfter, lastError: requestError)
+          retryCount += 1
+          try await Task.sleep(for: .seconds(retryAfter))
+          continue
         }
 
-        if (500...599).contains(http.statusCode), !isLastAttempt {
-          return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: requestError)
+        if (http.statusCode == 529 || (500...599).contains(http.statusCode)), attempt < maxNetworkAttempts - 1 {
+          lastError = AnthropicError.requestFailed(http.statusCode, message)
+          retryCount += 1
+          try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
+          continue
         }
 
-        return .fail(requestError)
+        throw AnthropicError.requestFailed(http.statusCode, message)
       } catch {
         if error is CancellationError { throw error }
-        if let openRouterError = error as? OpenRouterError {
-          return .fail(openRouterError)
-        }
+        if let anthropicError = error as? AnthropicError { throw anthropicError }
 
-        let sanitizedErrorDescription = ErrorLogSanitizer.sanitize(error.localizedDescription)
-        let wrapped = OpenRouterError.requestFailed(-1, sanitizedErrorDescription)
-        if isLastAttempt {
-          return .fail(wrapped)
+        let wrapped = AnthropicError.requestFailed(-1, error.localizedDescription)
+        lastError = wrapped
+        if attempt < maxNetworkAttempts - 1 {
+          retryCount += 1
+          try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
+          continue
         }
-        return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: wrapped)
+        throw wrapped
       }
     }
+
+    throw lastError ?? AnthropicError.requestFailed(-1, nil)
   }
 
-  private struct OpenAIErrorEnvelope: Decodable {
+  private struct AnthropicAPIErrorEnvelope: Decodable {
     struct ErrorBody: Decodable {
       let message: String?
-      let code: String?
       let type: String?
     }
     let error: ErrorBody?
   }
 
   private func parseErrorMessage(data: Data) -> String? {
-    if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
+    if let decoded = try? JSONDecoder().decode(AnthropicAPIErrorEnvelope.self, from: data) {
       let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
     }
@@ -309,34 +328,32 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   }
 }
 
-private struct OpenRouterChatCompletionsRequest: Encodable {
+private struct AnthropicMessagesRequest: Encodable {
   struct Message: Encodable {
     let role: String
     let content: String
   }
 
   let model: String
-  let messages: [Message]
-  let temperature: Double
   let maxTokens: Int
+  let messages: [Message]
 
   enum CodingKeys: String, CodingKey {
     case model
-    case messages
-    case temperature
     case maxTokens = "max_tokens"
+    case messages
   }
 }
 
-private struct OpenRouterChatCompletionsResponse: Decodable {
-  struct Choice: Decodable {
-    struct Message: Decodable {
-      let content: String?
-    }
-    let message: Message?
+struct AnthropicMessagesResponse: Decodable {
+  struct ContentBlock: Decodable {
+    let type: String
+    let text: String?
   }
 
-  let choices: [Choice]?
+  let content: [ContentBlock]
 }
 
-extension OpenRouterCorrector: @unchecked Sendable {}
+// Safety: `lastRetryCount` is mutated only inside a single in-flight request path.
+// `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
+extension AnthropicCorrector: @unchecked Sendable {}

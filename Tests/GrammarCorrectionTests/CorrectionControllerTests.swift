@@ -288,6 +288,37 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertFalse(recovererCalled, "Recoverer should not run if fallback already succeeded")
   }
 
+  @MainActor
+  func testFallbackFailureFallsThroughToRecovererWithoutManualAlertLoop() async {
+    let completion = expectation(description: "recoverer used")
+    let feedback = StubFeedback()
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+
+    var recovererCallCount = 0
+    let controller = CorrectionController(
+      corrector: ThrowingCorrector(error: TestError()),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      recoverer: { _ in
+        recovererCallCount += 1
+        completion.fulfill()
+        return CorrectionController.RecoveryAction(message: "Recovered", corrector: AppendCorrector())
+      },
+      shouldAttemptFallback: { _ in true },
+      fallbackCorrectorFactory: { ThrowingCorrector(error: TestError()) }
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(recovererCallCount, 1)
+    XCTAssertEqual(keyboard.commandVCount, 1)
+  }
+
   func testFeedbackCooldownAllowsAfterInterval() {
     var gate = FeedbackCooldown(cooldown: .milliseconds(100))
     let start = ContinuousClock.now

@@ -246,6 +246,8 @@ struct Settings: Codable {
   enum Provider: String, Codable {
     case gemini
     case openRouter
+    case openAI
+    case anthropic
 
     init(from decoder: Decoder) throws {
       let container = try decoder.singleValueContainer()
@@ -272,7 +274,7 @@ struct Settings: Codable {
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
   var hotKeyAnalyzeTone: HotKey
-  var fallbackToOpenRouterOnGeminiError: Bool
+  var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
   var geminiBaseURL: String
@@ -285,6 +287,18 @@ struct Settings: Codable {
   var openRouterMaxAttempts: Int
   var openRouterMinSimilarity: Double
   var openRouterExtraInstruction: String?
+  var openAIApiKey: String?
+  var openAIModel: String
+  var openAIBaseURL: String
+  var openAIMaxAttempts: Int
+  var openAIMinSimilarity: Double
+  var openAIExtraInstruction: String?
+  var anthropicApiKey: String?
+  var anthropicModel: String
+  var anthropicBaseURL: String
+  var anthropicMaxAttempts: Int
+  var anthropicMinSimilarity: Double
+  var anthropicExtraInstruction: String?
 
   init(
     provider: Provider = .gemini,
@@ -300,7 +314,7 @@ struct Settings: Codable {
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
-    fallbackToOpenRouterOnGeminiError: Bool = false,
+    enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.0-flash-lite-001",
     geminiBaseURL: String = "https://generativelanguage.googleapis.com",
@@ -312,7 +326,19 @@ struct Settings: Codable {
     openRouterBaseURL: String = "https://openrouter.ai/api/v1",
     openRouterMaxAttempts: Int = 2,
     openRouterMinSimilarity: Double = 0.65,
-    openRouterExtraInstruction: String? = nil
+    openRouterExtraInstruction: String? = nil,
+    openAIApiKey: String? = nil,
+    openAIModel: String = "gpt-4o-mini",
+    openAIBaseURL: String = "https://api.openai.com/v1",
+    openAIMaxAttempts: Int = 2,
+    openAIMinSimilarity: Double = 0.65,
+    openAIExtraInstruction: String? = nil,
+    anthropicApiKey: String? = nil,
+    anthropicModel: String = "claude-haiku-4-5",
+    anthropicBaseURL: String = "https://api.anthropic.com",
+    anthropicMaxAttempts: Int = 2,
+    anthropicMinSimilarity: Double = 0.65,
+    anthropicExtraInstruction: String? = nil
   ) {
     self.provider = provider
     self.requestTimeoutSeconds = requestTimeoutSeconds
@@ -327,7 +353,7 @@ struct Settings: Codable {
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
-    self.fallbackToOpenRouterOnGeminiError = fallbackToOpenRouterOnGeminiError
+    self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
     self.geminiBaseURL = geminiBaseURL
@@ -340,6 +366,18 @@ struct Settings: Codable {
     self.openRouterMaxAttempts = openRouterMaxAttempts
     self.openRouterMinSimilarity = openRouterMinSimilarity
     self.openRouterExtraInstruction = openRouterExtraInstruction
+    self.openAIApiKey = openAIApiKey
+    self.openAIModel = openAIModel
+    self.openAIBaseURL = openAIBaseURL
+    self.openAIMaxAttempts = openAIMaxAttempts
+    self.openAIMinSimilarity = openAIMinSimilarity
+    self.openAIExtraInstruction = openAIExtraInstruction
+    self.anthropicApiKey = anthropicApiKey
+    self.anthropicModel = anthropicModel
+    self.anthropicBaseURL = anthropicBaseURL
+    self.anthropicMaxAttempts = anthropicMaxAttempts
+    self.anthropicMinSimilarity = anthropicMinSimilarity
+    self.anthropicExtraInstruction = anthropicExtraInstruction
   }
 
   init(from decoder: Decoder) throws {
@@ -357,8 +395,10 @@ struct Settings: Codable {
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
-    fallbackToOpenRouterOnGeminiError =
-      try container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError) ?? false
+    enableGeminiOpenRouterFallback =
+      try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
+      ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
+      ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
     geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.0-flash-lite-001"
     geminiBaseURL =
@@ -373,6 +413,61 @@ struct Settings: Codable {
     openRouterMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openRouterMaxAttempts) ?? 2
     openRouterMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openRouterMinSimilarity) ?? 0.65
     openRouterExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openRouterExtraInstruction)
+    openAIApiKey = try container.decodeIfPresent(String.self, forKey: .openAIApiKey)
+    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-4o-mini"
+    openAIBaseURL = try container.decodeIfPresent(String.self, forKey: .openAIBaseURL) ?? "https://api.openai.com/v1"
+    openAIMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openAIMaxAttempts) ?? 2
+    openAIMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openAIMinSimilarity) ?? 0.65
+    openAIExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openAIExtraInstruction)
+    anthropicApiKey = try container.decodeIfPresent(String.self, forKey: .anthropicApiKey)
+    anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? "claude-haiku-4-5"
+    anthropicBaseURL = try container.decodeIfPresent(String.self, forKey: .anthropicBaseURL) ?? "https://api.anthropic.com"
+    anthropicMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .anthropicMaxAttempts) ?? 2
+    anthropicMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .anthropicMinSimilarity) ?? 0.65
+    anthropicExtraInstruction = try container.decodeIfPresent(String.self, forKey: .anthropicExtraInstruction)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(provider, forKey: .provider)
+    try container.encode(requestTimeoutSeconds, forKey: .requestTimeoutSeconds)
+    try container.encode(activationDelayMilliseconds, forKey: .activationDelayMilliseconds)
+    try container.encode(selectAllDelayMilliseconds, forKey: .selectAllDelayMilliseconds)
+    try container.encode(copySettleDelayMilliseconds, forKey: .copySettleDelayMilliseconds)
+    try container.encode(copyTimeoutMilliseconds, forKey: .copyTimeoutMilliseconds)
+    try container.encode(pasteSettleDelayMilliseconds, forKey: .pasteSettleDelayMilliseconds)
+    try container.encode(postPasteDelayMilliseconds, forKey: .postPasteDelayMilliseconds)
+    try container.encode(timingProfiles, forKey: .timingProfiles)
+    try container.encode(correctionLanguage, forKey: .correctionLanguage)
+    try container.encode(hotKeyCorrectSelection, forKey: .hotKeyCorrectSelection)
+    try container.encode(hotKeyCorrectAll, forKey: .hotKeyCorrectAll)
+    try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
+    try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
+    try container.encode(enableGeminiOpenRouterFallback, forKey: .fallbackToOpenRouterOnGeminiError)
+    try container.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
+    try container.encode(geminiModel, forKey: .geminiModel)
+    try container.encode(geminiBaseURL, forKey: .geminiBaseURL)
+    try container.encode(geminiMaxAttempts, forKey: .geminiMaxAttempts)
+    try container.encode(geminiMinSimilarity, forKey: .geminiMinSimilarity)
+    try container.encodeIfPresent(geminiExtraInstruction, forKey: .geminiExtraInstruction)
+    try container.encodeIfPresent(openRouterApiKey, forKey: .openRouterApiKey)
+    try container.encode(openRouterModel, forKey: .openRouterModel)
+    try container.encode(openRouterBaseURL, forKey: .openRouterBaseURL)
+    try container.encode(openRouterMaxAttempts, forKey: .openRouterMaxAttempts)
+    try container.encode(openRouterMinSimilarity, forKey: .openRouterMinSimilarity)
+    try container.encodeIfPresent(openRouterExtraInstruction, forKey: .openRouterExtraInstruction)
+    try container.encodeIfPresent(openAIApiKey, forKey: .openAIApiKey)
+    try container.encode(openAIModel, forKey: .openAIModel)
+    try container.encode(openAIBaseURL, forKey: .openAIBaseURL)
+    try container.encode(openAIMaxAttempts, forKey: .openAIMaxAttempts)
+    try container.encode(openAIMinSimilarity, forKey: .openAIMinSimilarity)
+    try container.encodeIfPresent(openAIExtraInstruction, forKey: .openAIExtraInstruction)
+    try container.encodeIfPresent(anthropicApiKey, forKey: .anthropicApiKey)
+    try container.encode(anthropicModel, forKey: .anthropicModel)
+    try container.encode(anthropicBaseURL, forKey: .anthropicBaseURL)
+    try container.encode(anthropicMaxAttempts, forKey: .anthropicMaxAttempts)
+    try container.encode(anthropicMinSimilarity, forKey: .anthropicMinSimilarity)
+    try container.encodeIfPresent(anthropicExtraInstruction, forKey: .anthropicExtraInstruction)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -389,6 +484,7 @@ struct Settings: Codable {
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
     case hotKeyAnalyzeTone
+    case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey
     case geminiModel
@@ -402,6 +498,18 @@ struct Settings: Codable {
     case openRouterMaxAttempts
     case openRouterMinSimilarity
     case openRouterExtraInstruction
+    case openAIApiKey
+    case openAIModel
+    case openAIBaseURL
+    case openAIMaxAttempts
+    case openAIMinSimilarity
+    case openAIExtraInstruction
+    case anthropicApiKey
+    case anthropicModel
+    case anthropicBaseURL
+    case anthropicMaxAttempts
+    case anthropicMinSimilarity
+    case anthropicExtraInstruction
   }
 
   func timingProfile(bundleIdentifier: String?, appName: String?) -> TimingProfile? {

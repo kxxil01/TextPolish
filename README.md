@@ -50,9 +50,9 @@ TextPolish needs permission to send keyboard shortcuts (copy/paste) to other app
 
 ### 3. Add your API key (free)
 
-TextPolish uses AI to correct your text. You need a free API key:
+TextPolish supports 4 providers. Add at least one API key to get started:
 
-**Option A: Gemini (recommended)**
+**Option A: Gemini (Google AI, recommended)**
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/app/apikey)
 2. Click "Create API Key" — **free, no credit card needed**
 3. Copy the key
@@ -67,7 +67,26 @@ TextPolish uses AI to correct your text. You need a free API key:
 
 > The default model is free. No credits needed unless you switch to a paid model.
 
+**Option C: OpenAI**
+1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Create a new secret key
+3. In TextPolish menu: **Provider → OpenAI** → **Set OpenAI API Key...**
+
+**Option D: Anthropic**
+1. Go to [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+2. Create an API key
+3. In TextPolish menu: **Provider → Anthropic** → **Set Anthropic API Key...**
+
 That's it! You're ready to use TextPolish.
+
+---
+
+## Supported Providers
+
+- Gemini (Google AI)
+- OpenRouter
+- OpenAI
+- Anthropic
 
 ---
 
@@ -129,7 +148,7 @@ Click the menu bar icon to access:
 
 | Setting | What it does |
 |---------|--------------|
-| **Provider** | Switch between Gemini and OpenRouter |
+| **Provider** | Switch between Gemini, OpenRouter, OpenAI, and Anthropic |
 | **Tone Analysis** | Analyze text tone and sentiment |
 | **Hotkeys** | Change or reset keyboard shortcuts |
 | **Language** | Force English (US) or Indonesian |
@@ -152,7 +171,7 @@ Click the menu bar icon to access:
 
 **Quota/rate limit error (429)?**
 → You've hit the free tier limit. Wait a minute and try again.
-→ Or enable **Preferences → Fallback to OpenRouter** as automatic backup.
+→ Or enable provider fallback (automatic backup is available for all provider combinations).
 
 **Start at Login won't enable?**
 → Move the app to /Applications first.
