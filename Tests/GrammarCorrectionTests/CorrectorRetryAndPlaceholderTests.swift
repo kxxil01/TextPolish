@@ -3,16 +3,6 @@ import XCTest
 @testable import GrammarCorrection
 
 final class CorrectorRetryAndPlaceholderTests: XCTestCase {
-  override class func setUp() {
-    super.setUp()
-    URLProtocol.registerClass(MockURLProtocol.self)
-  }
-
-  override class func tearDown() {
-    URLProtocol.unregisterClass(MockURLProtocol.self)
-    super.tearDown()
-  }
-
   override func tearDown() {
     MockURLProtocol.handler = nil
     MockURLProtocol.requestObserver = nil
@@ -46,11 +36,12 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
 
     let settings = Settings(
       provider: .openAI,
+      requestTimeoutSeconds: 1,
       openAIApiKey: "test-key",
       openAIBaseURL: "https://mock.local",
       openAIMaxAttempts: 1
     )
-    let corrector = try OpenAICorrector(settings: settings)
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
     let result = try await corrector.correct("Hello")
 
     XCTAssertEqual(result, "Hello")
@@ -86,11 +77,12 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
 
     let settings = Settings(
       provider: .anthropic,
+      requestTimeoutSeconds: 1,
       anthropicApiKey: "test-key",
       anthropicBaseURL: "https://mock.local",
       anthropicMaxAttempts: 1
     )
-    let corrector = try AnthropicCorrector(settings: settings)
+    let corrector = try AnthropicCorrector(settings: settings, session: Self.makeMockSession())
     let result = try await corrector.correct("Hello")
 
     XCTAssertEqual(result, "Hello")
@@ -111,11 +103,12 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
 
     let settings = Settings(
       provider: .openAI,
+      requestTimeoutSeconds: 1,
       openAIApiKey: "test-key",
       openAIBaseURL: "https://mock.local",
       openAIMaxAttempts: 1
     )
-    let corrector = try OpenAICorrector(settings: settings)
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
     let input = "Check this link: https://example.com and <@123>"
     let result = try await corrector.correct(input)
 
@@ -134,11 +127,12 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
 
     let settings = Settings(
       provider: .anthropic,
+      requestTimeoutSeconds: 1,
       anthropicApiKey: "test-key",
       anthropicBaseURL: "https://mock.local",
       anthropicMaxAttempts: 1
     )
-    let corrector = try AnthropicCorrector(settings: settings)
+    let corrector = try AnthropicCorrector(settings: settings, session: Self.makeMockSession())
     let input = "Check this link: https://example.com and <@123>"
     let result = try await corrector.correct(input)
 
@@ -166,6 +160,15 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let data = try? JSONEncoder().encode(value)
     let encoded = data.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
     return encoded
+  }
+
+  private static func makeMockSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [MockURLProtocol.self]
+    configuration.waitsForConnectivity = false
+    configuration.timeoutIntervalForRequest = 1
+    configuration.timeoutIntervalForResource = 1
+    return URLSession(configuration: configuration)
   }
 
   private static func httpResponse(for request: URLRequest, statusCode: Int, body: String) -> (HTTPURLResponse, Data) {
