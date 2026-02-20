@@ -54,6 +54,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let ownsSession: Bool
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
@@ -63,7 +64,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   var diagnosticsProvider: Settings.Provider { .openAI }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings) throws {
+  init(settings: Settings, session: URLSession? = nil) throws {
     keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
     keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
@@ -74,11 +75,17 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     self.model = trimmedModel
     guard !trimmedModel.isEmpty else { throw OpenAIError.invalidModel }
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
+    if let session {
+      self.session = session
+      self.ownsSession = false
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
+    }
     self.maxAttempts = max(1, settings.openAIMaxAttempts)
     self.retryPolicy = RetryPolicy()
     self.minSimilarity = max(0.0, min(1.0, settings.openAIMinSimilarity))
@@ -87,7 +94,9 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func correct(_ text: String) async throws -> String {
