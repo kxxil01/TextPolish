@@ -11,6 +11,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let ownsSession: Bool
   private let retryPolicy: RetryPolicy
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
@@ -37,19 +38,23 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     self.timeoutSeconds = settings.requestTimeoutSeconds
     if let session {
       self.session = session
+      self.ownsSession = false
     } else {
       let configuration = URLSessionConfiguration.default
       configuration.waitsForConnectivity = true
       configuration.timeoutIntervalForRequest = timeoutSeconds
       configuration.timeoutIntervalForResource = timeoutSeconds
       self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
     }
     self.retryPolicy = RetryPolicy()
     self.config = config
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
