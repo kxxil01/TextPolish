@@ -77,7 +77,7 @@ enum RetryAfterParser {
 
     let match = String(string[range])
     let rawValue = match
-      .replacingOccurrences(of: #"^\s*"retry_after"\s*:\s*"?#, with: "", options: .regularExpression)
+      .replacingOccurrences(of: "^\\s*\"retry_after\"\\s*:\\s*\"?", with: "", options: .regularExpression)
       .replacingOccurrences(of: #""?$"#, with: "", options: .regularExpression)
 
     return parseRetryAfterValue(rawValue) ?? 5
