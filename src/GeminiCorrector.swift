@@ -352,7 +352,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
 
     if let extraInstruction, !extraInstruction.isEmpty {
-      instructions.append("Extra instruction: \(extraInstruction)")
+      instructions.append("Extra instruction (apply lightly — still keep changes minimal): \(extraInstruction)")
     }
 
     instructions.append("Return only the corrected text. No explanations, no quotes, no code fences.")

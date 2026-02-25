@@ -529,25 +529,31 @@ struct Settings: Codable {
   static func loadOrCreateDefault() -> Settings {
     let url = settingsFileURL()
 
-    if let data = try? Data(contentsOf: url),
-       let settings = try? JSONDecoder().decode(Settings.self, from: data)
-    {
-      return settings
+    if let data = try? Data(contentsOf: url) {
+      do {
+        let settings = try JSONDecoder().decode(Settings.self, from: data)
+        return settings
+      } catch {
+        NSLog("[TextPolish] Failed to decode settings at \(url.path): \(error). Falling back to defaults.")
+      }
     }
 
     let legacyURL = legacySettingsFileURL()
-    if legacyURL != url,
-       let data = try? Data(contentsOf: legacyURL),
-       let settings = try? JSONDecoder().decode(Settings.self, from: data)
-    {
+    if legacyURL != url, let data = try? Data(contentsOf: legacyURL) {
       do {
-        try save(settings)
+        let settings = try JSONDecoder().decode(Settings.self, from: data)
+        do {
+          try save(settings)
+        } catch {
+          NSLog("[TextPolish] Could not migrate settings: \(error)")
+        }
+        return settings
       } catch {
-        NSLog("[TextPolish] Could not migrate settings: \(error)")
+        NSLog("[TextPolish] Failed to decode legacy settings at \(legacyURL.path): \(error). Falling back to defaults.")
       }
-      return settings
     }
 
+    NSLog("[TextPolish] No valid settings found, creating defaults.")
     let defaults = Settings.defaults()
     do {
       try save(defaults)
