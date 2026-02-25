@@ -316,7 +316,7 @@ struct Settings: Codable {
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
-    geminiModel: String = "gemini-2.0-flash-lite-001",
+    geminiModel: String = "gemini-2.0-flash-lite",
     geminiBaseURL: String = "https://generativelanguage.googleapis.com",
     geminiMaxAttempts: Int = 2,
     geminiMinSimilarity: Double = 0.65,
@@ -400,7 +400,7 @@ struct Settings: Codable {
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
       ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
-    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.0-flash-lite-001"
+    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.0-flash-lite"
     geminiBaseURL =
       try container.decodeIfPresent(String.self, forKey: .geminiBaseURL) ?? "https://generativelanguage.googleapis.com"
     geminiMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .geminiMaxAttempts) ?? 2

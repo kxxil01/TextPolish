@@ -233,7 +233,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         geminiModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
-        geminiModelField.placeholderString = "gemini-1.5-pro"
+        geminiModelField.placeholderString = "gemini-2.5-flash"
         geminiModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiModelField)
 
@@ -281,7 +281,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         openRouterModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
-        openRouterModelField.placeholderString = "anthropic/claude-3-haiku"
+        openRouterModelField.placeholderString = "google/gemini-2.0-flash-lite-001"
         openRouterModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterModelField)
 
