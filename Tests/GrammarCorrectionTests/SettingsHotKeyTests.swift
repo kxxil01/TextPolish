@@ -119,8 +119,8 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.timingProfiles, [:])
     XCTAssertEqual(decoded.enableGeminiOpenRouterFallback, false)
     XCTAssertEqual(decoded.correctionLanguage, .auto)
-    XCTAssertEqual(decoded.geminiModel, "gemini-2.0-flash-lite")
-    XCTAssertEqual(decoded.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
+    XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash-lite")
+    XCTAssertEqual(decoded.openRouterModel, "google/gemma-3-27b-it:free")
     XCTAssertEqual(decoded.hotKeyCorrectSelection, .correctSelectionDefault)
     XCTAssertEqual(decoded.hotKeyCorrectAll, .correctAllDefault)
   }
@@ -172,8 +172,8 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(defaults.timingProfiles, [:])
     XCTAssertEqual(defaults.enableGeminiOpenRouterFallback, false)
     XCTAssertEqual(defaults.correctionLanguage, .auto)
-    XCTAssertEqual(defaults.geminiModel, "gemini-2.0-flash-lite")
-    XCTAssertEqual(defaults.openRouterModel, "meta-llama/llama-3.2-3b-instruct:free")
+    XCTAssertEqual(defaults.geminiModel, "gemini-2.5-flash-lite")
+    XCTAssertEqual(defaults.openRouterModel, "google/gemma-3-27b-it:free")
     XCTAssertEqual(defaults.hotKeyCorrectSelection, .correctSelectionDefault)
     XCTAssertEqual(defaults.hotKeyCorrectAll, .correctAllDefault)
   }
