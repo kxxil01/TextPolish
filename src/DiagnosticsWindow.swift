@@ -3,13 +3,17 @@ import AppKit
 @MainActor
 final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   private let textView = NSTextView()
+  private let runButton = NSButton(title: "Run Diagnostic", target: nil, action: nil)
   private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
+  private let spinner = NSProgressIndicator()
   private var localMonitor: Any?
+
+  var onRunDiagnostic: (() -> Void)?
 
   init() {
     super.init(
-      contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
+      contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
       styleMask: [.titled, .closable, .nonactivatingPanel],
       backing: .buffered,
       defer: false
@@ -19,6 +23,8 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   }
 
   func update(with snapshot: DiagnosticsSnapshot?) {
+    // Only update if not currently running a diagnostic
+    if !spinner.isHidden { return }
     textView.string = DiagnosticsStore.shared.formattedSnapshot()
   }
 
@@ -36,6 +42,20 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
 
   func windowWillClose(_ notification: Notification) {
     removeKeyMonitor()
+  }
+
+  func showRunning() {
+    runButton.isEnabled = false
+    spinner.isHidden = false
+    spinner.startAnimation(nil)
+    textView.string = "Running diagnostic…"
+  }
+
+  func showResult(_ text: String) {
+    spinner.stopAnimation(nil)
+    spinner.isHidden = true
+    runButton.isEnabled = true
+    textView.string = text
   }
 
   private func setupWindow() {
@@ -68,11 +88,14 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     textView.textContainerInset = NSSize(width: 8, height: 8)
     scrollView.documentView = textView
 
-    let buttonStack = NSStackView(views: [copyButton, closeButton])
-    buttonStack.orientation = .horizontal
-    buttonStack.alignment = .centerY
-    buttonStack.spacing = 8
-    buttonStack.translatesAutoresizingMaskIntoConstraints = false
+    spinner.style = .spinning
+    spinner.controlSize = .small
+    spinner.isHidden = true
+    spinner.translatesAutoresizingMaskIntoConstraints = false
+
+    runButton.target = self
+    runButton.action = #selector(runClicked)
+    runButton.bezelStyle = .rounded
 
     copyButton.target = self
     copyButton.action = #selector(copyClicked)
@@ -82,6 +105,12 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     closeButton.action = #selector(closeClicked)
     closeButton.keyEquivalent = "\r"
     closeButton.bezelStyle = .rounded
+
+    let buttonStack = NSStackView(views: [runButton, spinner, copyButton, closeButton])
+    buttonStack.orientation = .horizontal
+    buttonStack.alignment = .centerY
+    buttonStack.spacing = 8
+    buttonStack.translatesAutoresizingMaskIntoConstraints = false
 
     containerView.addSubview(scrollView)
     containerView.addSubview(buttonStack)
@@ -95,8 +124,12 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
       buttonStack.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
       buttonStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16),
 
-      scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
+      scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 240),
     ])
+  }
+
+  @objc private func runClicked() {
+    onRunDiagnostic?()
   }
 
   @objc private func copyClicked() {

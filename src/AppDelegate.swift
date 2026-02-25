@@ -1579,9 +1579,318 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       if self.diagnosticsWindow == nil {
         self.diagnosticsWindow = DiagnosticsWindow()
       }
+      self.diagnosticsWindow?.onRunDiagnostic = { [weak self] in
+        guard let self else { return }
+        Task { @MainActor in
+          await self.runActiveDiagnostic()
+        }
+      }
       self.diagnosticsWindow?.show()
       NSApp.activate(ignoringOtherApps: true)
     }
+  }
+
+  private func runActiveDiagnostic() async {
+    diagnosticsWindow?.showRunning()
+    let provider = settings.provider
+    var lines: [String] = []
+    lines.append("Provider: \(providerDisplayName(provider))")
+    lines.append("─────────────────────────────────")
+
+    switch provider {
+    case .gemini:
+      lines.append(contentsOf: await diagnoseGemini())
+    case .openRouter:
+      lines.append(contentsOf: await diagnoseOpenRouter())
+    case .openAI:
+      lines.append(contentsOf: await diagnoseOpenAI())
+    case .anthropic:
+      lines.append(contentsOf: await diagnoseAnthropic())
+    }
+
+    let result = lines.joined(separator: "\n")
+    diagnosticsWindow?.showResult(result)
+  }
+
+  private func providerDisplayName(_ provider: Settings.Provider) -> String {
+    switch provider {
+    case .gemini: return "Gemini"
+    case .openRouter: return "OpenRouter"
+    case .openAI: return "OpenAI"
+    case .anthropic: return "Anthropic"
+    }
+  }
+
+  private func diagnoseGemini() async -> [String] {
+    var lines: [String] = []
+    guard let apiKey = currentGeminiApiKey(), !apiKey.isEmpty else {
+      lines.append("API Key: ✗ Not configured")
+      lines.append("")
+      lines.append("Set your Gemini API key in Settings or Keychain.")
+      return lines
+    }
+    lines.append("API Key: ✓ Found")
+    lines.append("Model: \(settings.geminiModel)")
+    lines.append("")
+
+    // Fetch model list
+    do {
+      let models = try await fetchGeminiModels(apiKey: apiKey)
+      lines.append("Available models (\(models.count)):")
+      let displayModels = models.prefix(20)
+      for model in displayModels {
+        let marker = model == settings.geminiModel ? " ← current" : ""
+        lines.append("  • \(model)\(marker)")
+      }
+      if models.count > 20 {
+        lines.append("  … and \(models.count - 20) more")
+      }
+
+      if !models.contains(settings.geminiModel) {
+        lines.append("")
+        lines.append("⚠ Current model \"\(settings.geminiModel)\" not found in model list.")
+        if let suggested = chooseGeminiModel(from: models) {
+          lines.append("  Suggested: \(suggested)")
+        }
+      }
+    } catch {
+      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+    }
+
+    // Verify key works with a simple generation call
+    lines.append("")
+    lines.append("API Key Test:")
+    do {
+      let testResult = try await testGeminiApiKey(apiKey: apiKey, model: settings.geminiModel)
+      if testResult {
+        lines.append("  ✓ API key is valid and model responds")
+      } else {
+        lines.append("  ✗ API key or model issue — no response")
+      }
+    } catch {
+      lines.append("  ✗ \(error.localizedDescription)")
+    }
+
+    return lines
+  }
+
+  private func diagnoseOpenRouter() async -> [String] {
+    var lines: [String] = []
+    let apiKey = currentOpenRouterApiKey()
+    let hasKey = apiKey != nil && !apiKey!.isEmpty
+
+    lines.append("API Key: \(hasKey ? "✓ Found" : "○ Not set (using keyless/free)")")
+    lines.append("Current Model: \(settings.openRouterModel)")
+    lines.append("")
+
+    // Fetch free models
+    lines.append("Scanning free models…")
+    do {
+      let allModels = try await fetchOpenRouterModels()
+      let freeModels = allModels.filter { $0.hasSuffix(":free") }
+      lines.removeLast() // remove "Scanning…"
+
+      lines.append("Free models available (\(freeModels.count)):")
+      let ranked = rankedOpenRouterModels(from: freeModels, preferFree: true, preferredFirst: nil, excluding: nil)
+      let displayModels = ranked.prefix(15)
+      for model in displayModels {
+        let marker = model == settings.openRouterModel ? " ← current" : ""
+        lines.append("  • \(model)\(marker)")
+      }
+      if ranked.count > 15 {
+        lines.append("  … and \(ranked.count - 15) more")
+      }
+
+      // Auto-detect a working free model
+      lines.append("")
+      lines.append("Probing for a working free model…")
+      let effectiveKey = apiKey ?? ""
+      if let working = try await detectWorkingOpenRouterModel(
+        apiKey: effectiveKey,
+        preferFree: true,
+        preferredFirst: settings.openRouterModel,
+        excluding: nil
+      ) {
+        if working == settings.openRouterModel {
+          lines.append("  ✓ Current model \"\(working)\" is working")
+        } else {
+          settings.openRouterModel = working
+          persistSettings()
+          lines.append("  ✓ Set model to \"\(working)\" (verified working)")
+        }
+      } else {
+        lines.append("  ✗ No working free model found")
+      }
+    } catch {
+      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+    }
+
+    return lines
+  }
+
+  private func diagnoseOpenAI() async -> [String] {
+    var lines: [String] = []
+    guard let apiKey = currentOpenAIApiKey(), !apiKey.isEmpty else {
+      lines.append("API Key: ✗ Not configured")
+      lines.append("")
+      lines.append("Set your OpenAI API key in Settings or Keychain.")
+      return lines
+    }
+    lines.append("API Key: ✓ Found")
+    lines.append("Model: \(settings.openAIModel)")
+    lines.append("")
+
+    // Fetch model list
+    do {
+      let models = try await fetchOpenAIModels(apiKey: apiKey)
+      let chatModels = models.filter {
+        $0.contains("gpt") || $0.contains("o1") || $0.contains("o3") || $0.contains("o4")
+      }.sorted()
+      lines.append("Chat models (\(chatModels.count)):")
+      let displayModels = chatModels.prefix(20)
+      for model in displayModels {
+        let marker = model == settings.openAIModel ? " ← current" : ""
+        lines.append("  • \(model)\(marker)")
+      }
+      if chatModels.count > 20 {
+        lines.append("  … and \(chatModels.count - 20) more")
+      }
+
+      if !chatModels.contains(settings.openAIModel) && !models.contains(settings.openAIModel) {
+        lines.append("")
+        lines.append("⚠ Current model \"\(settings.openAIModel)\" not found.")
+      }
+    } catch {
+      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+    }
+
+    // Verify key
+    lines.append("")
+    lines.append("API Key Test:")
+    do {
+      let testResult = try await testOpenAIApiKey(apiKey: apiKey, model: settings.openAIModel)
+      if testResult {
+        lines.append("  ✓ API key is valid and model responds")
+      } else {
+        lines.append("  ✗ API key or model issue — no response")
+      }
+    } catch {
+      lines.append("  ✗ \(error.localizedDescription)")
+    }
+
+    return lines
+  }
+
+  private func diagnoseAnthropic() async -> [String] {
+    var lines: [String] = []
+    guard let apiKey = currentAnthropicApiKey(), !apiKey.isEmpty else {
+      lines.append("API Key: ✗ Not configured")
+      lines.append("")
+      lines.append("Set your Anthropic API key in Settings or Keychain.")
+      return lines
+    }
+    lines.append("API Key: ✓ Found")
+    lines.append("Model: \(settings.anthropicModel)")
+    lines.append("")
+
+    // Anthropic doesn't have a public model list endpoint, so just verify the key
+    lines.append("API Key Test:")
+    do {
+      let testResult = try await testAnthropicApiKey(apiKey: apiKey, model: settings.anthropicModel)
+      if testResult {
+        lines.append("  ✓ API key is valid and model responds")
+      } else {
+        lines.append("  ✗ API key or model issue — no response")
+      }
+    } catch {
+      lines.append("  ✗ \(error.localizedDescription)")
+    }
+
+    return lines
+  }
+
+  // MARK: - Diagnostic API Helpers
+
+  private func testGeminiApiKey(apiKey: String, model: String) async throws -> Bool {
+    guard let baseURL = URL(string: settings.geminiBaseURL) else { return false }
+    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
+    var basePath = components.path
+    if basePath.hasSuffix("/") { basePath.removeLast() }
+    components.path = basePath + "/v1beta/models/\(model):generateContent"
+    components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+    guard let url = components.url else { return false }
+
+    var request = URLRequest(url: url, timeoutInterval: 15)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    let body: [String: Any] = [
+      "contents": [["parts": [["text": "Reply OK"]]]],
+      "generationConfig": ["maxOutputTokens": 8],
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else { return false }
+    return (200..<300).contains(http.statusCode)
+  }
+
+  private func fetchOpenAIModels(apiKey: String) async throws -> [String] {
+    let url = URL(string: settings.openAIBaseURL + "/models")!
+    var request = URLRequest(url: url, timeoutInterval: 15)
+    request.httpMethod = "GET"
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
+    }
+    guard (200..<300).contains(http.statusCode) else {
+      throw NSError(domain: "TextPolish", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
+    }
+
+    struct ModelsResponse: Decodable {
+      struct Model: Decodable { let id: String }
+      let data: [Model]?
+    }
+    let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+    return decoded.data?.map(\.id) ?? []
+  }
+
+  private func testOpenAIApiKey(apiKey: String, model: String) async throws -> Bool {
+    let url = URL(string: settings.openAIBaseURL + "/chat/completions")!
+    var request = URLRequest(url: url, timeoutInterval: 15)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    let body: [String: Any] = [
+      "model": model,
+      "messages": [["role": "user", "content": "Reply OK"]],
+      "max_tokens": 8,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else { return false }
+    return (200..<300).contains(http.statusCode)
+  }
+
+  private func testAnthropicApiKey(apiKey: String, model: String) async throws -> Bool {
+    let url = URL(string: settings.anthropicBaseURL + "/v1/messages")!
+    var request = URLRequest(url: url, timeoutInterval: 15)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+    let body: [String: Any] = [
+      "model": model,
+      "max_tokens": 8,
+      "messages": [["role": "user", "content": "Reply OK"]],
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else { return false }
+    return (200..<300).contains(http.statusCode)
   }
 
   private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
