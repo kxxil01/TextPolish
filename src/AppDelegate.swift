@@ -33,10 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var providerAnthropicItem: NSMenuItem?
   private var setGeminiKeyItem: NSMenuItem?
   private var setGeminiModelItem: NSMenuItem?
-  private var detectGeminiModelItem: NSMenuItem?
+
   private var setOpenRouterKeyItem: NSMenuItem?
   private var setOpenRouterModelItem: NSMenuItem?
-  private var detectOpenRouterModelItem: NSMenuItem?
+
   private var setOpenAIKeyItem: NSMenuItem?
   private var setOpenAIModelItem: NSMenuItem?
   private var setAnthropicKeyItem: NSMenuItem?
@@ -407,13 +407,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     setGeminiModelItem.target = self
 
-    let detectGeminiModelItem = NSMenuItem(
-      title: "Detect Gemini Model…",
-      action: #selector(detectGeminiModel),
-      keyEquivalent: ""
-    )
-    detectGeminiModelItem.target = self
-
     let setOpenRouterKeyItem = NSMenuItem(
       title: "Set OpenRouter API Key…",
       action: #selector(setOpenRouterApiKey),
@@ -427,13 +420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       keyEquivalent: ""
     )
     setOpenRouterModelItem.target = self
-
-    let detectOpenRouterModelItem = NSMenuItem(
-      title: "Detect OpenRouter Model…",
-      action: #selector(detectOpenRouterModel),
-      keyEquivalent: ""
-    )
-    detectOpenRouterModelItem.target = self
 
     let setOpenAIKeyItem = NSMenuItem(
       title: "Set OpenAI API Key…",
@@ -465,10 +451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     self.setGeminiKeyItem = setGeminiKeyItem
     self.setGeminiModelItem = setGeminiModelItem
-    self.detectGeminiModelItem = detectGeminiModelItem
     self.setOpenRouterKeyItem = setOpenRouterKeyItem
     self.setOpenRouterModelItem = setOpenRouterModelItem
-    self.detectOpenRouterModelItem = detectOpenRouterModelItem
     self.setOpenAIKeyItem = setOpenAIKeyItem
     self.setOpenAIModelItem = setOpenAIModelItem
     self.setAnthropicKeyItem = setAnthropicKeyItem
@@ -476,10 +460,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     providerMenu.addItem(setGeminiKeyItem)
     providerMenu.addItem(setGeminiModelItem)
-    providerMenu.addItem(detectGeminiModelItem)
     providerMenu.addItem(setOpenRouterKeyItem)
     providerMenu.addItem(setOpenRouterModelItem)
-    providerMenu.addItem(detectOpenRouterModelItem)
     providerMenu.addItem(setOpenAIKeyItem)
     providerMenu.addItem(setOpenAIModelItem)
     providerMenu.addItem(setAnthropicKeyItem)
@@ -644,10 +626,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     providerAnthropicItem?.state = settings.provider == .anthropic ? .on : .off
     setGeminiKeyItem?.isEnabled = settings.provider == .gemini
     setGeminiModelItem?.isEnabled = settings.provider == .gemini
-    detectGeminiModelItem?.isEnabled = settings.provider == .gemini
     setOpenRouterKeyItem?.isEnabled = settings.provider == .openRouter
     setOpenRouterModelItem?.isEnabled = settings.provider == .openRouter
-    detectOpenRouterModelItem?.isEnabled = settings.provider == .openRouter
     setOpenAIKeyItem?.isEnabled = settings.provider == .openAI
     setOpenAIModelItem?.isEnabled = settings.provider == .openAI
     setAnthropicKeyItem?.isEnabled = settings.provider == .anthropic
@@ -1492,20 +1472,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func detectGeminiModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      await self.detectGeminiModelAsync()
-    }
-  }
-
-  @objc private func detectOpenRouterModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      await self.detectOpenRouterModelAsync()
-    }
-  }
-
   @objc private func toggleLaunchAtLogin() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
@@ -1953,68 +1919,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     alert.informativeText = "Start at Login is most reliable when the app is in /Applications. Install the app there (for example via the .pkg), then enable Start at Login again."
     alert.addButton(withTitle: "OK")
     _ = alert.runModal()
-  }
-
-  private func detectGeminiModelAsync() async {
-    guard let apiKey = currentGeminiApiKey() else {
-      showSimpleAlert(title: "Missing Gemini API Key", message: "Set it via Provider → Set Gemini API Key…")
-      return
-    }
-
-    do {
-      let models = try await fetchGeminiModels(apiKey: apiKey)
-      guard let chosen = chooseGeminiModel(from: models) else {
-        showSimpleAlert(title: "No Models Found", message: "Gemini returned no usable models for this API key.")
-        return
-      }
-
-      settings.geminiModel = chosen
-      persistSettings()
-      syncProviderMenuStates()
-      refreshCorrector()
-      showSimpleAlert(title: "Gemini Model Updated", message: "Using: \(chosen)")
-    } catch {
-      let message =
-        (error as? LocalizedError)?.errorDescription ??
-        (error as NSError).localizedDescription
-      showSimpleAlert(title: "Detect Model Failed", message: message)
-    }
-  }
-
-  private func detectOpenRouterModelAsync() async {
-    guard let apiKey = currentOpenRouterApiKey() else {
-      showSimpleAlert(title: "Missing OpenRouter API Key", message: "Set it via Provider → Set OpenRouter API Key…")
-      return
-    }
-
-    do {
-      let current = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard let chosen = try await detectWorkingOpenRouterModel(
-        apiKey: apiKey,
-        preferFree: false,
-        preferredFirst: current.isEmpty ? nil : current,
-        excluding: nil
-      ) else {
-        showSimpleAlert(title: "No Working Model Found", message: "OpenRouter didn’t return a working model for this API key. Try setting a model manually.")
-        return
-      }
-
-      if chosen == current, !current.isEmpty {
-        showSimpleAlert(title: "OpenRouter Model OK", message: "Current model works: \(chosen)")
-        return
-      }
-
-      settings.openRouterModel = chosen
-      persistSettings()
-      syncProviderMenuStates()
-      refreshCorrector()
-      showSimpleAlert(title: "OpenRouter Model Updated", message: "Using: \(chosen)")
-    } catch {
-      let message =
-        (error as? LocalizedError)?.errorDescription ??
-        (error as NSError).localizedDescription
-      showSimpleAlert(title: "Detect Model Failed", message: message)
-    }
   }
 
   private func currentGeminiApiKey() -> String? {
