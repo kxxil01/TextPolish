@@ -64,10 +64,81 @@ class SettingsWindowViewController: NSViewController {
         self.view = rootView
     }
 
+    private var settingsObserver: Any?
+
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         loadSettings()
+
+        // Listen for external settings changes (e.g. provider changed via menu bar)
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self, let newSettings = notification.object as? Settings else { return }
+            self.settings = newSettings
+            self.reloadFromSettings()
+        }
+    }
+
+    deinit {
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// Reload all UI fields from the current `settings` without touching API key field values.
+    private func reloadFromSettings() {
+        updateProviderButtons()
+        fallbackCheckbox.state = settings.enableGeminiOpenRouterFallback ? .on : .off
+
+        geminiModelField.stringValue = settings.geminiModel
+        geminiBaseURLField.stringValue = settings.geminiBaseURL
+        geminiApiKeyField.placeholderString = hasKeychainKey(account: "geminiApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your Gemini API key"
+
+        openRouterModelField.stringValue = settings.openRouterModel
+        openRouterBaseURLField.stringValue = settings.openRouterBaseURL
+        openRouterApiKeyField.placeholderString = hasKeychainKey(account: "openRouterApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your OpenRouter API key"
+
+        openAIModelField.stringValue = settings.openAIModel
+        openAIBaseURLField.stringValue = settings.openAIBaseURL
+        openAIMaxAttemptsField.stringValue = String(settings.openAIMaxAttempts)
+        openAIMinSimilarityField.stringValue = String(format: "%.2f", settings.openAIMinSimilarity)
+        openAIExtraInstructionField.stringValue = settings.openAIExtraInstruction ?? ""
+        openAIApiKeyField.placeholderString = hasKeychainKey(account: "openAIApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your OpenAI API key"
+
+        anthropicModelField.stringValue = settings.anthropicModel
+        anthropicBaseURLField.stringValue = settings.anthropicBaseURL
+        anthropicMaxAttemptsField.stringValue = String(settings.anthropicMaxAttempts)
+        anthropicMinSimilarityField.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
+        anthropicExtraInstructionField.stringValue = settings.anthropicExtraInstruction ?? ""
+        anthropicApiKeyField.placeholderString = hasKeychainKey(account: "anthropicApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your Anthropic API key"
+
+        correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
+        correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
+        analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+
+        requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
+        geminiMinSimilarityField.stringValue = String(format: "%.2f", settings.geminiMinSimilarity)
+        openRouterMinSimilarityField.stringValue = String(format: "%.2f", settings.openRouterMinSimilarity)
+
+        switch settings.correctionLanguage {
+        case .auto: languagePopup.selectItem(at: 0)
+        case .englishUS: languagePopup.selectItem(at: 1)
+        case .indonesian: languagePopup.selectItem(at: 2)
+        }
+
+        extraInstructionField.stringValue = settings.geminiExtraInstruction ?? ""
     }
 
     private func setupUI() {
@@ -559,18 +630,27 @@ class SettingsWindowViewController: NSViewController {
         updateProviderButtons()
         fallbackCheckbox.state = settings.enableGeminiOpenRouterFallback ? .on : .off
 
-        // Gemini tab
+        // Gemini tab — show placeholder indicating whether a key is configured
         geminiApiKeyField.stringValue = ""
+        geminiApiKeyField.placeholderString = hasKeychainKey(account: "geminiApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your Gemini API key"
         geminiModelField.stringValue = settings.geminiModel
         geminiBaseURLField.stringValue = settings.geminiBaseURL
 
         // OpenRouter tab
         openRouterApiKeyField.stringValue = ""
+        openRouterApiKeyField.placeholderString = hasKeychainKey(account: "openRouterApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your OpenRouter API key"
         openRouterModelField.stringValue = settings.openRouterModel
         openRouterBaseURLField.stringValue = settings.openRouterBaseURL
 
         // OpenAI tab
         openAIApiKeyField.stringValue = ""
+        openAIApiKeyField.placeholderString = hasKeychainKey(account: "openAIApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your OpenAI API key"
         openAIModelField.stringValue = settings.openAIModel
         openAIBaseURLField.stringValue = settings.openAIBaseURL
         openAIMaxAttemptsField.stringValue = String(settings.openAIMaxAttempts)
@@ -579,6 +659,9 @@ class SettingsWindowViewController: NSViewController {
 
         // Anthropic tab
         anthropicApiKeyField.stringValue = ""
+        anthropicApiKeyField.placeholderString = hasKeychainKey(account: "anthropicApiKey")
+            ? "API key configured (leave blank to keep)"
+            : "Enter your Anthropic API key"
         anthropicModelField.stringValue = settings.anthropicModel
         anthropicBaseURLField.stringValue = settings.anthropicBaseURL
         anthropicMaxAttemptsField.stringValue = String(settings.anthropicMaxAttempts)
@@ -606,6 +689,45 @@ class SettingsWindowViewController: NSViewController {
         }
 
         extraInstructionField.stringValue = settings.geminiExtraInstruction ?? ""
+    }
+
+    // MARK: - Keychain Helpers
+
+    private var keychainService: String {
+        Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    }
+
+    private let legacyKeychainService = "com.ilham.GrammarCorrection"
+
+    /// Returns true if a non-empty API key exists in Keychain for the given account.
+    private func hasKeychainKey(account: String) -> Bool {
+        let key = (try? Keychain.getPassword(service: keychainService, account: account))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !key.isEmpty { return true }
+        let legacyKey = (try? Keychain.getPassword(service: legacyKeychainService, account: account))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !legacyKey.isEmpty
+    }
+
+    /// Reads the API key from Keychain (primary then legacy). Returns nil if not found.
+    private func keychainKey(account: String) -> String? {
+        let key = (try? Keychain.getPassword(service: keychainService, account: account))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !key.isEmpty { return key }
+        let legacyKey = (try? Keychain.getPassword(service: legacyKeychainService, account: account))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return legacyKey.isEmpty ? nil : legacyKey
+    }
+
+    /// Saves a non-empty API key to Keychain, or does nothing if the value is empty.
+    private func saveKeychainKeyIfNeeded(account: String, value: String, label: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try Keychain.setPassword(trimmed, service: keychainService, account: account, label: label)
+        } catch {
+            NSLog("[TextPolish] Failed to save \(account) to Keychain: \(error)")
+        }
     }
 
     @objc func applyButtonClicked(_ sender: NSButton) {
@@ -636,18 +758,32 @@ class SettingsWindowViewController: NSViewController {
         }
         newSettings.enableGeminiOpenRouterFallback = fallbackCheckbox.state == .on
 
-        // Gemini
-        // API keys are managed via Keychain and should not be persisted in settings.json.
+        // Gemini — save API key to Keychain if user entered one
+        saveKeychainKeyIfNeeded(
+            account: "geminiApiKey",
+            value: geminiApiKeyField.stringValue,
+            label: "TextPolish — Gemini API Key"
+        )
         newSettings.geminiApiKey = nil
         newSettings.geminiModel = geminiModelField.stringValue
         newSettings.geminiBaseURL = geminiBaseURLField.stringValue
 
         // OpenRouter
+        saveKeychainKeyIfNeeded(
+            account: "openRouterApiKey",
+            value: openRouterApiKeyField.stringValue,
+            label: "TextPolish — OpenRouter API Key"
+        )
         newSettings.openRouterApiKey = nil
         newSettings.openRouterModel = openRouterModelField.stringValue
         newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
 
         // OpenAI
+        saveKeychainKeyIfNeeded(
+            account: "openAIApiKey",
+            value: openAIApiKeyField.stringValue,
+            label: "TextPolish — OpenAI API Key"
+        )
         newSettings.openAIApiKey = nil
         newSettings.openAIModel = openAIModelField.stringValue
         newSettings.openAIBaseURL = openAIBaseURLField.stringValue
@@ -656,6 +792,11 @@ class SettingsWindowViewController: NSViewController {
         newSettings.openAIExtraInstruction = openAIExtraInstructionField.stringValue.isEmpty ? nil : openAIExtraInstructionField.stringValue
 
         // Anthropic
+        saveKeychainKeyIfNeeded(
+            account: "anthropicApiKey",
+            value: anthropicApiKeyField.stringValue,
+            label: "TextPolish — Anthropic API Key"
+        )
         newSettings.anthropicApiKey = nil
         newSettings.anthropicModel = anthropicModelField.stringValue
         newSettings.anthropicBaseURL = anthropicBaseURLField.stringValue
@@ -737,8 +878,14 @@ class SettingsWindowViewController: NSViewController {
 
         Task {
             do {
+                // Use field value if entered, otherwise try Keychain
+                var apiKey = geminiApiKeyField.stringValue
+                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    apiKey = self.keychainKey(account: "geminiApiKey") ?? ""
+                }
+
                 let detectedModel = try await ModelDetector.detectGeminiModel(
-                    apiKey: geminiApiKeyField.stringValue,
+                    apiKey: apiKey,
                     baseURL: geminiBaseURLField.stringValue
                 )
 
@@ -774,8 +921,14 @@ class SettingsWindowViewController: NSViewController {
 
         Task {
             do {
+                // Use field value if entered, otherwise try Keychain
+                var apiKey = openRouterApiKeyField.stringValue
+                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    apiKey = self.keychainKey(account: "openRouterApiKey") ?? ""
+                }
+
                 let detectedModel = try await ModelDetector.detectOpenRouterModel(
-                    apiKey: openRouterApiKeyField.stringValue
+                    apiKey: apiKey
                 )
 
                 await MainActor.run {

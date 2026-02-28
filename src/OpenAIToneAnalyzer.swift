@@ -256,11 +256,21 @@ private struct OpenAIToneRequest: Encodable {
   let temperature: Double
   let maxTokens: Int
 
-  enum CodingKeys: String, CodingKey {
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(model, forKey: .model)
+    try container.encode(messages, forKey: .messages)
+    try container.encode(temperature, forKey: .temperature)
+    try container.encode(maxTokens, forKey: .maxTokens)
+    try container.encode(maxTokens, forKey: .maxCompletionTokens)
+  }
+
+  private enum CodingKeys: String, CodingKey {
     case model
     case messages
     case temperature
     case maxTokens = "max_tokens"
+    case maxCompletionTokens = "max_completion_tokens"
   }
 }
 

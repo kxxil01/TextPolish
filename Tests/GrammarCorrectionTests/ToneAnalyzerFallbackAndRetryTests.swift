@@ -94,7 +94,6 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       enableGeminiOpenRouterFallback: false,
       openRouterApiKey: "fallback-key"
     )
-    let enabledWithoutCredentials = Settings(provider: .gemini, enableGeminiOpenRouterFallback: true)
     let enabledWithCredentials = Settings(
       provider: .gemini,
       enableGeminiOpenRouterFallback: true,
@@ -102,12 +101,26 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     )
 
     let disabledAnalyzer = ToneAnalyzerFactory.make(settings: disabled)
-    let enabledWithoutCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithoutCredentials)
     let enabledWithCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithCredentials)
 
+    // When fallback is disabled, no FallbackToneAnalyzer should be created even with credentials
     XCTAssertFalse(disabledAnalyzer is FallbackToneAnalyzer)
-    XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
+    // When fallback is enabled and credentials exist, FallbackToneAnalyzer should be created
     XCTAssertTrue(enabledWithCredentialsAnalyzer is FallbackToneAnalyzer)
+
+    // "Without credentials" case: only assert if Keychain doesn't have an OpenRouter key,
+    // since the factory also checks Keychain which we can't mock in integration tests.
+    let keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    let hasKeychainKey = ((try? Keychain.getPassword(service: keychainService, account: "openRouterApiKey"))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty == false
+    let hasLegacyKey = ((try? Keychain.getPassword(service: "com.ilham.GrammarCorrection", account: "openRouterApiKey"))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty == false
+
+    if !hasKeychainKey && !hasLegacyKey {
+      let enabledWithoutCredentials = Settings(provider: .gemini, enableGeminiOpenRouterFallback: true)
+      let enabledWithoutCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithoutCredentials)
+      XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
+    }
   }
 
   private static func makeMockSession() -> URLSession {

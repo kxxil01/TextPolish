@@ -410,8 +410,20 @@ final class CorrectionController {
       return fallbackCorrectorFactory()
     }
 
+    let fallbackProvider: Settings.Provider
+    switch settings.provider {
+    case .gemini:
+      fallbackProvider = .openRouter
+    case .openRouter:
+      fallbackProvider = .gemini
+    case .openAI:
+      fallbackProvider = .anthropic
+    case .anthropic:
+      fallbackProvider = .openAI
+    }
+
     let fallbackSettings = Settings(
-      provider: settings.provider == .gemini ? .openRouter : .gemini,
+      provider: fallbackProvider,
       requestTimeoutSeconds: settings.requestTimeoutSeconds,
       activationDelayMilliseconds: settings.activationDelayMilliseconds,
       selectAllDelayMilliseconds: settings.selectAllDelayMilliseconds,
@@ -436,7 +448,19 @@ final class CorrectionController {
       openRouterBaseURL: settings.openRouterBaseURL,
       openRouterMaxAttempts: settings.openRouterMaxAttempts,
       openRouterMinSimilarity: settings.openRouterMinSimilarity,
-      openRouterExtraInstruction: settings.openRouterExtraInstruction
+      openRouterExtraInstruction: settings.openRouterExtraInstruction,
+      openAIApiKey: settings.openAIApiKey,
+      openAIModel: settings.openAIModel,
+      openAIBaseURL: settings.openAIBaseURL,
+      openAIMaxAttempts: settings.openAIMaxAttempts,
+      openAIMinSimilarity: settings.openAIMinSimilarity,
+      openAIExtraInstruction: settings.openAIExtraInstruction,
+      anthropicApiKey: settings.anthropicApiKey,
+      anthropicModel: settings.anthropicModel,
+      anthropicBaseURL: settings.anthropicBaseURL,
+      anthropicMaxAttempts: settings.anthropicMaxAttempts,
+      anthropicMinSimilarity: settings.anthropicMinSimilarity,
+      anthropicExtraInstruction: settings.anthropicExtraInstruction
     )
 
     return CorrectorFactory.make(settings: fallbackSettings)

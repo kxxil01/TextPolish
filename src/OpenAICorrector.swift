@@ -338,11 +338,24 @@ private struct OpenAIChatCompletionsRequest: Encodable {
   let temperature: Double
   let maxTokens: Int
 
-  enum CodingKeys: String, CodingKey {
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(model, forKey: .model)
+    try container.encode(messages, forKey: .messages)
+    try container.encode(temperature, forKey: .temperature)
+    // Newer OpenAI models (o-series, gpt-4.5+, gpt-5+) require max_completion_tokens
+    // instead of max_tokens. Send both so the API accepts whichever it expects;
+    // the server ignores the unrecognized key.
+    try container.encode(maxTokens, forKey: .maxTokens)
+    try container.encode(maxTokens, forKey: .maxCompletionTokens)
+  }
+
+  private enum CodingKeys: String, CodingKey {
     case model
     case messages
     case temperature
     case maxTokens = "max_tokens"
+    case maxCompletionTokens = "max_completion_tokens"
   }
 }
 

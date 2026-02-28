@@ -290,10 +290,14 @@ final class CorrectionControllerTests: XCTestCase {
 
   @MainActor
   func testFallbackFailureFallsThroughToRecovererWithoutManualAlertLoop() async {
-    let completion = expectation(description: "recoverer used")
+    let completion = expectation(description: "correction completed")
     let feedback = StubFeedback()
     let keyboard = StubKeyboard(isTrusted: true)
     let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+
+    feedback.onSuccess = {
+      completion.fulfill()
+    }
 
     var recovererCallCount = 0
     let controller = CorrectionController(
@@ -305,7 +309,6 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard,
       recoverer: { _ in
         recovererCallCount += 1
-        completion.fulfill()
         return CorrectionController.RecoveryAction(message: "Recovered", corrector: AppendCorrector())
       },
       shouldAttemptFallback: { _ in true },

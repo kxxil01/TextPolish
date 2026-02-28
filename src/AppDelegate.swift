@@ -172,9 +172,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ) { [weak self] notification in
       guard let newSettings = notification.object as? Settings else { return }
       Task { @MainActor [weak self] in
-        self?.settings = newSettings
-        self?.refreshCorrector()
-        self?.setupHotKeys()
+        guard let self, !self.suppressSettingsNotification else { return }
+        self.settings = newSettings
+        self.syncProviderMenuStates()
+        self.syncFallbackMenuState()
+        self.syncLanguageMenuState()
+        self.refreshCorrector()
+        self.setupHotKeys()
       }
     }
 
@@ -707,10 +711,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     UserDefaults.standard.set(date, forKey: lastUpdateCheckKey)
   }
 
+  private var suppressSettingsNotification = false
+
   private func persistSettings() {
     do {
-      try Settings.save(settings)
+      suppressSettingsNotification = true
+      try Settings.saveAndNotify(settings)
+      suppressSettingsNotification = false
     } catch {
+      suppressSettingsNotification = false
       NSLog("[TextPolish] Failed to save settings: \(error)")
     }
   }
@@ -996,9 +1005,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     case .openRouter:
       return currentGeminiApiKey() != nil
     case .openAI:
-      return false
+      return currentAnthropicApiKey() != nil
     case .anthropic:
-      return false
+      return currentOpenAIApiKey() != nil
     }
   }
 
@@ -1008,6 +1017,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     if let openRouterError = error as? OpenRouterCorrector.OpenRouterError {
       return shouldFallbackFromOpenRouterError(openRouterError)
+    }
+    if let openAIError = error as? OpenAICorrector.OpenAIError {
+      return shouldFallbackFromOpenAIError(openAIError)
+    }
+    if let anthropicError = error as? AnthropicCorrector.AnthropicError {
+      return shouldFallbackFromAnthropicError(anthropicError)
     }
     if let urlError = error as? URLError {
       return shouldFallbackFromURLError(urlError)
@@ -1047,6 +1062,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
       }
       if status == 429 {
+        return true
+      }
+      if status <= 0 {
+        return true
+      }
+      return (500...599).contains(status)
+    }
+  }
+
+  private func shouldFallbackFromOpenAIError(_ error: OpenAICorrector.OpenAIError) -> Bool {
+    switch error {
+    case .missingApiKey, .invalidBaseURL, .invalidModel:
+      return false
+    case .emptyResponse, .overRewrite:
+      return true
+    case .requestFailed(let status, _):
+      if status == 401 || status == 403 || status == 402 {
+        return false
+      }
+      if status == 429 {
+        return true
+      }
+      if status <= 0 {
+        return true
+      }
+      return (500...599).contains(status)
+    }
+  }
+
+  private func shouldFallbackFromAnthropicError(_ error: AnthropicCorrector.AnthropicError) -> Bool {
+    switch error {
+    case .missingApiKey, .invalidBaseURL, .invalidModel:
+      return false
+    case .emptyResponse, .overRewrite:
+      return true
+    case .requestFailed(let status, _):
+      if status == 401 || status == 403 {
+        return false
+      }
+      if status == 429 || status == 529 {
         return true
       }
       if status <= 0 {
@@ -1534,8 +1589,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func openSettingsWindow(_ sender: Any?) {
-    settingsWindowController = SettingsWindowController()
-    settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    if let existing = settingsWindowController, existing.window?.isVisible == true {
+      // Window already open — bring it to front and reload to show latest state
+      existing.viewController?.loadSettings()
+      existing.window?.makeKeyAndOrderFront(nil)
+    } else {
+      settingsWindowController = SettingsWindowController()
+      settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
     NSApp.activate(ignoringOtherApps: true)
   }
 
@@ -1710,7 +1771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     do {
       let models = try await fetchOpenAIModels(apiKey: apiKey)
       let chatModels = models.filter {
-        $0.contains("gpt") || $0.contains("o1") || $0.contains("o3") || $0.contains("o4")
+        $0.contains("gpt") || $0.hasPrefix("o1") || $0.hasPrefix("o3") || $0.hasPrefix("o4")
       }.sorted()
       lines.append("Chat models (\(chatModels.count)):")
       let displayModels = chatModels.prefix(20)
@@ -1832,6 +1893,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "model": model,
       "messages": [["role": "user", "content": "Reply OK"]],
       "max_tokens": 8,
+      "max_completion_tokens": 8,
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -1903,6 +1965,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     case .alertSecondButtonReturn:
       if settings.provider == .openRouter {
         setOpenRouterApiKey()
+      } else if settings.provider == .openAI {
+        setOpenAIApiKey()
+      } else if settings.provider == .anthropic {
+        setAnthropicApiKey()
       } else {
         setGeminiApiKey()
       }
