@@ -55,7 +55,8 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     spinner.stopAnimation(nil)
     spinner.isHidden = true
     runButton.isEnabled = true
-    textView.string = text
+    let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    textView.string = normalized.isEmpty ? "Diagnostic completed, but no output was generated." : text
   }
 
   private func setupWindow() {
@@ -86,6 +87,15 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     textView.textColor = .labelColor
     textView.backgroundColor = .textBackgroundColor
     textView.textContainerInset = NSSize(width: 8, height: 8)
+    textView.isVerticallyResizable = true
+    textView.isHorizontallyResizable = false
+    textView.autoresizingMask = [.width]
+    textView.frame = NSRect(origin: .zero, size: scrollView.contentSize)
+    textView.textContainer?.containerSize = NSSize(
+      width: scrollView.contentSize.width,
+      height: .greatestFiniteMagnitude
+    )
+    textView.textContainer?.widthTracksTextView = true
     scrollView.documentView = textView
 
     spinner.style = .spinning

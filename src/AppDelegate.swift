@@ -967,14 +967,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
       guard case .requestFailed(let status, _) = openRouterError else { return nil }
       guard status == 404 || status == 402 else { return nil }
-      let preferFree = true
       guard let apiKey = currentOpenRouterApiKey() else { return nil }
 
       do {
         let current = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let chosen = try await detectWorkingOpenRouterModel(
           apiKey: apiKey,
-          preferFree: preferFree,
+          preferFree: true,
           preferredFirst: nil,
           excluding: current.isEmpty ? nil : current
         ) else { return nil }
@@ -983,9 +982,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         persistSettings()
         syncProviderMenuStates()
         refreshCorrector()
-        let message = preferFree
-          ? "OpenRouter switched to a working free model: \(chosen)"
-          : "OpenRouter model auto-detected: \(chosen)"
+        let message = "OpenRouter switched to a working free model: \(chosen)"
         return CorrectionController.RecoveryAction(message: message, corrector: nil)
       } catch {
         NSLog("[TextPolish] Auto-detect OpenRouter model failed: \(error)")
@@ -1615,7 +1612,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     let result = lines.joined(separator: "\n")
-    diagnosticsWindow?.showResult(result)
+    let normalized = result.trimmingCharacters(in: .whitespacesAndNewlines)
+    diagnosticsWindow?.showResult(
+      normalized.isEmpty ? "Diagnostic completed, but no output was generated." : result
+    )
   }
 
   private func providerDisplayName(_ provider: Settings.Provider) -> String {
@@ -1629,10 +1629,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func diagnoseGemini() async -> [String] {
     var lines: [String] = []
+    var hasFailure = false
     guard let apiKey = currentGeminiApiKey(), !apiKey.isEmpty else {
       lines.append("API Key: ✗ Not configured")
       lines.append("")
       lines.append("Set your Gemini API key in Settings or Keychain.")
+      lines.append("")
+      lines.append("Status: ✗ Not configured")
       return lines
     }
     lines.append("API Key: ✓ Found")
@@ -1661,6 +1664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     } catch {
       lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+      hasFailure = true
     }
 
     // Verify key works with a simple generation call
@@ -1672,16 +1676,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lines.append("  ✓ API key is valid and model responds")
       } else {
         lines.append("  ✗ API key or model issue — no response")
+        hasFailure = true
       }
     } catch {
       lines.append("  ✗ \(error.localizedDescription)")
+      hasFailure = true
     }
+
+    lines.append("")
+    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
 
     return lines
   }
 
   private func diagnoseOpenRouter() async -> [String] {
     var lines: [String] = []
+    var hasFailure = false
     let apiKey = currentOpenRouterApiKey()
     let hasKey = apiKey != nil && !apiKey!.isEmpty
 
@@ -1726,20 +1736,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
       } else {
         lines.append("  ✗ No working free model found")
+        hasFailure = true
       }
     } catch {
       lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+      hasFailure = true
     }
+
+    lines.append("")
+    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
 
     return lines
   }
 
   private func diagnoseOpenAI() async -> [String] {
     var lines: [String] = []
+    var hasFailure = false
     guard let apiKey = currentOpenAIApiKey(), !apiKey.isEmpty else {
       lines.append("API Key: ✗ Not configured")
       lines.append("")
       lines.append("Set your OpenAI API key in Settings or Keychain.")
+      lines.append("")
+      lines.append("Status: ✗ Not configured")
       return lines
     }
     lines.append("API Key: ✓ Found")
@@ -1768,6 +1786,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     } catch {
       lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+      hasFailure = true
     }
 
     // Verify key
@@ -1779,20 +1798,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lines.append("  ✓ API key is valid and model responds")
       } else {
         lines.append("  ✗ API key or model issue — no response")
+        hasFailure = true
       }
     } catch {
       lines.append("  ✗ \(error.localizedDescription)")
+      hasFailure = true
     }
+
+    lines.append("")
+    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
 
     return lines
   }
 
   private func diagnoseAnthropic() async -> [String] {
     var lines: [String] = []
+    var hasFailure = false
     guard let apiKey = currentAnthropicApiKey(), !apiKey.isEmpty else {
       lines.append("API Key: ✗ Not configured")
       lines.append("")
       lines.append("Set your Anthropic API key in Settings or Keychain.")
+      lines.append("")
+      lines.append("Status: ✗ Not configured")
       return lines
     }
     lines.append("API Key: ✓ Found")
@@ -1807,10 +1834,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lines.append("  ✓ API key is valid and model responds")
       } else {
         lines.append("  ✗ API key or model issue — no response")
+        hasFailure = true
       }
     } catch {
       lines.append("  ✗ \(error.localizedDescription)")
+      hasFailure = true
     }
+
+    lines.append("")
+    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
 
     return lines
   }
