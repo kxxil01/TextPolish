@@ -238,8 +238,11 @@ private struct OpenAIToneRequest: Encodable {
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
     try container.encode(temperature, forKey: .temperature)
-    try container.encode(maxTokens, forKey: .maxTokens)
-    try container.encode(maxTokens, forKey: .maxCompletionTokens)
+    if OpenAITokenPolicy.usesMaxCompletionTokens(model: model) {
+      try container.encode(maxTokens, forKey: .maxCompletionTokens)
+    } else {
+      try container.encode(maxTokens, forKey: .maxTokens)
+    }
   }
 
   private enum CodingKeys: String, CodingKey {

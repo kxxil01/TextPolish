@@ -1900,12 +1900,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-    let body: [String: Any] = [
+    var body: [String: Any] = [
       "model": model,
       "messages": [["role": "user", "content": "Reply OK"]],
-      "max_tokens": 8,
-      "max_completion_tokens": 8,
     ]
+    if OpenAITokenPolicy.usesMaxCompletionTokens(model: model) {
+      body["max_completion_tokens"] = 8
+    } else {
+      body["max_tokens"] = 8
+    }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (_, response) = try await URLSession.shared.data(for: request)
