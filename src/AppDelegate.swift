@@ -1202,7 +1202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     let hasKey = Keychain.hasConfiguredPassword(
       primaryService: keychainService,
-      account: keychainAccountGemini,
+      account: keychainAccountGemini
     )
     if !hasKey,
        settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
@@ -1219,7 +1219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     let hasKey = Keychain.hasConfiguredPassword(
       primaryService: keychainService,
-      account: keychainAccountOpenRouter,
+      account: keychainAccountOpenRouter
     )
     if !hasKey,
        settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
@@ -1236,7 +1236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     let hasKey = Keychain.hasConfiguredPassword(
       primaryService: keychainService,
-      account: keychainAccountOpenAI,
+      account: keychainAccountOpenAI
     )
     if !hasKey,
        settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
@@ -1253,7 +1253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     let hasKey = Keychain.hasConfiguredPassword(
       primaryService: keychainService,
-      account: keychainAccountAnthropic,
+      account: keychainAccountAnthropic
     )
     if !hasKey,
        settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
