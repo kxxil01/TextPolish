@@ -137,6 +137,30 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertTrue(decoded.enableGeminiOpenRouterFallback)
   }
 
+  func testDecodeMigratesDeprecatedGemini15ProModel() throws {
+    let json = """
+    {
+      "geminiModel": "gemini-1.5-pro"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
+  }
+
+  func testDecodeMigratesDeprecatedGeminiModelWithModelsPrefix() throws {
+    let json = """
+    {
+      "geminiModel": "models/gemini-1.5-pro-latest"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
+  }
+
   func testDecodeUnknownProviderDefaultsToGemini() throws {
     let json = """
     {

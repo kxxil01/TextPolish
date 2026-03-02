@@ -472,8 +472,27 @@ struct Settings: Codable {
   }
 
   mutating func migrateDeprecatedModels() {
-    let normalizedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    if normalizedGeminiModel == "gemini-2.0-flash-lite-001" || normalizedGeminiModel == "models/gemini-2.0-flash-lite-001" {
+    let trimmedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedGeminiModel: String = {
+      let lower = trimmedGeminiModel.lowercased()
+      if lower.hasPrefix("models/") {
+        return String(lower.dropFirst("models/".count))
+      }
+      return lower
+    }()
+
+    let deprecatedGeminiModels: Set<String> = [
+      "gemini-2.0-flash-lite-001",
+      "gemini-1.5-pro",
+      "gemini-1.5-pro-latest",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-latest",
+      "gemini-pro",
+      "gemini-pro-latest",
+      "gemini-1.0-pro"
+    ]
+
+    if deprecatedGeminiModels.contains(normalizedGeminiModel) || normalizedGeminiModel.hasPrefix("gemini-1.5") {
       geminiModel = "gemini-2.5-flash"
     }
   }
