@@ -7,6 +7,13 @@ enum Keychain {
     case invalidData
   }
 
+  static let defaultPrimaryService = "com.kxxil01.TextPolish"
+
+  static func primaryService(bundleIdentifier: String?) -> String {
+    let trimmedBundleIdentifier = trim(bundleIdentifier)
+    return trimmedBundleIdentifier.isEmpty ? defaultPrimaryService : trimmedBundleIdentifier
+  }
+
   static func getPassword(service: String, account: String) throws -> String? {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
@@ -66,5 +73,32 @@ enum Keychain {
     let status = SecItemDelete(query as CFDictionary)
     if status == errSecSuccess || status == errSecItemNotFound { return }
     throw KeychainError.unexpectedStatus(status)
+  }
+
+  static func getConfiguredPassword(primaryService: String, account: String) throws -> String? {
+    let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
+    let password = trim(try getPassword(service: normalizedPrimaryService, account: account))
+    return password.isEmpty ? nil : password
+  }
+
+  static func hasConfiguredPassword(primaryService: String, account: String) -> Bool {
+    guard let password = try? getConfiguredPassword(primaryService: primaryService, account: account) else {
+      return false
+    }
+    return !trim(password).isEmpty
+  }
+
+  static func setConfiguredPassword(
+    _ password: String,
+    primaryService: String,
+    account: String,
+    label: String? = nil
+  ) throws {
+    let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
+    try setPassword(password, service: normalizedPrimaryService, account: account, label: label)
+  }
+
+  private static func trim(_ value: String?) -> String {
+    value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
   }
 }

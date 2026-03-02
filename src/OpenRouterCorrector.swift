@@ -37,7 +37,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       case .emptyResponse:
         return "OpenRouter returned no text"
       case .overRewrite:
-        return "OpenRouter rewrote too much (try again or adjust model)"
+        return "OpenRouter changed too much and was rejected. Lower OpenRouter Min Similarity or simplify extra instruction."
       }
     }
   }
@@ -54,9 +54,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let legacyKeychainService = "com.ilham.GrammarCorrection"
   private let keychainAccount = "openRouterApiKey"
-  private let keychainLabel = "TextPolish — OpenRouter API Key"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
@@ -125,29 +123,15 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   }
 
   private func resolveApiKey() throws -> String {
-    // Try primary keychain
     do {
-      if let keyFromPrimaryKeychain = try Keychain.getPassword(service: keychainService, account: keychainAccount)?.trimmingCharacters(in: .whitespacesAndNewlines), !keyFromPrimaryKeychain.isEmpty {
-        return keyFromPrimaryKeychain
+      if let key = try Keychain.getConfiguredPassword(
+        primaryService: keychainService,
+        account: keychainAccount
+      ), !key.isEmpty {
+        return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read primary keychain: \(error)")
-    }
-
-    // Try legacy keychain
-    do {
-      if let keyFromLegacyKeychain = try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)?.trimmingCharacters(in: .whitespacesAndNewlines), !keyFromLegacyKeychain.isEmpty {
-        if legacyKeychainService != keychainService {
-          do {
-            try Keychain.setPassword(keyFromLegacyKeychain, service: keychainService, account: keychainAccount, label: keychainLabel)
-          } catch {
-            NSLog("[TextPolish] Failed to migrate legacy keychain: \(error)")
-          }
-        }
-        return keyFromLegacyKeychain
-      }
-    } catch {
-      NSLog("[TextPolish] Failed to read legacy keychain: \(error)")
+      NSLog("[TextPolish] Failed to read OpenRouter keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }

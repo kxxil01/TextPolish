@@ -113,10 +113,8 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     let keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
     let hasKeychainKey = ((try? Keychain.getPassword(service: keychainService, account: "openRouterApiKey"))?
       .trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty == false
-    let hasLegacyKey = ((try? Keychain.getPassword(service: "com.ilham.GrammarCorrection", account: "openRouterApiKey"))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty == false
 
-    if !hasKeychainKey && !hasLegacyKey {
+    if !hasKeychainKey {
       let enabledWithoutCredentials = Settings(provider: .gemini, enableGeminiOpenRouterFallback: true)
       let enabledWithoutCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithoutCredentials)
       XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)

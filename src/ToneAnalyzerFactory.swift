@@ -125,8 +125,7 @@ enum ToneAnalyzerFactory {
   }
 
   private static func hasCredentials(for provider: Settings.Provider, settings: Settings) -> Bool {
-    let keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
-    let legacyKeychainService = "com.ilham.GrammarCorrection"
+    let keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
 
     let credentialSource: (account: String, envKeys: [String], settingsValue: String?)
     switch provider {
@@ -140,11 +139,10 @@ enum ToneAnalyzerFactory {
       credentialSource = ("anthropicApiKey", ["ANTHROPIC_API_KEY"], settings.anthropicApiKey)
     }
 
-    if hasKeychainCredential(service: keychainService, account: credentialSource.account) {
-      return true
-    }
-
-    if hasKeychainCredential(service: legacyKeychainService, account: credentialSource.account) {
+    if Keychain.hasConfiguredPassword(
+      primaryService: keychainService,
+      account: credentialSource.account
+    ) {
       return true
     }
 
@@ -161,14 +159,6 @@ enum ToneAnalyzerFactory {
     }
 
     return false
-  }
-
-  private static func hasKeychainCredential(service: String, account: String) -> Bool {
-    guard let key = try? Keychain.getPassword(service: service, account: account) else {
-      return false
-    }
-    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-    return !trimmed.isEmpty
   }
 }
 

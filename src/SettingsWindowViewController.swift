@@ -694,29 +694,27 @@ class SettingsWindowViewController: NSViewController {
     // MARK: - Keychain Helpers
 
     private var keychainService: String {
-        Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+        Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     }
-
-    private let legacyKeychainService = "com.ilham.GrammarCorrection"
 
     /// Returns true if a non-empty API key exists in Keychain for the given account.
     private func hasKeychainKey(account: String) -> Bool {
-        let key = (try? Keychain.getPassword(service: keychainService, account: account))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !key.isEmpty { return true }
-        let legacyKey = (try? Keychain.getPassword(service: legacyKeychainService, account: account))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return !legacyKey.isEmpty
+        Keychain.hasConfiguredPassword(
+            primaryService: keychainService,
+            account: account
+        )
     }
 
-    /// Reads the API key from Keychain (primary then legacy). Returns nil if not found.
+    /// Reads the API key from Keychain. Returns nil if not found.
     private func keychainKey(account: String) -> String? {
-        let key = (try? Keychain.getPassword(service: keychainService, account: account))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !key.isEmpty { return key }
-        let legacyKey = (try? Keychain.getPassword(service: legacyKeychainService, account: account))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return legacyKey.isEmpty ? nil : legacyKey
+        guard let key = try? Keychain.getConfiguredPassword(
+            primaryService: keychainService,
+            account: account
+        ) else {
+            return nil
+        }
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Saves a non-empty API key to Keychain, or does nothing if the value is empty.
@@ -724,7 +722,12 @@ class SettingsWindowViewController: NSViewController {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try Keychain.setPassword(trimmed, service: keychainService, account: account, label: label)
+            try Keychain.setConfiguredPassword(
+                trimmed,
+                primaryService: keychainService,
+                account: account,
+                label: label
+            )
         } catch {
             NSLog("[TextPolish] Failed to save \(account) to Keychain: \(error)")
         }

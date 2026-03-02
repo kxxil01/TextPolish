@@ -4,9 +4,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let legacyKeychainService = "com.ilham.GrammarCorrection"
   private let keychainAccount = "openAIApiKey"
-  private let keychainLabel = "TextPolish — OpenAI API Key"
   private let keyFromSettings: String?
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
@@ -72,36 +70,15 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   }
 
   private func resolveApiKey() throws -> String {
-    // Try primary keychain
     do {
-      if let keyFromPrimaryKeychain = try Keychain.getPassword(service: keychainService, account: keychainAccount)?
-        .trimmingCharacters(in: .whitespacesAndNewlines), !keyFromPrimaryKeychain.isEmpty {
-        return keyFromPrimaryKeychain
+      if let key = try Keychain.getConfiguredPassword(
+        primaryService: keychainService,
+        account: keychainAccount
+      ), !key.isEmpty {
+        return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read primary keychain: \(error)")
-    }
-
-    // Try legacy keychain and migrate
-    do {
-      if let keyFromLegacyKeychain = try Keychain.getPassword(service: legacyKeychainService, account: keychainAccount)?
-        .trimmingCharacters(in: .whitespacesAndNewlines), !keyFromLegacyKeychain.isEmpty {
-        if legacyKeychainService != keychainService {
-          do {
-            try Keychain.setPassword(
-              keyFromLegacyKeychain,
-              service: keychainService,
-              account: keychainAccount,
-              label: keychainLabel
-            )
-          } catch {
-            NSLog("[TextPolish] Failed to migrate legacy keychain: \(error)")
-          }
-        }
-        return keyFromLegacyKeychain
-      }
-    } catch {
-      NSLog("[TextPolish] Failed to read legacy keychain: \(error)")
+      NSLog("[TextPolish] Failed to read OpenAI keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }

@@ -69,10 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let keychainAccountOpenRouter = "openRouterApiKey"
   private let keychainAccountOpenAI = "openAIApiKey"
   private let keychainAccountAnthropic = "anthropicApiKey"
-  private let legacyKeychainService = "com.ilham.GrammarCorrection"
-  private let expectedBundleIdentifier = "com.kxxil01.TextPolish"
   private var keychainService: String {
-    Bundle.main.bundleIdentifier ?? expectedBundleIdentifier
+    Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
   }
 
   private let didShowWelcomeKey = "didShowWelcome_0_1"
@@ -870,7 +868,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
         do {
-          try Keychain.setPassword(password, service: service, account: account, label: label)
+          try Keychain.setConfiguredPassword(
+            password,
+            primaryService: service,
+            account: account,
+            label: label
+          )
           NSLog("[TextPolish] Keychain set success account=\(account)")
           continuation.resume()
         } catch {
@@ -1197,13 +1200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     syncProviderMenuStates()
     refreshCorrector()
 
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountGemini))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountGemini))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    let hasKey = Keychain.hasConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountGemini,
+    )
     if !hasKey,
        settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
     {
@@ -1217,13 +1217,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     syncProviderMenuStates()
     refreshCorrector()
 
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenRouter))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenRouter))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    let hasKey = Keychain.hasConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountOpenRouter,
+    )
     if !hasKey,
        settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
     {
@@ -1237,13 +1234,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     syncProviderMenuStates()
     refreshCorrector()
 
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenAI))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenAI))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    let hasKey = Keychain.hasConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountOpenAI,
+    )
     if !hasKey,
        settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
     {
@@ -1257,13 +1251,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     syncProviderMenuStates()
     refreshCorrector()
 
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountAnthropic))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountAnthropic))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let hasKey = !keyFromKeychain.isEmpty || !keyFromLegacyKeychain.isEmpty
+    let hasKey = Keychain.hasConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountAnthropic,
+    )
     if !hasKey,
        settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
     {
@@ -1287,9 +1278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing Gemini key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountGemini)
-          if self.legacyKeychainService != self.keychainService {
-            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountGemini)
-          }
           self.settings.geminiApiKey = nil
           self.persistSettings()
           self.syncProviderMenuStates()
@@ -1332,9 +1320,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing OpenRouter key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenRouter)
-          if self.legacyKeychainService != self.keychainService {
-            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountOpenRouter)
-          }
           self.settings.openRouterApiKey = nil
           self.persistSettings()
           self.syncProviderMenuStates()
@@ -1377,9 +1362,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing OpenAI key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenAI)
-          if self.legacyKeychainService != self.keychainService {
-            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountOpenAI)
-          }
           self.settings.openAIApiKey = nil
           self.persistSettings()
           self.syncProviderMenuStates()
@@ -1422,9 +1404,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing Anthropic key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountAnthropic)
-          if self.legacyKeychainService != self.keychainService {
-            try? await self.deleteKeychainPassword(service: self.legacyKeychainService, account: self.keychainAccountAnthropic)
-          }
           self.settings.anthropicApiKey = nil
           self.persistSettings()
           self.syncProviderMenuStates()
@@ -1988,15 +1967,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func currentGeminiApiKey() -> String? {
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountGemini))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromKeychain.isEmpty { return keyFromKeychain }
-
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountGemini))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountGemini
+    ), !keyFromKeychain.isEmpty {
+      return keyFromKeychain
+    }
 
     let keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !keyFromSettings.isEmpty { return keyFromSettings }
@@ -2010,15 +1986,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func currentOpenRouterApiKey() -> String? {
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenRouter))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromKeychain.isEmpty { return keyFromKeychain }
-
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenRouter))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountOpenRouter
+    ), !keyFromKeychain.isEmpty {
+      return keyFromKeychain
+    }
 
     let keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !keyFromSettings.isEmpty { return keyFromSettings }
@@ -2029,15 +2002,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func currentOpenAIApiKey() -> String? {
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountOpenAI))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromKeychain.isEmpty { return keyFromKeychain }
-
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountOpenAI))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountOpenAI
+    ), !keyFromKeychain.isEmpty {
+      return keyFromKeychain
+    }
 
     let keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !keyFromSettings.isEmpty { return keyFromSettings }
@@ -2048,15 +2018,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func currentAnthropicApiKey() -> String? {
-    let keyFromKeychain =
-      (try? Keychain.getPassword(service: keychainService, account: keychainAccountAnthropic))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromKeychain.isEmpty { return keyFromKeychain }
-
-    let keyFromLegacyKeychain =
-      (try? Keychain.getPassword(service: legacyKeychainService, account: keychainAccountAnthropic))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromLegacyKeychain.isEmpty { return keyFromLegacyKeychain }
+    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+      primaryService: keychainService,
+      account: keychainAccountAnthropic
+    ), !keyFromKeychain.isEmpty {
+      return keyFromKeychain
+    }
 
     let keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !keyFromSettings.isEmpty { return keyFromSettings }
