@@ -472,6 +472,8 @@ struct Settings: Codable {
   }
 
   mutating func migrateDeprecatedModels() {
+    let openRouterDefaultModel = "google/gemma-3n-e4b-it:free"
+
     let trimmedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalizedGeminiModel: String = {
       let lower = trimmedGeminiModel.lowercased()
@@ -494,6 +496,19 @@ struct Settings: Codable {
 
     if deprecatedGeminiModels.contains(normalizedGeminiModel) || normalizedGeminiModel.hasPrefix("gemini-1.5") {
       geminiModel = "gemini-2.5-flash"
+    }
+
+    let normalizedOpenRouterModel = openRouterModel
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    let deprecatedOpenRouterModels: Set<String> = [
+      "anthropic/claude-3-sonnet",
+      "anthropic/claude-3-opus",
+      "anthropic/claude-3-haiku"
+    ]
+
+    if normalizedOpenRouterModel.isEmpty || deprecatedOpenRouterModels.contains(normalizedOpenRouterModel) {
+      openRouterModel = openRouterDefaultModel
     }
   }
 

@@ -161,6 +161,30 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
   }
 
+  func testDecodeMigratesDeprecatedOpenRouterClaude3Model() throws {
+    let json = """
+    {
+      "openRouterModel": "anthropic/claude-3-sonnet"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.openRouterModel, "google/gemma-3n-e4b-it:free")
+  }
+
+  func testDecodeMigratesEmptyOpenRouterModelToDefaultFreeModel() throws {
+    let json = """
+    {
+      "openRouterModel": "   "
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.openRouterModel, "google/gemma-3n-e4b-it:free")
+  }
+
   func testDecodeUnknownProviderDefaultsToGemini() throws {
     let json = """
     {
