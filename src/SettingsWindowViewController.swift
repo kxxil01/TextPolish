@@ -304,7 +304,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         geminiModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
-        geminiModelField.placeholderString = "gemini-2.5-flash-lite"
+        geminiModelField.placeholderString = "gemini-2.5-flash"
         geminiModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(geminiModelField)
 
@@ -352,7 +352,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         openRouterModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth - 130, height: 26))
-        openRouterModelField.placeholderString = "google/gemma-3-27b-it:free"
+        openRouterModelField.placeholderString = "google/gemma-3n-e4b-it:free"
         openRouterModelField.autoresizingMask = [.width, .minYMargin]
         container.addSubview(openRouterModelField)
 
@@ -395,7 +395,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         openAIModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth, height: 26))
-        openAIModelField.placeholderString = "gpt-4o-mini"
+        openAIModelField.placeholderString = "gpt-5-mini"
         container.addSubview(openAIModelField)
 
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)

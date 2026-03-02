@@ -316,19 +316,19 @@ struct Settings: Codable {
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
-    geminiModel: String = "gemini-2.5-flash-lite",
+    geminiModel: String = "gemini-2.5-flash",
     geminiBaseURL: String = "https://generativelanguage.googleapis.com",
     geminiMaxAttempts: Int = 2,
     geminiMinSimilarity: Double = 0.65,
     geminiExtraInstruction: String? = nil,
     openRouterApiKey: String? = nil,
-    openRouterModel: String = "google/gemma-3-27b-it:free",
+    openRouterModel: String = "google/gemma-3n-e4b-it:free",
     openRouterBaseURL: String = "https://openrouter.ai/api/v1",
     openRouterMaxAttempts: Int = 2,
     openRouterMinSimilarity: Double = 0.65,
     openRouterExtraInstruction: String? = nil,
     openAIApiKey: String? = nil,
-    openAIModel: String = "gpt-4o-mini",
+    openAIModel: String = "gpt-5-mini",
     openAIBaseURL: String = "https://api.openai.com/v1",
     openAIMaxAttempts: Int = 2,
     openAIMinSimilarity: Double = 0.65,
@@ -400,7 +400,7 @@ struct Settings: Codable {
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
       ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
-    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.5-flash-lite"
+    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.5-flash"
     geminiBaseURL =
       try container.decodeIfPresent(String.self, forKey: .geminiBaseURL) ?? "https://generativelanguage.googleapis.com"
     geminiMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .geminiMaxAttempts) ?? 2
@@ -408,13 +408,13 @@ struct Settings: Codable {
     geminiExtraInstruction = try container.decodeIfPresent(String.self, forKey: .geminiExtraInstruction)
     openRouterApiKey = try container.decodeIfPresent(String.self, forKey: .openRouterApiKey)
     openRouterModel =
-      try container.decodeIfPresent(String.self, forKey: .openRouterModel) ?? "google/gemma-3-27b-it:free"
+      try container.decodeIfPresent(String.self, forKey: .openRouterModel) ?? "google/gemma-3n-e4b-it:free"
     openRouterBaseURL = try container.decodeIfPresent(String.self, forKey: .openRouterBaseURL) ?? "https://openrouter.ai/api/v1"
     openRouterMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openRouterMaxAttempts) ?? 2
     openRouterMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openRouterMinSimilarity) ?? 0.65
     openRouterExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openRouterExtraInstruction)
     openAIApiKey = try container.decodeIfPresent(String.self, forKey: .openAIApiKey)
-    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-4o-mini"
+    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-5-mini"
     openAIBaseURL = try container.decodeIfPresent(String.self, forKey: .openAIBaseURL) ?? "https://api.openai.com/v1"
     openAIMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openAIMaxAttempts) ?? 2
     openAIMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openAIMinSimilarity) ?? 0.65
@@ -425,6 +425,7 @@ struct Settings: Codable {
     anthropicMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .anthropicMaxAttempts) ?? 2
     anthropicMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .anthropicMinSimilarity) ?? 0.65
     anthropicExtraInstruction = try container.decodeIfPresent(String.self, forKey: .anthropicExtraInstruction)
+    migrateDeprecatedModels()
   }
 
   func encode(to encoder: Encoder) throws {
@@ -468,6 +469,13 @@ struct Settings: Codable {
     try container.encode(anthropicMaxAttempts, forKey: .anthropicMaxAttempts)
     try container.encode(anthropicMinSimilarity, forKey: .anthropicMinSimilarity)
     try container.encodeIfPresent(anthropicExtraInstruction, forKey: .anthropicExtraInstruction)
+  }
+
+  mutating func migrateDeprecatedModels() {
+    let normalizedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalizedGeminiModel == "gemini-2.0-flash-lite-001" || normalizedGeminiModel == "models/gemini-2.0-flash-lite-001" {
+      geminiModel = "gemini-2.5-flash"
+    }
   }
 
   private enum CodingKeys: String, CodingKey {

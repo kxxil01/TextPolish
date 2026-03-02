@@ -75,7 +75,7 @@ final class ModelDetectorTests: XCTestCase {
               "name": "gemini-1.5-pro"
             },
             {
-              "name": "gemini-2.0-flash-lite-001"
+              "name": "gemini-2.5-flash"
             }
           ]
         }
@@ -87,7 +87,7 @@ final class ModelDetectorTests: XCTestCase {
         // Then
         XCTAssertEqual(response.models?.count, 2, "Should decode 2 models")
         XCTAssertEqual(response.models?[0].name, "gemini-1.5-pro", "First model should be gemini-1.5-pro")
-        XCTAssertEqual(response.models?[1].name, "gemini-2.0-flash-lite-001", "Second model should be gemini-2.0-flash-lite-001")
+        XCTAssertEqual(response.models?[1].name, "gemini-2.5-flash", "Second model should be gemini-2.5-flash")
     }
 
     func testGeminiModelsResponseDecodingWithEmpty() throws {
@@ -214,7 +214,7 @@ final class ModelDetectorTests: XCTestCase {
               "name": "gemini-1.5-pro"
             },
             {
-              "name": "gemini-2.0-flash-lite-001"
+              "name": "gemini-2.5-flash"
             },
             {
               "name": "gemini-1.5-flash"
@@ -227,7 +227,7 @@ final class ModelDetectorTests: XCTestCase {
         let response = try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: json)
 
         // Then - check that preferred model is first in the list
-        let preferred = response.models?.first(where: { $0.name == "gemini-2.0-flash-lite-001" })
+        let preferred = response.models?.first(where: { $0.name == "gemini-2.5-flash" })
         XCTAssertNotNil(preferred, "Should find preferred model")
     }
 

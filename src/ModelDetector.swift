@@ -45,11 +45,14 @@ enum ModelDetector {
 
             let decoded = try JSONDecoder().decode(GeminiModelsResponse.self, from: data)
 
-            // Prefer gemini-2.0-flash-lite-001, then gemini-1.5-flash, then first available
-            if let preferred = decoded.models?.first(where: { $0.name == "gemini-2.0-flash-lite-001" }) {
+            // Prefer stable lightweight Gemini models first, then any flash model.
+            if let preferred = decoded.models?.first(where: { $0.name == "gemini-2.5-flash" }) {
                 return preferred.name
             }
-            if let flash = decoded.models?.first(where: { $0.name.contains("flash") }) {
+            if let preferredLite = decoded.models?.first(where: { $0.name == "gemini-2.5-flash-lite" }) {
+                return preferredLite.name
+            }
+            if let flash = decoded.models?.first(where: { $0.name.contains("flash") && !$0.name.contains("preview") && !$0.name.contains("exp") }) {
                 return flash.name
             }
             if let first = decoded.models?.first {
@@ -88,8 +91,15 @@ enum ModelDetector {
 
             let decoded = try JSONDecoder().decode(OpenRouterModelsResponse.self, from: data)
 
-            // Prefer free models
-            if let freeModel = decoded.data?.first(where: { $0.pricing?.prompt == "0" && $0.pricing?.completion == "0" }) {
+            // Prefer lightweight free models, then any free model.
+            let freeModels = decoded.data?.filter { $0.pricing?.prompt == "0" && $0.pricing?.completion == "0" } ?? []
+            if let preferredLightFree = freeModels.first(where: {
+                let id = $0.id.lowercased()
+                return id.contains("mini") || id.contains("lite") || id.contains("flash") || id.contains("4b") || id.contains("3b")
+            }) {
+                return preferredLightFree.id
+            }
+            if let freeModel = freeModels.first {
                 return freeModel.id
             }
             if let first = decoded.data?.first {

@@ -967,7 +967,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
       guard case .requestFailed(let status, _) = openRouterError else { return nil }
       guard status == 404 || status == 402 else { return nil }
-      let preferFree = (status == 402)
+      let preferFree = true
       guard let apiKey = currentOpenRouterApiKey() else { return nil }
 
       do {
@@ -1435,7 +1435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       let value = self.promptForText(
         title: "Gemini Model",
-        message: "Examples: gemini-2.0-flash-lite-001, gemini-2.0-flash (depends on your API key).",
+        message: "Examples: gemini-2.5-flash, gemini-2.5-flash-lite (depends on your API key).",
         placeholder: "Model name",
         initialValue: self.settings.geminiModel
       )
@@ -1454,7 +1454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       let value = self.promptForText(
         title: "OpenRouter Model",
-        message: "Examples: google/gemini-2.0-flash-lite-001, openai/gpt-4o-mini (depends on your OpenRouter account).",
+        message: "Examples (free): google/gemma-3n-e4b-it:free, qwen/qwen3-4b:free",
         placeholder: "Model id",
         initialValue: self.settings.openRouterModel
       )
@@ -1473,7 +1473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       let value = self.promptForText(
         title: "OpenAI Model",
-        message: "Examples: gpt-4o-mini, gpt-4o (depends on your OpenAI account).",
+        message: "Examples: gpt-5-mini, gpt-5-nano (depends on your OpenAI account).",
         placeholder: "Model name",
         initialValue: self.settings.openAIModel
       )
@@ -1492,7 +1492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       let value = self.promptForText(
         title: "Anthropic Model",
-        message: "Examples: claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022 (depends on your Anthropic account).",
+        message: "Examples: claude-haiku-4-5, claude-sonnet-4-5 (depends on your Anthropic account).",
         placeholder: "Model name",
         initialValue: self.settings.anthropicModel
       )
@@ -2262,7 +2262,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let lower = name.lowercased()
       var value = 0
       if lower.contains("flash") { value += 100 }
-      if lower.contains("2.0") { value += 20 }
+      if lower.contains("2.5") { value += 120 }
+      if lower.contains("2.0") { value -= 20 }
       if lower.contains("1.5") { value += 10 }
       if lower.contains("lite") { value += 10 }
       if lower.contains("latest") { value += 5 }
@@ -2281,16 +2282,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func openRouterScore(_ id: String) -> Int {
     let lower = id.lowercased()
     var value = 0
-    if lower == "openai/gpt-4o-mini" { value += 960 }
-    if lower == "google/gemini-2.0-flash-lite-001" { value += 940 }
-    if lower == "google/gemini-2.0-flash-exp:free" { value += 880 }
-    if lower == "meta-llama/llama-3.2-3b-instruct:free" { value += 860 }
-    if lower == "qwen/qwen3-4b:free" { value += 820 }
-    if lower.contains("gemini") { value += 260 }
+    if lower == "google/gemma-3n-e4b-it:free" { value += 980 }
+    if lower == "qwen/qwen3-4b:free" { value += 940 }
+    if lower == "meta-llama/llama-3.2-3b-instruct:free" { value += 900 }
+    if lower == "google/gemma-3-12b-it:free" { value += 860 }
+    if lower == "google/gemma-3-27b-it:free" { value += 820 }
+    if lower == "openai/gpt-5-mini" { value += 780 }
+    if lower.contains("gemini") { value += 220 }
     if lower.contains("flash") { value += 220 }
     if lower.contains("2.0") { value += 50 }
     if lower.contains("lite") { value += 30 }
-    if lower.contains("gpt-4o-mini") { value += 240 }
+    if lower.contains("gpt-5-mini") { value += 260 }
+    if lower.contains("gpt-4o-mini") { value += 180 }
+    if lower.contains("gemma-3n") { value += 200 }
+    if lower.contains("4b") { value += 120 }
     if lower.contains("llama-3.2") { value += 90 }
     if lower.contains("3b") { value += 30 }
     if lower.contains("instruct") { value += 20 }
