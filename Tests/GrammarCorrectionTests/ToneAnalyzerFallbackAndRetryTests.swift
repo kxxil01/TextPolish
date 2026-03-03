@@ -120,6 +120,29 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     XCTAssertEqual(callCount, 1, "404 must fail fast without retries")
   }
 
+  func testGeminiToneAnalyzerPropagatesCancelledRequest() async throws {
+    ToneMockURLProtocol.handler = { _ in
+      throw URLError(.cancelled)
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test",
+      geminiBaseURL: "https://mock.local"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+
+    do {
+      _ = try await analyzer.analyze("This text is long enough.")
+      XCTFail("Expected cancellation to propagate")
+    } catch is CancellationError {
+      XCTAssertTrue(true)
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+  }
+
   func testFallbackToneAnalyzerDoesNotFallbackForTextLengthValidation() async throws {
     let fallbackTracker = ToneCallTracker()
     let analyzer = FallbackToneAnalyzer(

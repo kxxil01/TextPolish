@@ -9,6 +9,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let ownsSession: Bool
   private let maxRateLimitBackoffSeconds: Double
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
@@ -16,7 +17,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   var diagnosticsProvider: Settings.Provider { .gemini }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings, config: ToneAnalysisConfig = .default) throws {
+  init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv =
       ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
@@ -40,17 +41,25 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     }
 
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
+    if let session {
+      self.session = session
+      self.ownsSession = false
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
+    }
     self.maxRateLimitBackoffSeconds = 12
     self.config = config
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
@@ -113,6 +122,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
+      try Task.checkCancellation()
       let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
       var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
       request.httpMethod = "POST"
@@ -172,6 +182,10 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
+        if error is CancellationError { throw error }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+          throw CancellationError()
+        }
         // If it's already a ToneAnalysisError, rethrow it
         if error is ToneAnalysisError {
           throw error

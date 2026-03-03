@@ -19,6 +19,18 @@ struct FeedbackCooldown: Sendable {
 
 @MainActor
 final class CorrectionController {
+  private enum OperationError: LocalizedError {
+    case timedOut(Duration)
+
+    var errorDescription: String? {
+      switch self {
+      case .timedOut(let timeout):
+        let seconds = max(1, Int(timeout.components.seconds))
+        return "Correction timed out after \(seconds) seconds"
+      }
+    }
+  }
+
   struct RecoveryAction: Sendable {
     let message: String
     let corrector: GrammarCorrector?
@@ -93,6 +105,7 @@ final class CorrectionController {
   private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
+  private let operationTimeout: Duration
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
@@ -102,6 +115,7 @@ final class CorrectionController {
     feedback: FeedbackPresenter,
     settings: Settings,
     timings: Timings = .default,
+    operationTimeout: Duration = .seconds(12),
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
     recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil,
@@ -113,6 +127,7 @@ final class CorrectionController {
     self.feedback = feedback
     self.settings = settings
     self.timings = timings
+    self.operationTimeout = operationTimeout
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
     self.recoverer = recoverer
@@ -168,6 +183,7 @@ final class CorrectionController {
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       let operationStartedAt = Date()
+      let deadline = ContinuousClock.now + self.operationTimeout
       var activeProvider = self.settings.provider
       var activeModel = self.modelName(for: activeProvider)
       var fallbackCount = 0
@@ -202,7 +218,7 @@ final class CorrectionController {
       if let appToActivate {
         if !appToActivate.isActive {
           _ = appToActivate.activate(options: [])
-          try? await Task.sleep(for: timings.activationDelay)
+          try? await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
         }
       }
 
@@ -214,15 +230,15 @@ final class CorrectionController {
       do {
         if mode == .all {
           self.keyboard.sendCommandA()
-          try await Task.sleep(for: timings.selectAllDelay)
+          try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
         }
 
-        let inputText = try await self.copySelectedText(timings: timings)
+        let inputText = try await self.copySelectedText(timings: timings, deadline: deadline)
         try Task.checkCancellation()
 
         var corrected: String?
         do {
-          corrected = try await self.runCorrector(corrector, text: inputText)
+          corrected = try await self.runCorrector(corrector, text: inputText, deadline: deadline)
         } catch {
           let primaryError = error
           var unresolvedError: Error? = primaryError
@@ -236,7 +252,7 @@ final class CorrectionController {
               fallbackCount += 1
               usedCorrector = fallbackCorrector
               self.updateProviderModel(for: fallbackCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(fallbackCorrector, text: inputText)
+              corrected = try await self.runCorrector(fallbackCorrector, text: inputText, deadline: deadline)
               unresolvedError = nil
             } catch {
               unresolvedError = error
@@ -250,7 +266,7 @@ final class CorrectionController {
               let retryCorrector = action.corrector ?? self.corrector
               usedCorrector = retryCorrector
               self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(retryCorrector, text: inputText)
+              corrected = try await self.runCorrector(retryCorrector, text: inputText, deadline: deadline)
             } else {
               throw unresolvedError
             }
@@ -280,11 +296,11 @@ final class CorrectionController {
 
         try Task.checkCancellation()
         self.pasteboard.setString(corrected)
-        try await Task.sleep(for: timings.pasteSettleDelay)
+        try await self.sleepRespectingDeadline(timings.pasteSettleDelay, until: deadline)
         try Task.checkCancellation()
         self.keyboard.sendCommandV()
         didPaste = true
-        try await Task.sleep(for: timings.postPasteDelay)
+        try await self.sleepRespectingDeadline(timings.postPasteDelay, until: deadline)
         self.feedback.showSuccess()
         let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
         DiagnosticsStore.shared.recordSuccess(
@@ -352,28 +368,34 @@ final class CorrectionController {
     }
   }
 
-  private func copySelectedText(timings: Timings) async throws -> String {
+  private func copySelectedText(timings: Timings, deadline: ContinuousClock.Instant) async throws -> String {
     do {
-      return try await attemptCopy(excluding: copySentinel(), timings: timings)
+      return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
     } catch {
       if shouldRetryCopy(error) {
         try Task.checkCancellation()
-        return try await attemptCopy(excluding: copySentinel(), timings: timings)
+        return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
       }
       throw error
     }
   }
 
-  private func attemptCopy(excluding sentinel: String, timings: Timings) async throws -> String {
+  private func attemptCopy(
+    excluding sentinel: String,
+    timings: Timings,
+    deadline: ContinuousClock.Instant
+  ) async throws -> String {
     pasteboard.setString(sentinel)
-    try await Task.sleep(for: timings.copySettleDelay)
+    try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
 
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
+    let remaining = try remainingDuration(until: deadline)
+    let waitTimeout = minDuration(timings.copyTimeout, remaining)
     return try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,
       excluding: sentinel,
-      timeout: timings.copyTimeout
+      timeout: waitTimeout
     )
   }
 
@@ -394,15 +416,57 @@ final class CorrectionController {
     "GC_COPY_SENTINEL_" + UUID().uuidString
   }
 
-  private func runCorrector(_ corrector: GrammarCorrector, text: String) async throws -> String {
+  private func runCorrector(
+    _ corrector: GrammarCorrector,
+    text: String,
+    deadline: ContinuousClock.Instant
+  ) async throws -> String {
+    let remaining = try remainingDuration(until: deadline)
+    let timeoutError = OperationError.timedOut(operationTimeout)
     let task = Task.detached(priority: .userInitiated) {
       try await corrector.correct(text)
     }
+    defer {
+      task.cancel()
+    }
     return try await withTaskCancellationHandler {
-      try await task.value
+      try await withThrowingTaskGroup(of: String.self) { group in
+        group.addTask {
+          try await task.value
+        }
+        group.addTask {
+          try await Task.sleep(for: remaining)
+          throw timeoutError
+        }
+
+        guard let output = try await group.next() else {
+          throw timeoutError
+        }
+        group.cancelAll()
+        return output
+      }
     } onCancel: {
       task.cancel()
     }
+  }
+
+  private func remainingDuration(until deadline: ContinuousClock.Instant) throws -> Duration {
+    let remaining = deadline - ContinuousClock.now
+    guard remaining > .zero else {
+      throw OperationError.timedOut(operationTimeout)
+    }
+    return remaining
+  }
+
+  private func minDuration(_ lhs: Duration, _ rhs: Duration) -> Duration {
+    lhs < rhs ? lhs : rhs
+  }
+
+  private func sleepRespectingDeadline(_ delay: Duration, until deadline: ContinuousClock.Instant) async throws {
+    let remaining = try remainingDuration(until: deadline)
+    let boundedDelay = minDuration(delay, remaining)
+    try await Task.sleep(for: boundedDelay)
+    _ = try remainingDuration(until: deadline)
   }
 
   private func createFallbackCorrector() -> GrammarCorrector? {

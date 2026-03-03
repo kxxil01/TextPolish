@@ -10,6 +10,7 @@ final class CorrectionControllerTests: XCTestCase {
     private(set) var successCount = 0
     var onSuccess: (() -> Void)?
     var onInfo: ((String) -> Void)?
+    var onError: ((String) -> Void)?
 
     func showSuccess() {
       successCount += 1
@@ -23,6 +24,7 @@ final class CorrectionControllerTests: XCTestCase {
 
     func showError(_ message: String) {
       errorMessages.append(message)
+      onError?(message)
     }
   }
 
@@ -246,6 +248,35 @@ final class CorrectionControllerTests: XCTestCase {
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0)
+  }
+
+  @MainActor
+  func testCorrectionTimesOutBeforePaste() async {
+    let completion = expectation(description: "timeout surfaced")
+    let feedback = StubFeedback()
+    feedback.onError = { message in
+      if message.contains("timed out") {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: SlowCorrector(delay: .milliseconds(300)),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      operationTimeout: .milliseconds(60),
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 0, "Paste should not happen when operation times out")
+    XCTAssertTrue(feedback.errorMessages.contains(where: { $0.contains("timed out") }))
   }
 
   @MainActor

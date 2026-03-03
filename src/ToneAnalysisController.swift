@@ -2,6 +2,18 @@ import AppKit
 
 @MainActor
 final class ToneAnalysisController {
+  private enum OperationError: LocalizedError {
+    case timedOut(Duration)
+
+    var errorDescription: String? {
+      switch self {
+      case .timedOut(let timeout):
+        let seconds = max(1, Int(timeout.components.seconds))
+        return "Tone analysis timed out after \(seconds) seconds"
+      }
+    }
+  }
+
   struct Timings: Sendable {
     let activationDelay: Duration
     let copySettleDelay: Duration
@@ -37,6 +49,7 @@ final class ToneAnalysisController {
   private let pasteboard: PasteboardControlling
 
   private var timings: Timings
+  private let operationTimeout: Duration
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var currentAnalyzerTask: Task<ToneAnalysisResult, Error>?
@@ -48,6 +61,7 @@ final class ToneAnalysisController {
     feedback: FeedbackPresenter,
     resultPresenter: ToneAnalysisResultPresenter,
     timings: Timings = .default,
+    operationTimeout: Duration = .seconds(8),
     keyboard: KeyboardControlling? = nil,
     pasteboard: PasteboardControlling? = nil,
     onSuccess: (() -> Void)? = nil
@@ -56,6 +70,7 @@ final class ToneAnalysisController {
     self.feedback = feedback
     self.resultPresenter = resultPresenter
     self.timings = timings
+    self.operationTimeout = operationTimeout
     self.keyboard = keyboard ?? KeyboardController()
     self.pasteboard = pasteboard ?? PasteboardController()
     self.onSuccess = onSuccess
@@ -95,6 +110,7 @@ final class ToneAnalysisController {
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       let operationStartedAt = Date()
+      let deadline = ContinuousClock.now + self.operationTimeout
       let resolveProviderModel: () -> (Settings.Provider, String) = {
         if let reporting = analyzer as? DiagnosticsProviderReporting {
           return (reporting.diagnosticsProvider, reporting.diagnosticsModel)
@@ -131,7 +147,7 @@ final class ToneAnalysisController {
       if let appToActivate {
         if !appToActivate.isActive {
           _ = appToActivate.activate(options: [])
-          try? await Task.sleep(for: timings.activationDelay)
+          try? await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
         }
       }
 
@@ -139,7 +155,7 @@ final class ToneAnalysisController {
       defer { self.pasteboard.restore(snapshot) }
 
       do {
-        let inputText = try await self.copySelectedText(timings: timings)
+        let inputText = try await self.copySelectedText(timings: timings, deadline: deadline)
         try Task.checkCancellation()
 
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,7 +177,7 @@ final class ToneAnalysisController {
 
         self.feedback.showInfo("Analyzing tone...")
 
-        let result = try await self.runAnalyzer(analyzer, text: inputText)
+        let result = try await self.runAnalyzer(analyzer, text: inputText, deadline: deadline)
         try Task.checkCancellation()
 
         self.resultPresenter.showResult(result)
@@ -219,29 +235,35 @@ final class ToneAnalysisController {
     }
   }
 
-  private func copySelectedText(timings: Timings) async throws -> String {
+  private func copySelectedText(timings: Timings, deadline: ContinuousClock.Instant) async throws -> String {
     do {
-      return try await attemptCopy(excluding: copySentinel(), timings: timings)
+      return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
     } catch {
       if shouldRetryCopy(error) {
         try Task.checkCancellation()
-        return try await attemptCopy(excluding: copySentinel(), timings: timings)
+        return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
       }
       throw error
     }
   }
 
-  private func attemptCopy(excluding sentinel: String, timings: Timings) async throws -> String {
+  private func attemptCopy(
+    excluding sentinel: String,
+    timings: Timings,
+    deadline: ContinuousClock.Instant
+  ) async throws -> String {
     pasteboard.setString(sentinel)
-    try await Task.sleep(for: timings.copySettleDelay)
+    try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
     try Task.checkCancellation()
 
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
+    let remaining = try remainingDuration(until: deadline)
+    let waitTimeout = minDuration(timings.copyTimeout, remaining)
     return try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,
       excluding: sentinel,
-      timeout: timings.copyTimeout
+      timeout: waitTimeout
     )
   }
 
@@ -262,21 +284,60 @@ final class ToneAnalysisController {
     "GC_COPY_SENTINEL_" + UUID().uuidString
   }
 
-  private func runAnalyzer(_ analyzer: ToneAnalyzer, text: String) async throws -> ToneAnalysisResult {
+  private func runAnalyzer(
+    _ analyzer: ToneAnalyzer,
+    text: String,
+    deadline: ContinuousClock.Instant
+  ) async throws -> ToneAnalysisResult {
+    let remaining = try remainingDuration(until: deadline)
+    let timeoutError = OperationError.timedOut(operationTimeout)
     let task = Task.detached(priority: .userInitiated) {
       try await analyzer.analyze(text)
     }
     currentAnalyzerTask = task
     defer {
       currentAnalyzerTask = nil
+      task.cancel()
     }
     return try await withTaskCancellationHandler {
-      let result = try await task.value
-      // Check for cancellation before returning result
+      let result = try await withThrowingTaskGroup(of: ToneAnalysisResult.self) { group in
+        group.addTask {
+          try await task.value
+        }
+        group.addTask {
+          try await Task.sleep(for: remaining)
+          throw timeoutError
+        }
+
+        guard let output = try await group.next() else {
+          throw timeoutError
+        }
+        group.cancelAll()
+        return output
+      }
       try Task.checkCancellation()
       return result
     } onCancel: {
       task.cancel()
     }
+  }
+
+  private func remainingDuration(until deadline: ContinuousClock.Instant) throws -> Duration {
+    let remaining = deadline - ContinuousClock.now
+    guard remaining > .zero else {
+      throw OperationError.timedOut(operationTimeout)
+    }
+    return remaining
+  }
+
+  private func minDuration(_ lhs: Duration, _ rhs: Duration) -> Duration {
+    lhs < rhs ? lhs : rhs
+  }
+
+  private func sleepRespectingDeadline(_ delay: Duration, until deadline: ContinuousClock.Instant) async throws {
+    let remaining = try remainingDuration(until: deadline)
+    let boundedDelay = minDuration(delay, remaining)
+    try await Task.sleep(for: boundedDelay)
+    _ = try remainingDuration(until: deadline)
   }
 }
