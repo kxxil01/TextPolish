@@ -250,7 +250,10 @@ final class FallbackToneAnalyzer: ToneAnalyzer, DiagnosticsProviderReporting, Re
         case .missingApiKey, .invalidBaseURL, .invalidModelName:
           // Don't fallback on configuration errors
           throw error
-        case .rateLimited, .requestFailed, .emptyResponse, .invalidResponse, .textTooShort, .textTooLong, nil:
+        case .textTooShort, .textTooLong:
+          // Input validation won't be fixed by switching providers.
+          throw error
+        case .rateLimited, .requestFailed, .emptyResponse, .invalidResponse, nil:
           // Fallback on API errors
           break
         }

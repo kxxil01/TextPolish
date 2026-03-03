@@ -87,6 +87,63 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
   }
 
+  func testOpenRouterToneAnalyzerDoesNotRetryOnModelNotFound() async throws {
+    var callCount = 0
+
+    ToneMockURLProtocol.handler = { request in
+      callCount += 1
+      return Self.httpResponse(
+        for: request,
+        statusCode: 404,
+        body: #"{"error":{"message":"No endpoints found for anthropic/claude-3-sonnet.","code":404}}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openRouter,
+      requestTimeoutSeconds: 1,
+      openRouterApiKey: "test",
+      openRouterBaseURL: "https://mock.local"
+    )
+    let analyzer = try OpenRouterToneAnalyzer(settings: settings, session: Self.makeMockSession())
+
+    do {
+      _ = try await analyzer.analyze("This text is long enough.")
+      XCTFail("Expected non-retriable 404 to fail immediately")
+    } catch let error as ToneAnalysisError {
+      guard case .requestFailed(let status, _) = error else {
+        return XCTFail("Expected requestFailed, got \(error)")
+      }
+      XCTAssertEqual(status, 404)
+    }
+
+    XCTAssertEqual(callCount, 1, "404 must fail fast without retries")
+  }
+
+  func testFallbackToneAnalyzerDoesNotFallbackForTextLengthValidation() async throws {
+    let fallbackTracker = ToneCallTracker()
+    let analyzer = FallbackToneAnalyzer(
+      primary: FixedFailureToneAnalyzer(error: ToneAnalysisError.textTooShort),
+      fallback: CountingSuccessToneAnalyzer(tracker: fallbackTracker),
+      primaryProvider: .gemini,
+      primaryModel: "gemini-2.5-flash",
+      fallbackProvider: .openRouter,
+      fallbackModel: "google/gemma-3n-e4b-it:free"
+    )
+
+    do {
+      _ = try await analyzer.analyze("x")
+      XCTFail("Expected textTooShort to be returned without fallback")
+    } catch let error as ToneAnalysisError {
+      guard case .textTooShort = error else {
+        return XCTFail("Expected textTooShort, got \(error)")
+      }
+    }
+
+    let fallbackCalls = await fallbackTracker.value()
+    XCTAssertEqual(fallbackCalls, 0, "Fallback analyzer should not run for text length validation errors")
+  }
+
   @MainActor
   func testToneAnalyzerFactoryFallbackGating() {
     let disabled = Settings(
@@ -144,6 +201,40 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       headerFields: headers
     )!
     return (response, data)
+  }
+}
+
+private actor ToneCallTracker {
+  private var count = 0
+
+  func increment() {
+    count += 1
+  }
+
+  func value() -> Int {
+    count
+  }
+}
+
+private struct FixedFailureToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
+  let error: ToneAnalysisError
+
+  func analyze(_ text: String) async throws -> ToneAnalysisResult {
+    throw error
+  }
+}
+
+private struct CountingSuccessToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
+  let tracker: ToneCallTracker
+
+  func analyze(_ text: String) async throws -> ToneAnalysisResult {
+    await tracker.increment()
+    return ToneAnalysisResult(
+      tone: .neutral,
+      sentiment: .neutral,
+      formality: .casual,
+      explanation: "ok"
+    )
   }
 }
 

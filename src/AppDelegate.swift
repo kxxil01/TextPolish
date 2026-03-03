@@ -920,6 +920,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return baseTimings.applying(profile)
   }
 
+  private func toneTimingsOverride(for app: NSRunningApplication?) -> ToneAnalysisController.Timings? {
+    guard let correctionTimings = timingsOverride(for: app) else { return nil }
+    return ToneAnalysisController.Timings(
+      activationDelay: correctionTimings.activationDelay,
+      copySettleDelay: correctionTimings.copySettleDelay,
+      copyTimeout: correctionTimings.copyTimeout
+    )
+  }
+
   private func runAfterMenuDismissed(_ action: @escaping @MainActor () async -> Void) {
     if isMenuOpen {
       pendingAfterMenuAction = action
@@ -1130,14 +1139,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       self.captureFrontmostApplication()
       let target = self.lastTargetApplication
-      let timings = self.timingsOverride(for: target)
+      let correctionTimings = self.timingsOverride(for: target)
+      let toneTimings = self.toneTimingsOverride(for: target)
       switch id {
       case HotKeyManager.HotKeyID.correctSelection.rawValue:
-        self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
+        self.correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
       case HotKeyManager.HotKeyID.correctAll.rawValue:
-        self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
+        self.correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
       case HotKeyManager.HotKeyID.analyzeTone.rawValue:
-        self.toneAnalysisController?.analyzeSelection(targetApplication: target)
+        self.toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
       default:
         break
       }
@@ -1187,7 +1197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
       let target = self.lastTargetApplication
-      self.toneAnalysisController?.analyzeSelection(targetApplication: target)
+      let toneTimings = self.toneTimingsOverride(for: target)
+      self.toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
     }
   }
 
@@ -1692,10 +1703,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func diagnoseOpenRouter() async -> [String] {
     var lines: [String] = []
     var hasFailure = false
-    let apiKey = currentOpenRouterApiKey()
-    let hasKey = apiKey != nil && !apiKey!.isEmpty
+    guard let apiKey = currentOpenRouterApiKey(), !apiKey.isEmpty else {
+      lines.append("API Key: ✗ Not configured")
+      lines.append("")
+      lines.append("Set your OpenRouter API key in Settings or Keychain.")
+      lines.append("")
+      lines.append("Status: ✗ Not configured")
+      return lines
+    }
 
-    lines.append("API Key: \(hasKey ? "✓ Found" : "○ Not set (using keyless/free)")")
+    lines.append("API Key: ✓ Found")
     lines.append("Current Model: \(settings.openRouterModel)")
     lines.append("")
 
@@ -1720,9 +1737,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // Auto-detect a working free model
       lines.append("")
       lines.append("Probing for a working free model…")
-      let effectiveKey = apiKey ?? ""
       if let working = try await detectWorkingOpenRouterModel(
-        apiKey: effectiveKey,
+        apiKey: apiKey,
         preferFree: true,
         preferredFirst: settings.openRouterModel,
         excluding: nil
@@ -1851,29 +1867,109 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func testGeminiApiKey(apiKey: String, model: String) async throws -> Bool {
     guard let baseURL = URL(string: settings.geminiBaseURL) else { return false }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
+    let normalizedModel = normalizeGeminiModel(model)
+    let versionsToTry = ["v1beta", "v1"]
+
+    for (index, version) in versionsToTry.enumerated() {
+      guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
+      var basePath = components.path
+      if basePath.hasSuffix("/") { basePath.removeLast() }
+      components.path = basePath + "/\(version)/models/\(normalizedModel):generateContent"
+      components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+      guard let url = components.url else { return false }
+
+      var request = URLRequest(url: url, timeoutInterval: 15)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      let body: [String: Any] = [
+        "contents": [["parts": [["text": "Reply OK"]]]],
+        "generationConfig": ["maxOutputTokens": 8],
+      ]
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+      let (_, response) = try await URLSession.shared.data(for: request)
+      guard let http = response as? HTTPURLResponse else { return false }
+      if (200..<300).contains(http.statusCode) {
+        return true
+      }
+      if http.statusCode == 404, index < versionsToTry.count - 1 {
+        continue
+      }
+      return false
+    }
+
+    return false
+  }
+
+  private func makeOpenAIModelsURL() throws -> URL {
+    guard let baseURL = URL(string: settings.openAIBaseURL) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    }
+    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    }
+
     var basePath = components.path
     if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/v1beta/models/\(model):generateContent"
-    components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-    guard let url = components.url else { return false }
+    if basePath.hasSuffix("/chat/completions") {
+      basePath.removeLast("/chat/completions".count)
+    } else if basePath.hasSuffix("/models") {
+      basePath.removeLast("/models".count)
+    }
 
-    var request = URLRequest(url: url, timeoutInterval: 15)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    let body: [String: Any] = [
-      "contents": [["parts": [["text": "Reply OK"]]]],
-      "generationConfig": ["maxOutputTokens": 8],
-    ]
-    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    components.path = basePath.isEmpty ? "/models" : basePath + "/models"
+    guard let url = components.url else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI models URL"])
+    }
+    return url
+  }
 
-    let (_, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else { return false }
-    return (200..<300).contains(http.statusCode)
+  private func makeOpenAIChatCompletionsURLForDiagnostics() throws -> URL {
+    guard let baseURL = URL(string: settings.openAIBaseURL) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    }
+    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    }
+
+    var basePath = components.path
+    if basePath.hasSuffix("/") { basePath.removeLast() }
+    if basePath.hasSuffix("/chat/completions") {
+      basePath.removeLast("/chat/completions".count)
+    }
+
+    components.path = basePath.isEmpty ? "/chat/completions" : basePath + "/chat/completions"
+    guard let url = components.url else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI chat completions URL"])
+    }
+    return url
+  }
+
+  private func makeAnthropicMessagesURLForDiagnostics() throws -> URL {
+    guard let baseURL = URL(string: settings.anthropicBaseURL) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
+    }
+    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
+    }
+
+    var basePath = components.path
+    if basePath.hasSuffix("/") { basePath.removeLast() }
+    if basePath.hasSuffix("/v1/messages") {
+      basePath.removeLast("/v1/messages".count)
+    } else if basePath.hasSuffix("/v1") {
+      basePath.removeLast("/v1".count)
+    }
+
+    components.path = basePath.isEmpty ? "/v1/messages" : basePath + "/v1/messages"
+    guard let url = components.url else {
+      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic messages URL"])
+    }
+    return url
   }
 
   private func fetchOpenAIModels(apiKey: String) async throws -> [String] {
-    let url = URL(string: settings.openAIBaseURL + "/models")!
+    let url = try makeOpenAIModelsURL()
     var request = URLRequest(url: url, timeoutInterval: 15)
     request.httpMethod = "GET"
     request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -1895,7 +1991,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func testOpenAIApiKey(apiKey: String, model: String) async throws -> Bool {
-    let url = URL(string: settings.openAIBaseURL + "/chat/completions")!
+    let url = try makeOpenAIChatCompletionsURLForDiagnostics()
     var request = URLRequest(url: url, timeoutInterval: 15)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1917,7 +2013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func testAnthropicApiKey(apiKey: String, model: String) async throws -> Bool {
-    let url = URL(string: settings.anthropicBaseURL + "/v1/messages")!
+    let url = try makeAnthropicMessagesURLForDiagnostics()
     var request = URLRequest(url: url, timeoutInterval: 15)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")

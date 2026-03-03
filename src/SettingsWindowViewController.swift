@@ -899,8 +899,6 @@ class SettingsWindowViewController: NSViewController {
                 }
             } catch {
                 await MainActor.run {
-                    // Don't show alert in test environment to avoid blocking CI/CD
-                    #if DEBUG
                     if NSClassFromString("XCTestCase") != nil {
                         NSLog("[TextPolish] Gemini model detection error suppressed in test environment: \(error)")
                     } else {
@@ -909,7 +907,6 @@ class SettingsWindowViewController: NSViewController {
                         alert.informativeText = error.localizedDescription
                         alert.runModal()
                     }
-                    #endif
 
                     detectGeminiModelButton.title = "Detect Model"
                     detectGeminiModelButton.isEnabled = true
@@ -941,8 +938,6 @@ class SettingsWindowViewController: NSViewController {
                 }
             } catch {
                 await MainActor.run {
-                    // Don't show alert in test environment to avoid blocking CI/CD
-                    #if DEBUG
                     if NSClassFromString("XCTestCase") != nil {
                         NSLog("[TextPolish] OpenRouter model detection error suppressed in test environment: \(error)")
                     } else {
@@ -951,7 +946,6 @@ class SettingsWindowViewController: NSViewController {
                         alert.informativeText = error.localizedDescription
                         alert.runModal()
                     }
-                    #endif
 
                     detectOpenRouterModelButton.title = "Detect Model"
                     detectOpenRouterModelButton.isEnabled = true
