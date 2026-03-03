@@ -712,9 +712,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var suppressSettingsNotification = false
 
   private func persistSettings() {
+    var normalized = settings
+    normalized.normalizeRuntimeValues()
     do {
       suppressSettingsNotification = true
-      try Settings.saveAndNotify(settings)
+      try Settings.saveAndNotify(normalized)
+      settings = normalized
       suppressSettingsNotification = false
     } catch {
       suppressSettingsNotification = false
@@ -1992,24 +1995,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func testOpenAIApiKey(apiKey: String, model: String) async throws -> Bool {
     let url = try makeOpenAIChatCompletionsURLForDiagnostics()
-    var request = URLRequest(url: url, timeoutInterval: 15)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-    var body: [String: Any] = [
-      "model": model,
-      "messages": [["role": "user", "content": "Reply OK"]],
-    ]
-    if OpenAITokenPolicy.usesMaxCompletionTokens(model: model) {
-      body["max_completion_tokens"] = 8
-    } else {
-      body["max_tokens"] = 8
-    }
-    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+    let tokenStrategies = preferredUsesMaxCompletionTokens ? [true, false] : [false, true]
+    var lastError: Error?
 
-    let (_, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else { return false }
-    return (200..<300).contains(http.statusCode)
+    for (index, useMaxCompletionTokens) in tokenStrategies.enumerated() {
+      var request = URLRequest(url: url, timeoutInterval: 15)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+      var body: [String: Any] = [
+        "model": model,
+        "messages": [["role": "user", "content": "Reply OK"]],
+      ]
+      if useMaxCompletionTokens {
+        body["max_completion_tokens"] = 8
+      } else {
+        body["max_tokens"] = 8
+      }
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+      do {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+          let error = NSError(
+            domain: "TextPolish",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
+          )
+          lastError = error
+          continue
+        }
+
+        if (200..<300).contains(http.statusCode) {
+          return true
+        }
+
+        let message = parseOpenAIErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
+        let error = NSError(
+          domain: "TextPolish",
+          code: http.statusCode,
+          userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
+        )
+        lastError = error
+
+        if index == 0, OpenAITokenPolicy.isTokenParameterError(message: message) {
+          continue
+        }
+        throw error
+      } catch {
+        lastError = error
+        if index == 0, OpenAITokenPolicy.isTokenParameterError(message: error.localizedDescription) {
+          continue
+        }
+        throw error
+      }
+    }
+
+    throw lastError ?? NSError(
+      domain: "TextPolish",
+      code: 0,
+      userInfo: [NSLocalizedDescriptionKey: "OpenAI API key test failed"]
+    )
   }
 
   private func testAnthropicApiKey(apiKey: String, model: String) async throws -> Bool {
@@ -2198,7 +2245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let error: ErrorBody?
   }
 
-  private func parseOpenRouterErrorMessage(data: Data) -> String? {
+  private func parseOpenAIErrorMessage(data: Data) -> String? {
     if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
       let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
       if let message, !message.isEmpty { return message }
@@ -2209,6 +2256,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     return nil
+  }
+
+  private func parseOpenRouterErrorMessage(data: Data) -> String? {
+    parseOpenAIErrorMessage(data: data)
   }
 
   private func makeOpenRouterChatCompletionsURL() throws -> URL {
@@ -2229,7 +2280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func probeOpenRouterModel(apiKey: String, model: String) async throws -> Bool {
     let url = try makeOpenRouterChatCompletionsURL()
-    var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
+    let probeTimeoutSeconds = max(1.0, min(settings.requestTimeoutSeconds, 4.0))
+    var request = URLRequest(url: url, timeoutInterval: probeTimeoutSeconds)
     request.httpMethod = "POST"
     request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
     request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
@@ -2271,14 +2323,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     excluding: String?
   ) async throws -> String? {
     let models = try await fetchOpenRouterModels()
-    let candidates = rankedOpenRouterModels(from: models, preferFree: preferFree, preferredFirst: preferredFirst, excluding: excluding)
-    let limit = min(20, candidates.count)
-
-    for model in candidates.prefix(limit) {
-      let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+    let candidates = rankedOpenRouterModels(
+      from: models,
+      preferFree: preferFree,
+      preferredFirst: preferredFirst,
+      excluding: excluding
+    )
+    var deduplicated: [String] = []
+    var seen = Set<String>()
+    for rawModel in candidates {
+      let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { continue }
-      if try await probeOpenRouterModel(apiKey: apiKey, model: trimmed) {
-        return trimmed
+      let normalized = trimmed.lowercased()
+      guard seen.insert(normalized).inserted else { continue }
+      deduplicated.append(trimmed)
+    }
+
+    let limit = min(6, deduplicated.count)
+    for model in deduplicated.prefix(limit) {
+      if try await probeOpenRouterModel(apiKey: apiKey, model: model) {
+        return model
       }
     }
 

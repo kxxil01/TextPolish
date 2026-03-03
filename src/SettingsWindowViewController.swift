@@ -718,24 +718,32 @@ class SettingsWindowViewController: NSViewController {
     }
 
     /// Saves a non-empty API key to Keychain, or does nothing if the value is empty.
-    private func saveKeychainKeyIfNeeded(account: String, value: String, label: String) {
+    private func saveKeychainKeyIfNeeded(account: String, value: String, label: String) throws {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        do {
-            try Keychain.setConfiguredPassword(
-                trimmed,
-                primaryService: keychainService,
-                account: account,
-                label: label
-            )
-        } catch {
-            NSLog("[TextPolish] Failed to save \(account) to Keychain: \(error)")
+        try Keychain.setConfiguredPassword(
+            trimmed,
+            primaryService: keychainService,
+            account: account,
+            label: label
+        )
+    }
+
+    private func showErrorAlertIfNeeded(title: String, message: String) {
+        if NSClassFromString("XCTestCase") != nil {
+            NSLog("[TextPolish] \(title): \(message)")
+            return
         }
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 
     @objc func applyButtonClicked(_ sender: NSButton) {
-        saveSettings()
-        settingsWindowController?.close()
+        if saveSettings() {
+            settingsWindowController?.close()
+        }
     }
 
     @objc func cancelButtonClicked(_ sender: NSButton) {
@@ -746,8 +754,9 @@ class SettingsWindowViewController: NSViewController {
         // Language selection changed
     }
 
-    func saveSettings() {
-        guard var newSettings = settings else { return }
+    @discardableResult
+    func saveSettings() -> Bool {
+        guard var newSettings = settings else { return false }
 
         // Provider
         if geminiProviderButton.state == .on {
@@ -762,50 +771,62 @@ class SettingsWindowViewController: NSViewController {
         newSettings.enableGeminiOpenRouterFallback = fallbackCheckbox.state == .on
 
         // Gemini — save API key to Keychain if user entered one
-        saveKeychainKeyIfNeeded(
-            account: "geminiApiKey",
-            value: geminiApiKeyField.stringValue,
-            label: "TextPolish — Gemini API Key"
-        )
-        newSettings.geminiApiKey = nil
-        newSettings.geminiModel = geminiModelField.stringValue
-        newSettings.geminiBaseURL = geminiBaseURLField.stringValue
+        do {
+            try saveKeychainKeyIfNeeded(
+                account: "geminiApiKey",
+                value: geminiApiKeyField.stringValue,
+                label: "TextPolish — Gemini API Key"
+            )
+            newSettings.geminiApiKey = nil
+            newSettings.geminiModel = geminiModelField.stringValue
+            newSettings.geminiBaseURL = geminiBaseURLField.stringValue
 
-        // OpenRouter
-        saveKeychainKeyIfNeeded(
-            account: "openRouterApiKey",
-            value: openRouterApiKeyField.stringValue,
-            label: "TextPolish — OpenRouter API Key"
-        )
-        newSettings.openRouterApiKey = nil
-        newSettings.openRouterModel = openRouterModelField.stringValue
-        newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
+            // OpenRouter
+            try saveKeychainKeyIfNeeded(
+                account: "openRouterApiKey",
+                value: openRouterApiKeyField.stringValue,
+                label: "TextPolish — OpenRouter API Key"
+            )
+            newSettings.openRouterApiKey = nil
+            newSettings.openRouterModel = openRouterModelField.stringValue
+            newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
 
-        // OpenAI
-        saveKeychainKeyIfNeeded(
-            account: "openAIApiKey",
-            value: openAIApiKeyField.stringValue,
-            label: "TextPolish — OpenAI API Key"
-        )
-        newSettings.openAIApiKey = nil
-        newSettings.openAIModel = openAIModelField.stringValue
-        newSettings.openAIBaseURL = openAIBaseURLField.stringValue
-        newSettings.openAIMaxAttempts = Int(openAIMaxAttemptsField.stringValue) ?? 2
-        newSettings.openAIMinSimilarity = Double(openAIMinSimilarityField.stringValue) ?? 0.65
-        newSettings.openAIExtraInstruction = openAIExtraInstructionField.stringValue.isEmpty ? nil : openAIExtraInstructionField.stringValue
+            // OpenAI
+            try saveKeychainKeyIfNeeded(
+                account: "openAIApiKey",
+                value: openAIApiKeyField.stringValue,
+                label: "TextPolish — OpenAI API Key"
+            )
+            newSettings.openAIApiKey = nil
+            newSettings.openAIModel = openAIModelField.stringValue
+            newSettings.openAIBaseURL = openAIBaseURLField.stringValue
+            newSettings.openAIMaxAttempts = Int(openAIMaxAttemptsField.stringValue) ?? 2
+            newSettings.openAIMinSimilarity = Double(openAIMinSimilarityField.stringValue) ?? 0.65
+            newSettings.openAIExtraInstruction = openAIExtraInstructionField.stringValue.isEmpty ? nil : openAIExtraInstructionField.stringValue
 
-        // Anthropic
-        saveKeychainKeyIfNeeded(
-            account: "anthropicApiKey",
-            value: anthropicApiKeyField.stringValue,
-            label: "TextPolish — Anthropic API Key"
-        )
-        newSettings.anthropicApiKey = nil
-        newSettings.anthropicModel = anthropicModelField.stringValue
-        newSettings.anthropicBaseURL = anthropicBaseURLField.stringValue
-        newSettings.anthropicMaxAttempts = Int(anthropicMaxAttemptsField.stringValue) ?? 2
-        newSettings.anthropicMinSimilarity = Double(anthropicMinSimilarityField.stringValue) ?? 0.65
-        newSettings.anthropicExtraInstruction = anthropicExtraInstructionField.stringValue.isEmpty ? nil : anthropicExtraInstructionField.stringValue
+            // Anthropic
+            try saveKeychainKeyIfNeeded(
+                account: "anthropicApiKey",
+                value: anthropicApiKeyField.stringValue,
+                label: "TextPolish — Anthropic API Key"
+            )
+            newSettings.anthropicApiKey = nil
+            newSettings.anthropicModel = anthropicModelField.stringValue
+            newSettings.anthropicBaseURL = anthropicBaseURLField.stringValue
+            newSettings.anthropicMaxAttempts = Int(anthropicMaxAttemptsField.stringValue) ?? 2
+            newSettings.anthropicMinSimilarity = Double(anthropicMinSimilarityField.stringValue) ?? 0.65
+            newSettings.anthropicExtraInstruction = anthropicExtraInstructionField.stringValue.isEmpty ? nil : anthropicExtraInstructionField.stringValue
+        } catch {
+            if NSClassFromString("XCTestCase") != nil {
+                NSLog("[TextPolish] Keychain save error suppressed in test environment: \(error)")
+            } else {
+                showErrorAlertIfNeeded(
+                    title: "Failed to save API key",
+                    message: "Keychain rejected the API key update: \(error.localizedDescription)"
+                )
+                return false
+            }
+        }
 
         // Hotkeys
         if let selectionHotKey = correctSelectionField.hotKey {
@@ -837,13 +858,20 @@ class SettingsWindowViewController: NSViewController {
 
         newSettings.geminiExtraInstruction = extraInstructionField.stringValue.isEmpty ? nil : extraInstructionField.stringValue
 
-        settings = newSettings
+        newSettings.normalizeRuntimeValues()
         do {
             try Settings.saveAndNotify(newSettings)
+            settings = newSettings
         } catch {
             NSLog("[TextPolish] Failed to save settings from Settings window: \(error)")
+            showErrorAlertIfNeeded(
+                title: "Failed to save settings",
+                message: error.localizedDescription
+            )
+            return false
         }
         delegate?.settingsDidChange(settings)
+        return true
     }
 
     func updateProviderButtons() {

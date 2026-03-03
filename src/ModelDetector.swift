@@ -24,11 +24,16 @@ enum ModelDetector {
             throw DetectorError.requestFailed("Invalid base URL")
         }
 
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw DetectorError.requestFailed("Invalid base URL")
+        }
         components.path = "/v1beta/models"
         components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        guard let requestURL = components.url else {
+            throw DetectorError.requestFailed("Invalid Gemini models URL")
+        }
 
-        var request = URLRequest(url: components.url!)
+        var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
         request.setValue("TextPolish/1.0", forHTTPHeaderField: "User-Agent")
 
@@ -72,7 +77,9 @@ enum ModelDetector {
             throw DetectorError.noApiKey
         }
 
-        let url = URL(string: "https://openrouter.ai/api/v1/models")!
+        guard let url = URL(string: "https://openrouter.ai/api/v1/models") else {
+            throw DetectorError.requestFailed("Invalid OpenRouter models URL")
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -92,7 +99,9 @@ enum ModelDetector {
             let decoded = try JSONDecoder().decode(OpenRouterModelsResponse.self, from: data)
 
             // Prefer lightweight free models, then any free model.
-            let freeModels = decoded.data?.filter { $0.pricing?.prompt == "0" && $0.pricing?.completion == "0" } ?? []
+            let freeModels = decoded.data?.filter {
+                isFreePrice($0.pricing?.prompt) && isFreePrice($0.pricing?.completion)
+            } ?? []
             if let preferredLightFree = freeModels.first(where: {
                 let id = $0.id.lowercased()
                 return id.contains("mini") || id.contains("lite") || id.contains("flash") || id.contains("4b") || id.contains("3b")
@@ -131,5 +140,20 @@ enum ModelDetector {
             let completion: String?
         }
         let data: [Model]?
+    }
+
+    private static func isFreePrice(_ value: String?) -> Bool {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return false }
+        if trimmed == "0" || trimmed == "0.0" || trimmed == "0.00" {
+            return true
+        }
+        if let decimal = Decimal(string: trimmed), decimal <= 0 {
+            return true
+        }
+        if let numeric = Double(trimmed), numeric <= 0 {
+            return true
+        }
+        return false
     }
 }

@@ -300,6 +300,18 @@ struct Settings: Codable {
   var anthropicMinSimilarity: Double
   var anthropicExtraInstruction: String?
 
+  private enum Defaults {
+    static let requestTimeoutSeconds: Double = 20
+    static let geminiModel = "gemini-2.5-flash"
+    static let geminiBaseURL = "https://generativelanguage.googleapis.com"
+    static let openRouterModel = "google/gemma-3n-e4b-it:free"
+    static let openRouterBaseURL = "https://openrouter.ai/api/v1"
+    static let openAIModel = "gpt-5-mini"
+    static let openAIBaseURL = "https://api.openai.com/v1"
+    static let anthropicModel = "claude-haiku-4-5"
+    static let anthropicBaseURL = "https://api.anthropic.com"
+  }
+
   init(
     provider: Provider = .gemini,
     requestTimeoutSeconds: Double = 20,
@@ -378,12 +390,13 @@ struct Settings: Codable {
     self.anthropicMaxAttempts = anthropicMaxAttempts
     self.anthropicMinSimilarity = anthropicMinSimilarity
     self.anthropicExtraInstruction = anthropicExtraInstruction
+    normalizeRuntimeValues()
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     provider = try container.decodeIfPresent(Provider.self, forKey: .provider) ?? .gemini
-    requestTimeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .requestTimeoutSeconds) ?? 20
+    requestTimeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .requestTimeoutSeconds) ?? Defaults.requestTimeoutSeconds
     activationDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .activationDelayMilliseconds) ?? 80
     selectAllDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .selectAllDelayMilliseconds) ?? 60
     copySettleDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .copySettleDelayMilliseconds) ?? 20
@@ -400,32 +413,32 @@ struct Settings: Codable {
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
       ?? false
     geminiApiKey = try container.decodeIfPresent(String.self, forKey: .geminiApiKey)
-    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? "gemini-2.5-flash"
+    geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? Defaults.geminiModel
     geminiBaseURL =
-      try container.decodeIfPresent(String.self, forKey: .geminiBaseURL) ?? "https://generativelanguage.googleapis.com"
+      try container.decodeIfPresent(String.self, forKey: .geminiBaseURL) ?? Defaults.geminiBaseURL
     geminiMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .geminiMaxAttempts) ?? 2
     geminiMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .geminiMinSimilarity) ?? 0.65
     geminiExtraInstruction = try container.decodeIfPresent(String.self, forKey: .geminiExtraInstruction)
     openRouterApiKey = try container.decodeIfPresent(String.self, forKey: .openRouterApiKey)
     openRouterModel =
-      try container.decodeIfPresent(String.self, forKey: .openRouterModel) ?? "google/gemma-3n-e4b-it:free"
-    openRouterBaseURL = try container.decodeIfPresent(String.self, forKey: .openRouterBaseURL) ?? "https://openrouter.ai/api/v1"
+      try container.decodeIfPresent(String.self, forKey: .openRouterModel) ?? Defaults.openRouterModel
+    openRouterBaseURL = try container.decodeIfPresent(String.self, forKey: .openRouterBaseURL) ?? Defaults.openRouterBaseURL
     openRouterMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openRouterMaxAttempts) ?? 2
     openRouterMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openRouterMinSimilarity) ?? 0.65
     openRouterExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openRouterExtraInstruction)
     openAIApiKey = try container.decodeIfPresent(String.self, forKey: .openAIApiKey)
-    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-5-mini"
-    openAIBaseURL = try container.decodeIfPresent(String.self, forKey: .openAIBaseURL) ?? "https://api.openai.com/v1"
+    openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? Defaults.openAIModel
+    openAIBaseURL = try container.decodeIfPresent(String.self, forKey: .openAIBaseURL) ?? Defaults.openAIBaseURL
     openAIMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .openAIMaxAttempts) ?? 2
     openAIMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .openAIMinSimilarity) ?? 0.65
     openAIExtraInstruction = try container.decodeIfPresent(String.self, forKey: .openAIExtraInstruction)
     anthropicApiKey = try container.decodeIfPresent(String.self, forKey: .anthropicApiKey)
-    anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? "claude-haiku-4-5"
-    anthropicBaseURL = try container.decodeIfPresent(String.self, forKey: .anthropicBaseURL) ?? "https://api.anthropic.com"
+    anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? Defaults.anthropicModel
+    anthropicBaseURL = try container.decodeIfPresent(String.self, forKey: .anthropicBaseURL) ?? Defaults.anthropicBaseURL
     anthropicMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .anthropicMaxAttempts) ?? 2
     anthropicMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .anthropicMinSimilarity) ?? 0.65
     anthropicExtraInstruction = try container.decodeIfPresent(String.self, forKey: .anthropicExtraInstruction)
-    migrateDeprecatedModels()
+    normalizeRuntimeValues()
   }
 
   func encode(to encoder: Encoder) throws {
@@ -472,7 +485,7 @@ struct Settings: Codable {
   }
 
   mutating func migrateDeprecatedModels() {
-    let openRouterDefaultModel = "google/gemma-3n-e4b-it:free"
+    let openRouterDefaultModel = Defaults.openRouterModel
 
     let trimmedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalizedGeminiModel: String = {
@@ -510,6 +523,90 @@ struct Settings: Codable {
     if normalizedOpenRouterModel.isEmpty || deprecatedOpenRouterModels.contains(normalizedOpenRouterModel) {
       openRouterModel = openRouterDefaultModel
     }
+  }
+
+  mutating func normalizeRuntimeValues() {
+    requestTimeoutSeconds = Self.clampedFinite(
+      requestTimeoutSeconds,
+      min: 1,
+      max: 120,
+      fallback: Defaults.requestTimeoutSeconds
+    )
+
+    activationDelayMilliseconds = max(0, activationDelayMilliseconds)
+    selectAllDelayMilliseconds = max(0, selectAllDelayMilliseconds)
+    copySettleDelayMilliseconds = max(0, copySettleDelayMilliseconds)
+    copyTimeoutMilliseconds = max(100, copyTimeoutMilliseconds)
+    pasteSettleDelayMilliseconds = max(0, pasteSettleDelayMilliseconds)
+    postPasteDelayMilliseconds = max(0, postPasteDelayMilliseconds)
+
+    geminiMaxAttempts = Self.clamped(geminiMaxAttempts, min: 1, max: 8)
+    openRouterMaxAttempts = Self.clamped(openRouterMaxAttempts, min: 1, max: 8)
+    openAIMaxAttempts = Self.clamped(openAIMaxAttempts, min: 1, max: 8)
+    anthropicMaxAttempts = Self.clamped(anthropicMaxAttempts, min: 1, max: 8)
+
+    geminiMinSimilarity = Self.clampedFinite(geminiMinSimilarity, min: 0, max: 1, fallback: 0.65)
+    openRouterMinSimilarity = Self.clampedFinite(openRouterMinSimilarity, min: 0, max: 1, fallback: 0.65)
+    openAIMinSimilarity = Self.clampedFinite(openAIMinSimilarity, min: 0, max: 1, fallback: 0.65)
+    anthropicMinSimilarity = Self.clampedFinite(anthropicMinSimilarity, min: 0, max: 1, fallback: 0.65)
+
+    geminiApiKey = Self.nilIfEmpty(geminiApiKey)
+    openRouterApiKey = Self.nilIfEmpty(openRouterApiKey)
+    openAIApiKey = Self.nilIfEmpty(openAIApiKey)
+    anthropicApiKey = Self.nilIfEmpty(anthropicApiKey)
+
+    geminiModel = Self.trimmed(geminiModel)
+    if geminiModel.lowercased().hasPrefix("models/") {
+      geminiModel = String(geminiModel.dropFirst("models/".count))
+    }
+    if geminiModel.isEmpty { geminiModel = Defaults.geminiModel }
+
+    openRouterModel = Self.trimmed(openRouterModel)
+    if openRouterModel.isEmpty { openRouterModel = Defaults.openRouterModel }
+
+    openAIModel = Self.trimmed(openAIModel)
+    if openAIModel.isEmpty { openAIModel = Defaults.openAIModel }
+
+    anthropicModel = Self.trimmed(anthropicModel)
+    if anthropicModel.isEmpty { anthropicModel = Defaults.anthropicModel }
+
+    geminiBaseURL = Self.validatedURLString(geminiBaseURL, fallback: Defaults.geminiBaseURL)
+    openRouterBaseURL = Self.validatedURLString(openRouterBaseURL, fallback: Defaults.openRouterBaseURL)
+    openAIBaseURL = Self.validatedURLString(openAIBaseURL, fallback: Defaults.openAIBaseURL)
+    anthropicBaseURL = Self.validatedURLString(anthropicBaseURL, fallback: Defaults.anthropicBaseURL)
+
+    geminiExtraInstruction = Self.nilIfEmpty(geminiExtraInstruction)
+    openRouterExtraInstruction = Self.nilIfEmpty(openRouterExtraInstruction)
+    openAIExtraInstruction = Self.nilIfEmpty(openAIExtraInstruction)
+    anthropicExtraInstruction = Self.nilIfEmpty(anthropicExtraInstruction)
+
+    migrateDeprecatedModels()
+  }
+
+  private static func clamped(_ value: Int, min lowerBound: Int, max upperBound: Int) -> Int {
+    Swift.max(lowerBound, Swift.min(upperBound, value))
+  }
+
+  private static func clampedFinite(_ value: Double, min lowerBound: Double, max upperBound: Double, fallback: Double) -> Double {
+    guard value.isFinite else { return fallback }
+    return Swift.max(lowerBound, Swift.min(upperBound, value))
+  }
+
+  private static func trimmed(_ value: String?) -> String {
+    value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  }
+
+  private static func nilIfEmpty(_ value: String?) -> String? {
+    let trimmedValue = trimmed(value)
+    return trimmedValue.isEmpty ? nil : trimmedValue
+  }
+
+  private static func validatedURLString(_ value: String, fallback: String) -> String {
+    let trimmedValue = trimmed(value)
+    guard !trimmedValue.isEmpty, URL(string: trimmedValue) != nil else {
+      return fallback
+    }
+    return trimmedValue
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -611,19 +708,27 @@ struct Settings: Codable {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    let data = try encoder.encode(settings)
+    var normalized = settings
+    normalized.normalizeRuntimeValues()
+    let data = try encoder.encode(normalized)
     try data.write(to: url, options: [.atomic])
   }
 
   static func settingsFileURL() -> URL {
-    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        .appendingPathComponent("Library", isDirectory: true)
+        .appendingPathComponent("Application Support", isDirectory: true)
     return base
       .appendingPathComponent(appSupportFolderName, isDirectory: true)
       .appendingPathComponent("settings.json", isDirectory: false)
   }
 
   static func legacySettingsFileURL() -> URL {
-    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        .appendingPathComponent("Library", isDirectory: true)
+        .appendingPathComponent("Application Support", isDirectory: true)
     return base
       .appendingPathComponent(legacyAppSupportFolderName, isDirectory: true)
       .appendingPathComponent("settings.json", isDirectory: false)

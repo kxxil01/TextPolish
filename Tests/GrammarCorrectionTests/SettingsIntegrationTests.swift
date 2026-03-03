@@ -164,7 +164,11 @@ final class SettingsIntegrationTests: XCTestCase {
 
         // Then
         XCTAssertNil(settingsWindowViewController?.settings.openRouterApiKey, "OpenRouter API key should not be persisted in settings")
-        XCTAssertEqual(settingsWindowViewController?.settings.openRouterModel, testModel, "OpenRouter model should be updated")
+        XCTAssertEqual(
+            settingsWindowViewController?.settings.openRouterModel,
+            "google/gemma-3n-e4b-it:free",
+            "Deprecated OpenRouter model should be migrated to default free model"
+        )
     }
 
     func testTabSwitching() {

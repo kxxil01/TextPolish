@@ -171,68 +171,54 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }
+    let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
 
     for attempt in 0..<maxNetworkAttempts {
-      let url = try makeChatCompletionsURL()
-      var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-      request.httpMethod = "POST"
-      request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-      request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-      let body = OpenAIChatCompletionsRequest(
-        model: model,
-        messages: [
-          .init(role: "user", content: prompt),
-        ],
-        temperature: 0.0,
-        maxTokens: 1024
-      )
-      request.httpBody = try JSONEncoder().encode(body)
-
       do {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-          let error = OpenAIError.requestFailed(-1, nil)
-          lastError = error
-          if attempt < maxNetworkAttempts - 1 {
-            retryCount += 1
-            try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
-            continue
+        do {
+          return try await sendRequest(
+            prompt: prompt,
+            apiKey: apiKey,
+            useMaxCompletionTokens: preferredUsesMaxCompletionTokens
+          )
+        } catch let preferredError as OpenAIError {
+          if case .requestFailed(let status, let message) = preferredError,
+             status == 400,
+             OpenAITokenPolicy.isTokenParameterError(message: message)
+          {
+            return try await sendRequest(
+              prompt: prompt,
+              apiKey: apiKey,
+              useMaxCompletionTokens: !preferredUsesMaxCompletionTokens
+            )
           }
-          throw error
+          throw preferredError
         }
-
-        if (200..<300).contains(http.statusCode) {
-          let decoded = try JSONDecoder().decode(OpenAIChatCompletionsResponse.self, from: data)
-          let content = decoded.choices?.first?.message?.content ?? ""
-          return content
-        }
-
-        let message = parseErrorMessage(data: data)
-        NSLog("[TextPolish] OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
-
-        if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
-          lastError = OpenAIError.requestFailed(http.statusCode, message)
-          let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
-            ?? retryPolicy.retryDelaySeconds(attempt: attempt)
-          let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryAfter))
-          continue
-        }
-
-        if (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
-          lastError = OpenAIError.requestFailed(http.statusCode, message)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
-          continue
-        }
-
-        throw OpenAIError.requestFailed(http.statusCode, message)
       } catch {
         if error is CancellationError { throw error }
-        if let openAIError = error as? OpenAIError { throw openAIError }
+        if let openAIError = error as? OpenAIError {
+          switch openAIError {
+          case .requestFailed(let status, _):
+            if status == 429, attempt < maxNetworkAttempts - 1 {
+              lastError = openAIError
+              let retryAfter = retryPolicy.clampedRateLimitBackoff(
+                retryPolicy.retryDelaySeconds(attempt: attempt)
+              )
+              retryCount += 1
+              try await Task.sleep(for: .seconds(retryAfter))
+              continue
+            }
+            if (500...599).contains(status), attempt < maxNetworkAttempts - 1 {
+              lastError = openAIError
+              retryCount += 1
+              try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
+              continue
+            }
+            throw openAIError
+          default:
+            throw openAIError
+          }
+        }
 
         let wrapped = OpenAIError.requestFailed(-1, error.localizedDescription)
         lastError = wrapped
@@ -246,6 +232,45 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
 
     throw lastError ?? OpenAIError.requestFailed(-1, nil)
+  }
+
+  private func sendRequest(
+    prompt: String,
+    apiKey: String,
+    useMaxCompletionTokens: Bool
+  ) async throws -> String {
+    let url = try makeChatCompletionsURL()
+    var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+    request.httpMethod = "POST"
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+    let body = OpenAIChatCompletionsRequest(
+      model: model,
+      messages: [
+        .init(role: "user", content: prompt),
+      ],
+      temperature: 0.0,
+      maxTokens: 1024,
+      useMaxCompletionTokens: useMaxCompletionTokens
+    )
+    request.httpBody = try JSONEncoder().encode(body)
+
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw OpenAIError.requestFailed(-1, nil)
+    }
+
+    if (200..<300).contains(http.statusCode) {
+      let decoded = try JSONDecoder().decode(OpenAIChatCompletionsResponse.self, from: data)
+      let content = decoded.choices?.first?.message?.content ?? ""
+      return content
+    }
+
+    let message = parseErrorMessage(data: data)
+    NSLog("[TextPolish] OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    throw OpenAIError.requestFailed(http.statusCode, message)
   }
 
   private struct OpenAIErrorEnvelope: Decodable {
@@ -321,13 +346,28 @@ private struct OpenAIChatCompletionsRequest: Encodable {
   let messages: [Message]
   let temperature: Double
   let maxTokens: Int
+  let useMaxCompletionTokens: Bool
+
+  init(
+    model: String,
+    messages: [Message],
+    temperature: Double,
+    maxTokens: Int,
+    useMaxCompletionTokens: Bool? = nil
+  ) {
+    self.model = model
+    self.messages = messages
+    self.temperature = temperature
+    self.maxTokens = maxTokens
+    self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+  }
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
     try container.encode(temperature, forKey: .temperature)
-    if OpenAITokenPolicy.usesMaxCompletionTokens(model: model) {
+    if useMaxCompletionTokens {
       try container.encode(maxTokens, forKey: .maxCompletionTokens)
     } else {
       try container.encode(maxTokens, forKey: .maxTokens)

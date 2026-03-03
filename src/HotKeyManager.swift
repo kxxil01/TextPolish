@@ -131,7 +131,7 @@ final class HotKeyManager {
         if getStatus == noErr {
           let id = Int(hotKeyID.id)
           MainActor.assumeIsolated {
-            let pointer = UnsafeMutableRawPointer(bitPattern: userDataValue)!
+            guard let pointer = UnsafeMutableRawPointer(bitPattern: userDataValue) else { return }
             let manager = Unmanaged<HotKeyManager>.fromOpaque(pointer).takeUnretainedValue()
             manager.onHotKey?(id)
           }

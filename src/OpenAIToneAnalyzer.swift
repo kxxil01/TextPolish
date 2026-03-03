@@ -112,58 +112,47 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private func generate(prompt: String, apiKey: String) async throws -> String {
     var retryCount = 0
     defer { lastRetryCount = retryCount }
+    let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
 
     for attempt in 0..<retryPolicy.maxNetworkAttempts {
       do {
-        let url = try makeChatCompletionsURL()
-        var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-        request.httpMethod = "POST"
-        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-        let body = OpenAIToneRequest(
-          model: model,
-          messages: [
-            .init(role: "user", content: prompt),
-          ],
-          temperature: 0.0,
-          maxTokens: config.maxOutputTokens
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-          throw ToneAnalysisError.requestFailed(-1, nil)
+        do {
+          return try await sendRequest(
+            prompt: prompt,
+            apiKey: apiKey,
+            useMaxCompletionTokens: preferredUsesMaxCompletionTokens
+          )
+        } catch let preferredError as ToneAnalysisError {
+          if case .requestFailed(let status, let message) = preferredError,
+             status == 400,
+             OpenAITokenPolicy.isTokenParameterError(message: message)
+          {
+            return try await sendRequest(
+              prompt: prompt,
+              apiKey: apiKey,
+              useMaxCompletionTokens: !preferredUsesMaxCompletionTokens
+            )
+          }
+          throw preferredError
         }
-
-        if (200..<300).contains(http.statusCode) {
-          let decoded = try JSONDecoder().decode(OpenAIToneResponse.self, from: data)
-          let content = decoded.choices?.first?.message?.content ?? ""
-          guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
-          return content
-        }
-
-        let message = parseErrorMessage(data: data)
-        NSLog("[TextPolish] OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
-
-        let canRetry = attempt < retryPolicy.maxNetworkAttempts - 1
-        if canRetry && (http.statusCode == 429 || (500...599).contains(http.statusCode)) {
-          let retryAfterRaw = http.statusCode == 429
-            ? (RetryAfterParser.retryAfterSeconds(from: http, data: data)
-                ?? retryPolicy.retryDelaySeconds(attempt: attempt))
-            : retryPolicy.retryDelaySeconds(attempt: attempt)
-          let retryAfter = http.statusCode == 429
-            ? retryPolicy.clampedRateLimitBackoff(retryAfterRaw)
-            : retryAfterRaw
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryAfter))
-          continue
-        }
-
-        throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
         if error is CancellationError { throw error }
+        if case ToneAnalysisError.requestFailed(let status, _) = error {
+          let canRetry = attempt < retryPolicy.maxNetworkAttempts - 1
+          if canRetry && status == 429 {
+            retryCount += 1
+            let retryAfter = retryPolicy.clampedRateLimitBackoff(
+              retryPolicy.retryDelaySeconds(attempt: attempt)
+            )
+            try await Task.sleep(for: .seconds(retryAfter))
+            continue
+          }
+          if canRetry && (500...599).contains(status) {
+            retryCount += 1
+            try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
+            continue
+          }
+        }
         if case ToneAnalysisError.requestFailed(let status, _) = error,
            (400..<500).contains(status), status != 429
         {
@@ -178,6 +167,46 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     }
 
     throw ToneAnalysisError.requestFailed(-1, nil)
+  }
+
+  private func sendRequest(
+    prompt: String,
+    apiKey: String,
+    useMaxCompletionTokens: Bool
+  ) async throws -> String {
+    let url = try makeChatCompletionsURL()
+    var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+    request.httpMethod = "POST"
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+    let body = OpenAIToneRequest(
+      model: model,
+      messages: [
+        .init(role: "user", content: prompt),
+      ],
+      temperature: 0.0,
+      maxTokens: config.maxOutputTokens,
+      useMaxCompletionTokens: useMaxCompletionTokens
+    )
+    request.httpBody = try JSONEncoder().encode(body)
+
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw ToneAnalysisError.requestFailed(-1, nil)
+    }
+
+    if (200..<300).contains(http.statusCode) {
+      let decoded = try JSONDecoder().decode(OpenAIToneResponse.self, from: data)
+      let content = decoded.choices?.first?.message?.content ?? ""
+      guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
+      return content
+    }
+
+    let message = parseErrorMessage(data: data)
+    NSLog("[TextPolish] OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    throw ToneAnalysisError.requestFailed(http.statusCode, message)
   }
 
   private struct OpenAIErrorEnvelopeTone: Decodable {
@@ -232,13 +261,28 @@ private struct OpenAIToneRequest: Encodable {
   let messages: [Message]
   let temperature: Double
   let maxTokens: Int
+  let useMaxCompletionTokens: Bool
+
+  init(
+    model: String,
+    messages: [Message],
+    temperature: Double,
+    maxTokens: Int,
+    useMaxCompletionTokens: Bool? = nil
+  ) {
+    self.model = model
+    self.messages = messages
+    self.temperature = temperature
+    self.maxTokens = maxTokens
+    self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+  }
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
     try container.encode(temperature, forKey: .temperature)
-    if OpenAITokenPolicy.usesMaxCompletionTokens(model: model) {
+    if useMaxCompletionTokens {
       try container.encode(maxTokens, forKey: .maxCompletionTokens)
     } else {
       try container.encode(maxTokens, forKey: .maxTokens)

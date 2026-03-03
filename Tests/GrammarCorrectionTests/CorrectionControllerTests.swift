@@ -346,7 +346,7 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertEqual(timings.activationDelay, .milliseconds(10))
     XCTAssertEqual(timings.selectAllDelay, .milliseconds(20))
     XCTAssertEqual(timings.copySettleDelay, .milliseconds(30))
-    XCTAssertEqual(timings.copyTimeout, .milliseconds(40))
+    XCTAssertEqual(timings.copyTimeout, .milliseconds(100))
     XCTAssertEqual(timings.pasteSettleDelay, .milliseconds(50))
     XCTAssertEqual(timings.postPasteDelay, .milliseconds(60))
   }
@@ -366,7 +366,7 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertEqual(timings.activationDelay, .milliseconds(0))
     XCTAssertEqual(timings.selectAllDelay, .milliseconds(0))
     XCTAssertEqual(timings.copySettleDelay, .milliseconds(0))
-    XCTAssertEqual(timings.copyTimeout, .milliseconds(0))
+    XCTAssertEqual(timings.copyTimeout, .milliseconds(100))
     XCTAssertEqual(timings.pasteSettleDelay, .milliseconds(0))
     XCTAssertEqual(timings.postPasteDelay, .milliseconds(0))
   }

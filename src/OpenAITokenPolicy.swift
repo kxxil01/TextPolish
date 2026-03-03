@@ -14,5 +14,16 @@ enum OpenAITokenPolicy {
 
     return false
   }
-}
 
+  static func isTokenParameterError(message: String?) -> Bool {
+    let lowered = message?.lowercased() ?? ""
+    guard !lowered.isEmpty else { return false }
+    if lowered.contains("max_tokens") || lowered.contains("max completion tokens") || lowered.contains("max_completion_tokens") {
+      return true
+    }
+    if lowered.contains("unknown parameter") || lowered.contains("unsupported parameter") {
+      return true
+    }
+    return false
+  }
+}
