@@ -125,7 +125,6 @@ final class ModelDetectorTests: XCTestCase {
     func testDetectOpenRouterModelHandlesHTTPError() async {
         // Given
         let invalidApiKey = "invalid-key"
-        let baseURL = "https://openrouter.ai/api/v1"
 
         // When & Then
         do {
@@ -231,6 +230,39 @@ final class ModelDetectorTests: XCTestCase {
         XCTAssertNotNil(preferred, "Should find preferred model")
     }
 
+    func testMakeGeminiModelsURLPreservesCustomBasePath() throws {
+        let url = try ModelDetector.makeGeminiModelsURL(
+            baseURL: "https://gateway.example.com/googleai",
+            apiKey: "test-key"
+        )
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://gateway.example.com/googleai/v1beta/models?key=test-key",
+            "Should preserve configured path prefix when building Gemini models URL"
+        )
+    }
+
+    func testMakeGeminiModelsURLDoesNotDuplicateV1BetaPath() throws {
+        let url = try ModelDetector.makeGeminiModelsURL(
+            baseURL: "https://gateway.example.com/googleai/v1beta",
+            apiKey: "test-key"
+        )
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://gateway.example.com/googleai/v1beta/models?key=test-key",
+            "Should append models endpoint without duplicating v1beta segment"
+        )
+    }
+
+    func testSelectPreferredGeminiModelNormalizesModelsPrefix() {
+        let models = [
+            ModelDetector.GeminiModelsResponse.Model(name: "models/gemini-1.5-pro"),
+            ModelDetector.GeminiModelsResponse.Model(name: "models/gemini-2.5-flash")
+        ]
+        let selected = ModelDetector.selectPreferredGeminiModel(from: models)
+        XCTAssertEqual(selected, "gemini-2.5-flash", "Should normalize models/ prefix and choose preferred model")
+    }
+
     func testOpenRouterFreeModelSelection() throws {
         // Given - simulates API response with free model
         let json = """
@@ -261,14 +293,6 @@ final class ModelDetectorTests: XCTestCase {
         let freeModel = response.data?.first(where: { $0.pricing?.prompt == "0" && $0.pricing?.completion == "0" })
         XCTAssertNotNil(freeModel, "Should find free model")
         XCTAssertEqual(freeModel?.id, "anthropic/claude-3-haiku", "Should select correct free model")
-    }
-
-    // MARK: - Integration Tests
-
-    func testModelDetectorConformance() {
-        // Test that the types conform to expected protocols
-        XCTAssertTrue(ModelDetector.DetectorError.self is Error.Type, "DetectorError should be an Error type")
-        XCTAssertTrue(ModelDetector.DetectorError.self is LocalizedError.Type, "DetectorError should conform to LocalizedError")
     }
 
     func testEmptyModelsResponse() throws {

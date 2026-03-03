@@ -10,6 +10,7 @@ class KeyComboField: NSView {
 
     public let textField = NSTextField()
     private var isRecording = false
+    private var keyDownMonitor: Any?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -51,13 +52,14 @@ class KeyComboField: NSView {
     }
 
     private func startRecording() {
+        removeKeyMonitorIfNeeded()
         isRecording = true
         textField.stringValue = "Press keys..."
         textField.textColor = .systemBlue
         layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.1).cgColor
 
         // Capture key events
-        NSEvent.addLocalMonitorForEvents(matching: NSEvent.EventTypeMask.keyDown) { [weak self] event in
+        keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: NSEvent.EventTypeMask.keyDown) { [weak self] event in
             guard let self = self, self.isRecording else { return event }
 
             if event.keyCode == 53 { // Escape key
@@ -72,8 +74,16 @@ class KeyComboField: NSView {
 
     private func stopRecording() {
         isRecording = false
+        removeKeyMonitorIfNeeded()
         layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         updateDisplay()
+    }
+
+    private func removeKeyMonitorIfNeeded() {
+        if let monitor = keyDownMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyDownMonitor = nil
+        }
     }
 
     private func handleKeyEvent(_ event: NSEvent) {
@@ -100,7 +110,15 @@ class KeyComboField: NSView {
         textField.textColor = .labelColor
     }
 
+    var hasActiveKeyDownMonitor: Bool {
+        keyDownMonitor != nil
+    }
+
     func loadFromHotKey(_ hotKey: Settings.HotKey) {
         self.hotKey = hotKey
+    }
+
+    deinit {
+        removeKeyMonitorIfNeeded()
     }
 }

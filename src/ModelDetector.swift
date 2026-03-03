@@ -19,19 +19,7 @@ enum ModelDetector {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DetectorError.noApiKey
         }
-
-        guard let url = URL(string: baseURL) else {
-            throw DetectorError.requestFailed("Invalid base URL")
-        }
-
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            throw DetectorError.requestFailed("Invalid base URL")
-        }
-        components.path = "/v1beta/models"
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        guard let requestURL = components.url else {
-            throw DetectorError.requestFailed("Invalid Gemini models URL")
-        }
+        let requestURL = try makeGeminiModelsURL(baseURL: baseURL, apiKey: apiKey)
 
         var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
@@ -50,18 +38,8 @@ enum ModelDetector {
 
             let decoded = try JSONDecoder().decode(GeminiModelsResponse.self, from: data)
 
-            // Prefer stable lightweight Gemini models first, then any flash model.
-            if let preferred = decoded.models?.first(where: { $0.name == "gemini-2.5-flash" }) {
-                return preferred.name
-            }
-            if let preferredLite = decoded.models?.first(where: { $0.name == "gemini-2.5-flash-lite" }) {
-                return preferredLite.name
-            }
-            if let flash = decoded.models?.first(where: { $0.name.contains("flash") && !$0.name.contains("preview") && !$0.name.contains("exp") }) {
-                return flash.name
-            }
-            if let first = decoded.models?.first {
-                return first.name
+            if let selectedModel = selectPreferredGeminiModel(from: decoded.models ?? []) {
+                return selectedModel
             }
 
             throw DetectorError.requestFailed("No models found")
@@ -70,6 +48,49 @@ enum ModelDetector {
         } catch {
             throw DetectorError.requestFailed(error.localizedDescription)
         }
+    }
+
+    static func makeGeminiModelsURL(baseURL: String, apiKey: String) throws -> URL {
+        guard let url = URL(string: baseURL) else {
+            throw DetectorError.requestFailed("Invalid base URL")
+        }
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw DetectorError.requestFailed("Invalid base URL")
+        }
+        components.path = makeGeminiModelsPath(basePath: components.path)
+
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "key" }
+        items.append(URLQueryItem(name: "key", value: apiKey))
+        components.queryItems = items
+
+        guard let requestURL = components.url else {
+            throw DetectorError.requestFailed("Invalid Gemini models URL")
+        }
+        return requestURL
+    }
+
+    static func selectPreferredGeminiModel(from models: [GeminiModelsResponse.Model]) -> String? {
+        let normalizedNames = models.map { normalizeGeminiModelName($0.name) }
+
+        // Prefer stable lightweight Gemini models first, then any flash model.
+        if let preferred = normalizedNames.first(where: { $0 == "gemini-2.5-flash" }) {
+            return preferred
+        }
+        if let preferredLite = normalizedNames.first(where: { $0 == "gemini-2.5-flash-lite" }) {
+            return preferredLite
+        }
+        if let flash = normalizedNames.first(where: {
+            let lower = $0.lowercased()
+            return lower.contains("flash") && !lower.contains("preview") && !lower.contains("exp")
+        }) {
+            return flash
+        }
+        if let first = normalizedNames.first {
+            return first
+        }
+        return nil
     }
 
     static func detectOpenRouterModel(apiKey: String) async throws -> String {
@@ -155,5 +176,24 @@ enum ModelDetector {
             return true
         }
         return false
+    }
+
+    private static func makeGeminiModelsPath(basePath: String) -> String {
+        let segments = basePath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        if segments.count >= 2 && segments[segments.count - 2] == "v1beta" && segments.last == "models" {
+            return "/" + segments.joined(separator: "/")
+        }
+        if segments.last == "v1beta" {
+            return "/" + (segments + ["models"]).joined(separator: "/")
+        }
+        return "/" + (segments + ["v1beta", "models"]).joined(separator: "/")
+    }
+
+    private static func normalizeGeminiModelName(_ rawName: String) -> String {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("models/") {
+            return String(trimmed.dropFirst("models/".count))
+        }
+        return trimmed
     }
 }

@@ -171,6 +171,23 @@ final class KeyComboFieldTests: XCTestCase {
         XCTAssertEqual(Settings.HotKey.correctAllDefault.displayString.count > 0, true, "Default all hotkey should have display string")
         XCTAssertEqual(Settings.HotKey.analyzeToneDefault.displayString.count > 0, true, "Default tone hotkey should have display string")
     }
+
+    func testRecordingLifecycleRemovesLocalMonitor() {
+        triggerRecordingClick()
+        XCTAssertTrue(keyComboField.hasActiveKeyDownMonitor, "Key monitor should be active while recording")
+
+        triggerRecordingClick()
+        XCTAssertFalse(keyComboField.hasActiveKeyDownMonitor, "Key monitor should be removed after recording stops")
+    }
+
+    func testRecordingCanBeStartedAgainAfterStop() {
+        triggerRecordingClick()
+        triggerRecordingClick()
+        XCTAssertFalse(keyComboField.hasActiveKeyDownMonitor, "Monitor should be removed after stop")
+
+        triggerRecordingClick()
+        XCTAssertTrue(keyComboField.hasActiveKeyDownMonitor, "Monitor should be re-created on next recording session")
+    }
 }
 
 // MARK: - Display String Tests
@@ -199,5 +216,12 @@ extension KeyComboFieldTests {
             let hotKey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: modifiers)
             XCTAssertEqual(hotKey.displayString, expected, "Failed for modifiers: \(modifiers)")
         }
+    }
+}
+
+private extension KeyComboFieldTests {
+    func triggerRecordingClick() {
+        let selector = NSSelectorFromString("handleClick:")
+        _ = keyComboField.perform(selector, with: NSClickGestureRecognizer())
     }
 }

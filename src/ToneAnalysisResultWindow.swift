@@ -16,7 +16,7 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   private let explanationLabel = NSTextField(wrappingLabelWithString: "")
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
 
-  private var localMonitor: Any?
+  private nonisolated(unsafe) var localMonitor: Any?
 
   override init(
     contentRect: NSRect,
@@ -42,15 +42,6 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     isMovableByWindowBackground = true
     backgroundColor = NSColor.windowBackgroundColor
     hasShadow = true
-
-    // Auto-dismiss on Escape
-    localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      if event.keyCode == 53 { // Escape
-        self?.dismiss()
-        return nil
-      }
-      return event
-    }
   }
 
   private func setupUI() {
@@ -129,11 +120,16 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     return row
   }
 
+  var hasActiveEscapeMonitor: Bool {
+    localMonitor != nil
+  }
+
   @objc private func closeButtonClicked() {
     dismiss()
   }
 
   func showResult(_ result: ToneAnalysisResult) {
+    ensureEscapeMonitor()
     toneLabel.stringValue = "\(toneEmoji(result.tone)) \(result.tone.rawValue)"
     sentimentLabel.stringValue = "\(sentimentEmoji(result.sentiment)) \(result.sentiment.rawValue)"
     formalityLabel.stringValue = result.formality.rawValue
@@ -144,6 +140,7 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   }
 
   func showError(_ message: String) {
+    ensureEscapeMonitor()
     toneLabel.stringValue = "Error"
     sentimentLabel.stringValue = "-"
     formalityLabel.stringValue = "-"
@@ -154,12 +151,28 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   }
 
   func dismiss() {
-    // Remove the local monitor to prevent memory leak
+    removeEscapeMonitorIfNeeded()
+    orderOut(nil)
+  }
+
+  private func ensureEscapeMonitor() {
+    guard localMonitor == nil else { return }
+    localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self = self else { return event }
+      guard self.isVisible else { return event }
+      if event.keyCode == 53 { // Escape
+        self.dismiss()
+        return nil
+      }
+      return event
+    }
+  }
+
+  private nonisolated func removeEscapeMonitorIfNeeded() {
     if let monitor = localMonitor {
       NSEvent.removeMonitor(monitor)
       localMonitor = nil
     }
-    orderOut(nil)
   }
 
   private func positionNearCursor() {
@@ -223,8 +236,6 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   }
 
   deinit {
-    if let monitor = localMonitor {
-      NSEvent.removeMonitor(monitor)
-    }
+    removeEscapeMonitorIfNeeded()
   }
 }
