@@ -47,7 +47,9 @@ final class HotKeyManager {
     if registeredSelection == correctSelection,
        registeredAll == correctAll,
        registeredAnalyzeTone == analyzeTone,
-       !hotKeyRefs.isEmpty
+       hotKeyRefs[HotKeyID.correctSelection.rawValue] != nil,
+       hotKeyRefs[HotKeyID.correctAll.rawValue] != nil,
+       hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil
     {
       return
     }
@@ -61,35 +63,41 @@ final class HotKeyManager {
     let correctAllID = HotKeyID.correctAll.rawValue
     let analyzeToneID = HotKeyID.analyzeTone.rawValue
 
-    do {
-      try registerHotKey(id: correctSelectionID, keyCode: correctSelection.keyCode, modifiers: correctSelection.modifiers)
-      try registerHotKey(id: correctAllID, keyCode: correctAll.keyCode, modifiers: correctAll.modifiers)
-      try registerHotKey(id: analyzeToneID, keyCode: analyzeTone.keyCode, modifiers: analyzeTone.modifiers)
-      registeredSelection = correctSelection
-      registeredAll = correctAll
-      registeredAnalyzeTone = analyzeTone
-    } catch {
-      unregisterAll()
-      if let previousSelection, let previousAll, let previousAnalyzeTone {
-        do {
-          try registerHotKey(id: correctSelectionID, keyCode: previousSelection.keyCode, modifiers: previousSelection.modifiers)
-          try registerHotKey(id: correctAllID, keyCode: previousAll.keyCode, modifiers: previousAll.modifiers)
-          try registerHotKey(id: analyzeToneID, keyCode: previousAnalyzeTone.keyCode, modifiers: previousAnalyzeTone.modifiers)
-          registeredSelection = previousSelection
-          registeredAll = previousAll
-          registeredAnalyzeTone = previousAnalyzeTone
-        } catch {
-          registeredSelection = nil
-          registeredAll = nil
-          registeredAnalyzeTone = nil
-          NSLog("[TextPolish] Failed to restore previous hotkeys: \(error)")
+    var firstError: Error?
+
+    func registerWithFallback(
+      id: Int,
+      desired: Settings.HotKey,
+      previous: Settings.HotKey?
+    ) -> Settings.HotKey? {
+      do {
+        try registerHotKey(id: id, keyCode: desired.keyCode, modifiers: desired.modifiers)
+        return desired
+      } catch let desiredError {
+        if firstError == nil {
+          firstError = desiredError
         }
-      } else {
-        registeredSelection = nil
-        registeredAll = nil
-        registeredAnalyzeTone = nil
+
+        guard let previous, previous != desired else {
+          return nil
+        }
+
+        do {
+          try registerHotKey(id: id, keyCode: previous.keyCode, modifiers: previous.modifiers)
+          return previous
+        } catch {
+          NSLog("[TextPolish] Failed to restore hotkey id=\(id): \(error)")
+          return nil
+        }
       }
-      throw error
+    }
+
+    registeredSelection = registerWithFallback(id: correctSelectionID, desired: correctSelection, previous: previousSelection)
+    registeredAll = registerWithFallback(id: correctAllID, desired: correctAll, previous: previousAll)
+    registeredAnalyzeTone = registerWithFallback(id: analyzeToneID, desired: analyzeTone, previous: previousAnalyzeTone)
+
+    if let firstError {
+      throw firstError
     }
   }
 

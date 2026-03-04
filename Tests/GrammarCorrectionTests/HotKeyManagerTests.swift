@@ -4,7 +4,7 @@ import Carbon
 @testable import GrammarCorrection
 
 final class HotKeyManagerTests: XCTestCase {
-  func testRegisterHotKeysRestoresPreviousOnFailure() {
+  func testRegisterHotKeysRestoresFailedHotKeyAndKeepsSuccessfulUpdates() {
     struct RegisterCall: Equatable {
       let id: Int
       let keyCode: UInt32
@@ -53,9 +53,48 @@ final class HotKeyManagerTests: XCTestCase {
     failAllKeyCode = newAll.keyCode
 
     XCTAssertThrowsError(try manager.registerHotKeys(correctSelection: newSelection, correctAll: newAll, analyzeTone: newAnalyzeTone))
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], oldSelection)
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], newSelection)
     XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], oldAnalyzeTone)
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], newAnalyzeTone)
+  }
+
+  func testRegisterHotKeysKeepsAvailableHotKeysWhenOneIsUnavailable() {
+    var active: [Int: Settings.HotKey] = [:]
+
+    let registerHandler: HotKeyManager.RegisterHandler = { id, keyCode, modifiers in
+      if id == HotKeyManager.HotKeyID.analyzeTone.rawValue {
+        throw HotKeyManager.HotKeyManagerError.alreadyInUse
+      }
+      let hotKey = Settings.HotKey(keyCode: keyCode, modifiers: modifiers)
+      active[id] = hotKey
+      return EventHotKeyRef(bitPattern: id + 1)!
+    }
+
+    let unregisterHandler: HotKeyManager.UnregisterHandler = { _ in
+      active.removeAll()
+    }
+
+    let installHandler: HotKeyManager.InstallHandler = { _ in
+      EventHandlerRef(bitPattern: 1)
+    }
+
+    let manager = HotKeyManager(
+      registerHandler: registerHandler,
+      unregisterHandler: unregisterHandler,
+      installHandler: installHandler
+    )
+
+    XCTAssertThrowsError(
+      try manager.registerHotKeys(
+        correctSelection: Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey)),
+        correctAll: Settings.HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey)),
+        analyzeTone: Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey))
+      )
+    )
+
+    XCTAssertNotNil(active[HotKeyManager.HotKeyID.correctSelection.rawValue])
+    XCTAssertNotNil(active[HotKeyManager.HotKeyID.correctAll.rawValue])
+    XCTAssertNil(active[HotKeyManager.HotKeyID.analyzeTone.rawValue])
   }
 
   func testIsHotKeyInUseIgnoresCurrentHotKeys() {
