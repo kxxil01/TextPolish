@@ -306,7 +306,7 @@ struct Settings: Codable {
     static let geminiBaseURL = "https://generativelanguage.googleapis.com"
     static let openRouterModel = "google/gemma-3n-e4b-it:free"
     static let openRouterBaseURL = "https://openrouter.ai/api/v1"
-    static let openAIModel = "gpt-5-mini"
+    static let openAIModel = "gpt-5-nano"
     static let openAIBaseURL = "https://api.openai.com/v1"
     static let anthropicModel = "claude-haiku-4-5"
     static let anthropicBaseURL = "https://api.anthropic.com"
@@ -340,7 +340,7 @@ struct Settings: Codable {
     openRouterMinSimilarity: Double = 0.65,
     openRouterExtraInstruction: String? = nil,
     openAIApiKey: String? = nil,
-    openAIModel: String = "gpt-5-mini",
+    openAIModel: String = "gpt-5-nano",
     openAIBaseURL: String = "https://api.openai.com/v1",
     openAIMaxAttempts: Int = 2,
     openAIMinSimilarity: Double = 0.65,
@@ -484,47 +484,6 @@ struct Settings: Codable {
     try container.encodeIfPresent(anthropicExtraInstruction, forKey: .anthropicExtraInstruction)
   }
 
-  mutating func migrateDeprecatedModels() {
-    let openRouterDefaultModel = Defaults.openRouterModel
-
-    let trimmedGeminiModel = geminiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalizedGeminiModel: String = {
-      let lower = trimmedGeminiModel.lowercased()
-      if lower.hasPrefix("models/") {
-        return String(lower.dropFirst("models/".count))
-      }
-      return lower
-    }()
-
-    let deprecatedGeminiModels: Set<String> = [
-      "gemini-2.0-flash-lite-001",
-      "gemini-1.5-pro",
-      "gemini-1.5-pro-latest",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-pro",
-      "gemini-pro-latest",
-      "gemini-1.0-pro"
-    ]
-
-    if deprecatedGeminiModels.contains(normalizedGeminiModel) || normalizedGeminiModel.hasPrefix("gemini-1.5") {
-      geminiModel = "gemini-2.5-flash"
-    }
-
-    let normalizedOpenRouterModel = openRouterModel
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased()
-    let deprecatedOpenRouterModels: Set<String> = [
-      "anthropic/claude-3-sonnet",
-      "anthropic/claude-3-opus",
-      "anthropic/claude-3-haiku"
-    ]
-
-    if normalizedOpenRouterModel.isEmpty || deprecatedOpenRouterModels.contains(normalizedOpenRouterModel) {
-      openRouterModel = openRouterDefaultModel
-    }
-  }
-
   mutating func normalizeRuntimeValues() {
     requestTimeoutSeconds = Self.clampedFinite(
       requestTimeoutSeconds,
@@ -580,7 +539,6 @@ struct Settings: Codable {
     openAIExtraInstruction = Self.nilIfEmpty(openAIExtraInstruction)
     anthropicExtraInstruction = Self.nilIfEmpty(anthropicExtraInstruction)
 
-    migrateDeprecatedModels()
   }
 
   private static func clamped(_ value: Int, min lowerBound: Int, max upperBound: Int) -> Int {

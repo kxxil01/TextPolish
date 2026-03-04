@@ -72,7 +72,7 @@ final class ModelDetectorTests: XCTestCase {
         {
           "models": [
             {
-              "name": "gemini-1.5-pro"
+              "name": "gemini-2.5-pro"
             },
             {
               "name": "gemini-2.5-flash"
@@ -86,7 +86,7 @@ final class ModelDetectorTests: XCTestCase {
 
         // Then
         XCTAssertEqual(response.models?.count, 2, "Should decode 2 models")
-        XCTAssertEqual(response.models?[0].name, "gemini-1.5-pro", "First model should be gemini-1.5-pro")
+        XCTAssertEqual(response.models?[0].name, "gemini-2.5-pro", "First model should be gemini-2.5-pro")
         XCTAssertEqual(response.models?[1].name, "gemini-2.5-flash", "Second model should be gemini-2.5-flash")
     }
 
@@ -143,7 +143,7 @@ final class ModelDetectorTests: XCTestCase {
         {
           "data": [
             {
-              "id": "anthropic/claude-3-haiku",
+              "id": "google/gemma-3n-e4b-it:free",
               "pricing": {
                 "prompt": "0",
                 "completion": "0"
@@ -165,7 +165,7 @@ final class ModelDetectorTests: XCTestCase {
 
         // Then
         XCTAssertEqual(response.data?.count, 2, "Should decode 2 models")
-        XCTAssertEqual(response.data?[0].id, "anthropic/claude-3-haiku", "First model should be claude-3-haiku")
+        XCTAssertEqual(response.data?[0].id, "google/gemma-3n-e4b-it:free", "First model should be gemma free model")
         XCTAssertEqual(response.data?[0].pricing?.prompt, "0", "First model should be free")
     }
 
@@ -210,13 +210,13 @@ final class ModelDetectorTests: XCTestCase {
         {
           "models": [
             {
-              "name": "gemini-1.5-pro"
+              "name": "gemini-2.5-pro"
             },
             {
               "name": "gemini-2.5-flash"
             },
             {
-              "name": "gemini-1.5-flash"
+              "name": "gemini-2.5-flash-lite"
             }
           ]
         }
@@ -256,7 +256,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testSelectPreferredGeminiModelNormalizesModelsPrefix() {
         let models = [
-            ModelDetector.GeminiModelsResponse.Model(name: "models/gemini-1.5-pro"),
+            ModelDetector.GeminiModelsResponse.Model(name: "models/gemini-2.5-pro"),
             ModelDetector.GeminiModelsResponse.Model(name: "models/gemini-2.5-flash")
         ]
         let selected = ModelDetector.selectPreferredGeminiModel(from: models)
@@ -276,7 +276,7 @@ final class ModelDetectorTests: XCTestCase {
               }
             },
             {
-              "id": "anthropic/claude-3-haiku",
+              "id": "google/gemma-3n-e4b-it:free",
               "pricing": {
                 "prompt": "0",
                 "completion": "0"
@@ -292,7 +292,7 @@ final class ModelDetectorTests: XCTestCase {
         // Then - check that free model is found
         let freeModel = response.data?.first(where: { $0.pricing?.prompt == "0" && $0.pricing?.completion == "0" })
         XCTAssertNotNil(freeModel, "Should find free model")
-        XCTAssertEqual(freeModel?.id, "anthropic/claude-3-haiku", "Should select correct free model")
+        XCTAssertEqual(freeModel?.id, "google/gemma-3n-e4b-it:free", "Should select correct free model")
     }
 
     func testEmptyModelsResponse() throws {

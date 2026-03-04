@@ -27,12 +27,12 @@ final class SettingsIntegrationTests: XCTestCase {
             hotKeyAnalyzeTone: Settings.HotKey.analyzeToneDefault,
             enableGeminiOpenRouterFallback: false,
             geminiApiKey: "",
-            geminiModel: "gemini-1.5-flash",
+            geminiModel: "gemini-2.5-flash",
             geminiBaseURL: "https://generativelanguage.googleapis.com",
             geminiMinSimilarity: 0.7,
             geminiExtraInstruction: "",
             openRouterApiKey: "",
-            openRouterModel: "anthropic/claude-3-haiku",
+            openRouterModel: "google/gemma-3n-e4b-it:free",
             openRouterBaseURL: "https://openrouter.ai/api/v1",
             openRouterMinSimilarity: 0.7
         )
@@ -155,7 +155,7 @@ final class SettingsIntegrationTests: XCTestCase {
         // Given
         settingsWindowViewController?.loadSettings()
         let testApiKey = "TEST_OR_API_KEY_FOR_TESTING_ONLY"
-        let testModel = "anthropic/claude-3-sonnet"
+        let testModel = "google/gemma-3-27b-it:free"
 
         // When
         settingsWindowViewController?.openRouterApiKeyField?.stringValue = testApiKey
@@ -166,8 +166,8 @@ final class SettingsIntegrationTests: XCTestCase {
         XCTAssertNil(settingsWindowViewController?.settings.openRouterApiKey, "OpenRouter API key should not be persisted in settings")
         XCTAssertEqual(
             settingsWindowViewController?.settings.openRouterModel,
-            "google/gemma-3n-e4b-it:free",
-            "Deprecated OpenRouter model should be migrated to default free model"
+            testModel,
+            "Configured OpenRouter model should persist"
         )
     }
 
@@ -295,7 +295,7 @@ extension SettingsIntegrationTests {
         let settings = Settings()
 
         // Then
-        XCTAssertEqual(settings.openAIModel, "gpt-5-mini", "Default OpenAI model should be gpt-5-mini")
+        XCTAssertEqual(settings.openAIModel, "gpt-5-nano", "Default OpenAI model should be gpt-5-nano")
     }
 
     func testAnthropicDefaultModel() {
@@ -341,7 +341,7 @@ extension SettingsIntegrationTests {
         settingsWindowViewController?.openAIMinSimilarityField.stringValue = "0.77"
         settingsWindowViewController?.openAIExtraInstructionField.stringValue = "Keep contractions"
 
-        settingsWindowViewController?.anthropicModelField.stringValue = "claude-3-7-sonnet"
+        settingsWindowViewController?.anthropicModelField.stringValue = "claude-haiku-4-5"
         settingsWindowViewController?.anthropicBaseURLField.stringValue = "https://api.anthropic.com"
         settingsWindowViewController?.anthropicMaxAttemptsField.stringValue = "5"
         settingsWindowViewController?.anthropicMinSimilarityField.stringValue = "0.82"
@@ -355,7 +355,7 @@ extension SettingsIntegrationTests {
         XCTAssertEqual(settingsWindowViewController?.settings.openAIMinSimilarity, 0.77)
         XCTAssertEqual(settingsWindowViewController?.settings.openAIExtraInstruction, "Keep contractions")
 
-        XCTAssertEqual(settingsWindowViewController?.settings.anthropicModel, "claude-3-7-sonnet")
+        XCTAssertEqual(settingsWindowViewController?.settings.anthropicModel, "claude-haiku-4-5")
         XCTAssertEqual(settingsWindowViewController?.settings.anthropicBaseURL, "https://api.anthropic.com")
         XCTAssertEqual(settingsWindowViewController?.settings.anthropicMaxAttempts, 5)
         XCTAssertEqual(settingsWindowViewController?.settings.anthropicMinSimilarity, 0.82)

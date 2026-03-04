@@ -106,7 +106,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         viewController.geminiProviderButton.state = .on
         viewController.fallbackCheckbox.state = .on
         viewController.geminiApiKeyField.stringValue = "TEST_GEMINI_API_KEY_FOR_TESTING"
-        viewController.geminiModelField.stringValue = "gemini-1.5-pro"
+        viewController.geminiModelField.stringValue = "gemini-2.5-flash"
 
         // When
         viewController.saveSettings()

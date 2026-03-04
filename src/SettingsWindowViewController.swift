@@ -395,7 +395,7 @@ class SettingsWindowViewController: NSViewController {
         container.addSubview(modelLabel)
 
         openAIModelField = NSTextField(frame: NSRect(x: padding, y: container.frame.height - 160, width: contentWidth, height: 26))
-        openAIModelField.placeholderString = "gpt-5-mini"
+        openAIModelField.placeholderString = "gpt-5-nano"
         container.addSubview(openAIModelField)
 
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)

@@ -1509,7 +1509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       let value = self.promptForText(
         title: "OpenAI Model",
-        message: "Examples: gpt-5-mini, gpt-5-nano (depends on your OpenAI account).",
+        message: "Recommended fast/light model: gpt-5-nano (availability depends on your OpenAI account).",
         placeholder: "Model name",
         initialValue: self.settings.openAIModel
       )
@@ -2098,9 +2098,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (_, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else { return false }
-    return (200..<300).contains(http.statusCode)
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw NSError(
+        domain: "TextPolish",
+        code: 0,
+        userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
+      )
+    }
+
+    if (200..<300).contains(http.statusCode) {
+      return true
+    }
+
+    let message = parseAnthropicErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
+    throw NSError(
+      domain: "TextPolish",
+      code: http.statusCode,
+      userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
+    )
   }
 
   private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
@@ -2285,6 +2301,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func parseOpenRouterErrorMessage(data: Data) -> String? {
     parseOpenAIErrorMessage(data: data)
+  }
+
+  private struct AnthropicDiagnosticsErrorEnvelope: Decodable {
+    struct ErrorBody: Decodable {
+      let message: String?
+      let type: String?
+    }
+    let error: ErrorBody?
+  }
+
+  private func parseAnthropicErrorMessage(data: Data) -> String? {
+    if let decoded = try? JSONDecoder().decode(AnthropicDiagnosticsErrorEnvelope.self, from: data) {
+      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
+      if let message, !message.isEmpty { return message }
+    }
+
+    if let string = String(data: data, encoding: .utf8) {
+      return ErrorLogSanitizer.sanitize(string)
+    }
+
+    return nil
   }
 
   private func makeOpenRouterChatCompletionsURL() throws -> URL {
@@ -2481,6 +2518,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func score(_ name: String) -> Int {
       let lower = name.lowercased()
       var value = 0
+      if lower == "gemini-2.5-flash-lite" { value += 200 }
+      if lower == "gemini-2.5-flash" { value += 180 }
       if lower.contains("flash") { value += 100 }
       if lower.contains("2.5") { value += 120 }
       if lower.contains("2.0") { value -= 20 }
@@ -2507,12 +2546,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     if lower == "meta-llama/llama-3.2-3b-instruct:free" { value += 900 }
     if lower == "google/gemma-3-12b-it:free" { value += 860 }
     if lower == "google/gemma-3-27b-it:free" { value += 820 }
-    if lower == "openai/gpt-5-mini" { value += 780 }
+    if lower == "openai/gpt-5-nano" { value += 780 }
     if lower.contains("gemini") { value += 220 }
     if lower.contains("flash") { value += 220 }
     if lower.contains("2.0") { value += 50 }
     if lower.contains("lite") { value += 30 }
-    if lower.contains("gpt-5-mini") { value += 260 }
+    if lower.contains("gpt-5-nano") { value += 260 }
     if lower.contains("gpt-4o-mini") { value += 180 }
     if lower.contains("gemma-3n") { value += 200 }
     if lower.contains("4b") { value += 120 }
@@ -2535,7 +2574,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     guard !models.isEmpty else { return [] }
 
     let filtered = preferFree ? models.filter { $0.hasSuffix(":free") } : models
-    var pool = filtered.isEmpty ? models : filtered
+    var pool = filtered
     if let excluding, !excluding.isEmpty {
       pool.removeAll { $0 == excluding }
     }
@@ -2544,6 +2583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     guard let preferredFirst, !preferredFirst.isEmpty else { return pool }
     if preferredFirst == excluding { return pool }
+    if preferFree, !preferredFirst.hasSuffix(":free") { return pool }
 
     var result: [String] = [preferredFirst]
     result.append(contentsOf: pool.filter { $0 != preferredFirst })

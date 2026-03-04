@@ -137,10 +137,10 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertTrue(decoded.enableGeminiOpenRouterFallback)
   }
 
-  func testDecodeMigratesDeprecatedGemini15ProModel() throws {
+  func testDecodeRetainsConfiguredGeminiModel() throws {
     let json = """
     {
-      "geminiModel": "gemini-1.5-pro"
+      "geminiModel": "gemini-2.5-flash"
     }
     """
     let data = Data(json.utf8)
@@ -149,10 +149,10 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
   }
 
-  func testDecodeMigratesDeprecatedGeminiModelWithModelsPrefix() throws {
+  func testDecodeNormalizesGeminiModelWithModelsPrefix() throws {
     let json = """
     {
-      "geminiModel": "models/gemini-1.5-pro-latest"
+      "geminiModel": "models/gemini-2.5-flash"
     }
     """
     let data = Data(json.utf8)
@@ -161,16 +161,28 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
   }
 
-  func testDecodeMigratesDeprecatedOpenRouterClaude3Model() throws {
+  func testDecodeRetainsConfiguredOpenRouterModel() throws {
     let json = """
     {
-      "openRouterModel": "anthropic/claude-3-sonnet"
+      "openRouterModel": "google/gemma-3-27b-it:free"
     }
     """
     let data = Data(json.utf8)
     let decoded = try JSONDecoder().decode(Settings.self, from: data)
 
-    XCTAssertEqual(decoded.openRouterModel, "google/gemma-3n-e4b-it:free")
+    XCTAssertEqual(decoded.openRouterModel, "google/gemma-3-27b-it:free")
+  }
+
+  func testDecodeRetainsConfiguredAnthropicModel() throws {
+    let json = """
+    {
+      "anthropicModel": "claude-haiku-4-5"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.anthropicModel, "claude-haiku-4-5")
   }
 
   func testDecodeMigratesEmptyOpenRouterModelToDefaultFreeModel() throws {
