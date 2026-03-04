@@ -715,6 +715,14 @@ struct Settings: Codable {
   }
 
   static func settingsFileURL() -> URL {
+    if let overridePath = settingsFileOverridePath() {
+      return URL(fileURLWithPath: overridePath, isDirectory: false)
+    }
+
+    if let testDirectory = testSettingsDirectoryURL() {
+      return testDirectory.appendingPathComponent("settings.json", isDirectory: false)
+    }
+
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
         .appendingPathComponent("Library", isDirectory: true)
@@ -725,6 +733,17 @@ struct Settings: Codable {
   }
 
   static func legacySettingsFileURL() -> URL {
+    if let overridePath = settingsFileOverridePath() {
+      let overrideURL = URL(fileURLWithPath: overridePath, isDirectory: false)
+      return overrideURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("legacy-settings.json", isDirectory: false)
+    }
+
+    if let testDirectory = testSettingsDirectoryURL() {
+      return testDirectory.appendingPathComponent("legacy-settings.json", isDirectory: false)
+    }
+
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
         .appendingPathComponent("Library", isDirectory: true)
@@ -732,5 +751,24 @@ struct Settings: Codable {
     return base
       .appendingPathComponent(legacyAppSupportFolderName, isDirectory: true)
       .appendingPathComponent("settings.json", isDirectory: false)
+  }
+
+  private static func settingsFileOverridePath() -> String? {
+    let overridePath = ProcessInfo.processInfo.environment["TEXTPOLISH_SETTINGS_FILE"]?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let overridePath, !overridePath.isEmpty else {
+      return nil
+    }
+    return overridePath
+  }
+
+  private static func testSettingsDirectoryURL() -> URL? {
+    let env = ProcessInfo.processInfo.environment
+    let isRunningTests = NSClassFromString("XCTestCase") != nil || env["XCTestConfigurationFilePath"] != nil
+    guard isRunningTests else { return nil }
+
+    let processID = ProcessInfo.processInfo.processIdentifier
+    return URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+      .appendingPathComponent("TextPolishTests-\(processID)", isDirectory: true)
   }
 }

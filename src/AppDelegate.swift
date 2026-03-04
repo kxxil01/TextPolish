@@ -120,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       feedback: feedback,
       settings: settings,
       timings: .init(settings: settings),
+      operationTimeout: correctionOperationTimeoutDuration(),
       recoverer: { [weak self] error in
         guard let self else { return nil }
         return await self.recoverFromError(error)
@@ -145,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       feedback: feedback,
       resultPresenter: toneResultWindow,
       timings: .init(settings: settings),
+      operationTimeout: toneOperationTimeoutDuration(),
       onSuccess: { [weak self] in
         self?.incrementToneAnalysisCount()
       }
@@ -908,8 +910,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     correctionController?.updateSettings(settings)
     correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
     correctionController?.updateTimings(.init(settings: settings))
+    correctionController?.updateOperationTimeout(correctionOperationTimeoutDuration())
     toneAnalysisController?.updateAnalyzer(ToneAnalyzerFactory.make(settings: settings))
     toneAnalysisController?.updateTimings(.init(settings: settings))
+    toneAnalysisController?.updateOperationTimeout(toneOperationTimeoutDuration())
+  }
+
+  private func correctionOperationTimeoutDuration() -> Duration {
+    let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
+    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
+    let timeoutSeconds = min(180, max(12, requestSeconds * multiplier + 4))
+    return .seconds(timeoutSeconds)
+  }
+
+  private func toneOperationTimeoutDuration() -> Duration {
+    let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
+    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
+    let timeoutSeconds = min(120, max(8, requestSeconds * multiplier + 2))
+    return .seconds(timeoutSeconds)
   }
 
   private func timingsOverride(for app: NSRunningApplication?) -> CorrectionController.Timings? {
@@ -1164,6 +1182,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       )
     } catch {
       NSLog("[TextPolish] Failed to register hotkeys: \(error)")
+      let configured = [
+        "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
+        "Correct All \(settings.hotKeyCorrectAll.displayString)",
+        "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
+      ].joined(separator: " • ")
+      let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+      feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
     }
   }
 

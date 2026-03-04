@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import Carbon
 @testable import GrammarCorrection
 
 final class SettingsWindowViewControllerTests: XCTestCase {
@@ -128,6 +129,28 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNil(viewController.settings.openRouterApiKey)
         XCTAssertNil(viewController.settings.openAIApiKey)
         XCTAssertNil(viewController.settings.anthropicApiKey)
+    }
+
+    func testSaveSettingsRejectsDuplicateHotkeys() {
+        viewController.loadSettings()
+
+        let duplicate = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
+        viewController.correctSelectionField.hotKey = duplicate
+        viewController.correctAllField.hotKey = duplicate
+
+        let saved = viewController.saveSettings()
+
+        XCTAssertFalse(saved, "Save should fail when hotkeys are duplicated")
+    }
+
+    func testSaveSettingsRejectsHotkeyWithoutModifier() {
+        viewController.loadSettings()
+
+        viewController.analyzeToneField.hotKey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: 0)
+
+        let saved = viewController.saveSettings()
+
+        XCTAssertFalse(saved, "Save should fail when a hotkey has no modifier")
     }
 
     func testProviderChanged() {

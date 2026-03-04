@@ -49,7 +49,7 @@ final class ToneAnalysisController {
   private let pasteboard: PasteboardControlling
 
   private var timings: Timings
-  private let operationTimeout: Duration
+  private var operationTimeout: Duration
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var currentAnalyzerTask: Task<ToneAnalysisResult, Error>?
@@ -84,6 +84,10 @@ final class ToneAnalysisController {
 
   func updateTimings(_ timings: Timings) {
     self.timings = timings
+  }
+
+  func updateOperationTimeout(_ timeout: Duration) {
+    self.operationTimeout = timeout
   }
 
   var isBusy: Bool {

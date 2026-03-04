@@ -105,7 +105,7 @@ final class CorrectionController {
   private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
-  private let operationTimeout: Duration
+  private var operationTimeout: Duration
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
@@ -146,6 +146,10 @@ final class CorrectionController {
 
   func updateSettings(_ settings: Settings) {
     self.settings = settings
+  }
+
+  func updateOperationTimeout(_ timeout: Duration) {
+    self.operationTimeout = timeout
   }
 
   var isBusy: Bool {

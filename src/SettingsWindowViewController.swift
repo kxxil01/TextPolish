@@ -829,15 +829,24 @@ class SettingsWindowViewController: NSViewController {
         }
 
         // Hotkeys
-        if let selectionHotKey = correctSelectionField.hotKey {
-            newSettings.hotKeyCorrectSelection = selectionHotKey
+        let selectionHotKey = correctSelectionField.hotKey ?? newSettings.hotKeyCorrectSelection
+        let allHotKey = correctAllField.hotKey ?? newSettings.hotKeyCorrectAll
+        let toneHotKey = analyzeToneField.hotKey ?? newSettings.hotKeyAnalyzeTone
+        if let hotKeyValidationError = validateHotKeys(
+            selection: selectionHotKey,
+            all: allHotKey,
+            tone: toneHotKey,
+            current: newSettings
+        ) {
+            showErrorAlertIfNeeded(
+                title: "Invalid hotkeys",
+                message: hotKeyValidationError
+            )
+            return false
         }
-        if let allHotKey = correctAllField.hotKey {
-            newSettings.hotKeyCorrectAll = allHotKey
-        }
-        if let toneHotKey = analyzeToneField.hotKey {
-            newSettings.hotKeyAnalyzeTone = toneHotKey
-        }
+        newSettings.hotKeyCorrectSelection = selectionHotKey
+        newSettings.hotKeyCorrectAll = allHotKey
+        newSettings.hotKeyAnalyzeTone = toneHotKey
 
         // Advanced
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
@@ -872,6 +881,47 @@ class SettingsWindowViewController: NSViewController {
         }
         delegate?.settingsDidChange(settings)
         return true
+    }
+
+    private func validateHotKeys(
+        selection: Settings.HotKey,
+        all: Settings.HotKey,
+        tone: Settings.HotKey,
+        current: Settings
+    ) -> String? {
+        let hotKeys: [(name: String, value: Settings.HotKey)] = [
+            ("Correct Selection", selection),
+            ("Correct All", all),
+            ("Analyze Tone", tone)
+        ]
+
+        for hotKey in hotKeys {
+            if hotKey.value.modifiers == 0 {
+                return "\(hotKey.name) must include at least one modifier key (Control, Option, Command, or Shift)."
+            }
+        }
+
+        if selection == all || selection == tone || all == tone {
+            return "Hotkeys must be unique across Correct Selection, Correct All, and Analyze Tone."
+        }
+
+        let ignoredCurrent = [
+            current.hotKeyCorrectSelection,
+            current.hotKeyCorrectAll,
+            current.hotKeyAnalyzeTone
+        ]
+
+        for hotKey in hotKeys {
+            let inUse = HotKeyManager.isHotKeyInUse(
+                hotKey: hotKey.value,
+                ignoring: ignoredCurrent
+            )
+            if inUse {
+                return "\(hotKey.name) (\(hotKey.value.displayString)) is already used by another application."
+            }
+        }
+
+        return nil
     }
 
     func updateProviderButtons() {

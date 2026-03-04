@@ -203,3 +203,16 @@ final class HotKeyManager {
     return checker(hotKey.keyCode, hotKey.modifiers)
   }
 }
+
+extension HotKeyManager.HotKeyManagerError: LocalizedError {
+  var errorDescription: String? {
+    switch self {
+    case .couldNotInstallHandler(let status):
+      return "Could not install global hotkey handler (OSStatus \(status))."
+    case .couldNotRegisterHotKey(let status):
+      return "Could not register global shortcut (OSStatus \(status))."
+    case .alreadyInUse:
+      return "The shortcut is already used by another application."
+    }
+  }
+}
