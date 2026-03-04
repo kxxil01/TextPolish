@@ -131,7 +131,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read OpenRouter keychain: \(error)")
+      TPLogger.log("Failed to read OpenRouter keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -198,7 +198,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
         }
 
         let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        NSLog("[TextPolish] OpenRouter HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        TPLogger.log("OpenRouter HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
         let requestError = OpenRouterError.requestFailed(http.statusCode, message)
 

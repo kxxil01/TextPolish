@@ -78,7 +78,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read OpenRouter keychain: \(error)")
+      TPLogger.log("Failed to read OpenRouter keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -157,7 +157,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
         }
 
         let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        NSLog("[TextPolish] OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        TPLogger.log("OpenRouter Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         throw ToneAnalysisError.requestFailed(http.statusCode, message)
       } catch {
         if error is CancellationError { throw error }

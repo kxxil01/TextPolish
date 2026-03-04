@@ -85,7 +85,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read Gemini keychain: \(error)")
+      TPLogger.log("Failed to read Gemini keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -163,7 +163,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
         }
 
         let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        NSLog("[TextPolish] Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
+        TPLogger.log("Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
 
         // Handle rate limiting with exponential backoff
         if http.statusCode == 429 {

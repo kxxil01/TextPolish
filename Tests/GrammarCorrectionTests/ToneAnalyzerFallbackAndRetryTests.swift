@@ -95,7 +95,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 404,
-        body: #"{"error":{"message":"No endpoints found for anthropic/claude-3-sonnet.","code":404}}"#
+        body: #"{"error":{"message":"No endpoints found for openrouter/nonexistent-model.","code":404}}"#
       )
     }
 

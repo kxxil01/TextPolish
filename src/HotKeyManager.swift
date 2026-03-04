@@ -86,7 +86,7 @@ final class HotKeyManager {
           try registerHotKey(id: id, keyCode: previous.keyCode, modifiers: previous.modifiers)
           return previous
         } catch {
-          NSLog("[TextPolish] Failed to restore hotkey id=\(id): \(error)")
+          TPLogger.log("Failed to restore hotkey id=\(id): \(error)")
           return nil
         }
       }

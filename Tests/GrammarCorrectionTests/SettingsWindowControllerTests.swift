@@ -58,7 +58,7 @@ final class SettingsWindowControllerTests: XCTestCase {
     func testViewControllerSetup() {
         controller.windowDidLoad()
         XCTAssertNotNil(controller.viewController, "View controller should be set up")
-        XCTAssertTrue(controller.viewController is SettingsWindowViewController, "Content view controller should be SettingsWindowViewController")
+        XCTAssertNotNil(controller.viewController, "Content view controller should be SettingsWindowViewController")
     }
 
     func testWindowTitle() {

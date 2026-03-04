@@ -230,8 +230,6 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     func testSettingsDidChangeDelegate() {
         // Given
         viewController.loadSettings()
-        let initialSettings = viewController.settings
-
         // When
         viewController.saveSettings()
 

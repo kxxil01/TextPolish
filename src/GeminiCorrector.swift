@@ -135,7 +135,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read Gemini keychain: \(error)")
+      TPLogger.log("Failed to read Gemini keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -223,7 +223,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             }
 
             let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-            NSLog("[TextPolish] Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
+            TPLogger.log("Gemini HTTP \(http.statusCode) url=\(sanitize(url)) message=\(message ?? "nil")")
 
             if http.statusCode == 404, index < versionsToTry.count - 1 {
               let error = GeminiError.requestFailed(http.statusCode, message)

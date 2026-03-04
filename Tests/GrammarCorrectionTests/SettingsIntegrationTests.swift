@@ -10,7 +10,7 @@ final class SettingsIntegrationTests: XCTestCase {
     override func setUp() {
         super.setUp()
         settingsWindowController = SettingsWindowController()
-        settingsWindowViewController = settingsWindowController.viewController as? SettingsWindowViewController
+        settingsWindowViewController = settingsWindowController.viewController
         // Force the view to load and viewDidLoad to be called
         let _ = settingsWindowViewController?.view
         settingsWindowViewController?.viewDidLoad()

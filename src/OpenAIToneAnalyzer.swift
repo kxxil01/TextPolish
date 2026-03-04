@@ -78,7 +78,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read OpenAI keychain: \(error)")
+      TPLogger.log("Failed to read OpenAI keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -205,7 +205,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     }
 
     let message = parseErrorMessage(data: data)
-    NSLog("[TextPolish] OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    TPLogger.log("OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw ToneAnalysisError.requestFailed(http.statusCode, message)
   }
 

@@ -193,10 +193,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     _ = updaterController
     if isUpdaterAvailable {
       updaterController.updater.automaticallyChecksForUpdates = true
-      NSLog("[TextPolish] Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
+      TPLogger.log("Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
     } else {
       updaterController.updater.automaticallyChecksForUpdates = false
-      NSLog("[TextPolish] Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
+      TPLogger.log("Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
     }
     maybeShowWelcome()
   }
@@ -723,7 +723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       suppressSettingsNotification = false
     } catch {
       suppressSettingsNotification = false
-      NSLog("[TextPolish] Failed to save settings: \(error)")
+      TPLogger.log("Failed to save settings: \(error)")
     }
   }
 
@@ -867,7 +867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func setKeychainPassword(_ password: String, service: String, account: String) async throws {
-    NSLog("[TextPolish] Keychain set start account=\(account)")
+    TPLogger.log("Keychain set start account=\(account)")
     NSApp.activate(ignoringOtherApps: true)
     let label = keychainLabel(for: account)
     try await withCheckedThrowingContinuation { continuation in
@@ -879,10 +879,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             account: account,
             label: label
           )
-          NSLog("[TextPolish] Keychain set success account=\(account)")
+          TPLogger.log("Keychain set success account=\(account)")
           continuation.resume()
         } catch {
-          NSLog("[TextPolish] Keychain set failed account=\(account) error=\(error)")
+          TPLogger.log("Keychain set failed account=\(account) error=\(error)")
           continuation.resume(throwing: error)
         }
       }
@@ -890,16 +890,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func deleteKeychainPassword(service: String, account: String) async throws {
-    NSLog("[TextPolish] Keychain delete start account=\(account)")
+    TPLogger.log("Keychain delete start account=\(account)")
     NSApp.activate(ignoringOtherApps: true)
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
         do {
           try Keychain.deletePassword(service: service, account: account)
-          NSLog("[TextPolish] Keychain delete success account=\(account)")
+          TPLogger.log("Keychain delete success account=\(account)")
           continuation.resume()
         } catch {
-          NSLog("[TextPolish] Keychain delete failed account=\(account) error=\(error)")
+          TPLogger.log("Keychain delete failed account=\(account) error=\(error)")
           continuation.resume(throwing: error)
         }
       }
@@ -987,7 +987,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           refreshCorrector()
           return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
         } catch {
-          NSLog("[TextPolish] Auto-detect Gemini model failed: \(error)")
+          TPLogger.log("Auto-detect Gemini model failed: \(error)")
         }
       }
 
@@ -1015,7 +1015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let message = "OpenRouter switched to a working free model: \(chosen)"
         return CorrectionController.RecoveryAction(message: message, corrector: nil)
       } catch {
-        NSLog("[TextPolish] Auto-detect OpenRouter model failed: \(error)")
+        TPLogger.log("Auto-detect OpenRouter model failed: \(error)")
         return nil
       }
     case .openAI:
@@ -1181,7 +1181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         analyzeTone: settings.hotKeyAnalyzeTone
       )
     } catch {
-      NSLog("[TextPolish] Failed to register hotkeys: \(error)")
+      TPLogger.log("Failed to register hotkeys: \(error)")
       let configured = [
         "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
         "Correct All \(settings.hotKeyCorrectAll.displayString)",
@@ -1305,7 +1305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "Gemini API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] Gemini key prompt result=\(self.apiKeyPromptResultKind(result))")
+      TPLogger.log("Gemini key prompt result=\(self.apiKeyPromptResultKind(result))")
 
       switch result {
       case .canceled:
@@ -1320,7 +1320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("Gemini key cleared")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to clear key: \(error)")
+          TPLogger.log("Failed to clear key: \(error)")
           self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
         }
       case .save(let value):
@@ -1333,7 +1333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("Gemini key saved")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to save key: \(error)")
+          TPLogger.log("Failed to save key: \(error)")
           self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
         }
       }
@@ -1347,7 +1347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "OpenRouter API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] OpenRouter key prompt result=\(self.apiKeyPromptResultKind(result))")
+      TPLogger.log("OpenRouter key prompt result=\(self.apiKeyPromptResultKind(result))")
 
       switch result {
       case .canceled:
@@ -1362,7 +1362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("OpenRouter key cleared")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to clear key: \(error)")
+          TPLogger.log("Failed to clear key: \(error)")
           self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
         }
       case .save(let value):
@@ -1375,7 +1375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("OpenRouter key saved")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to save key: \(error)")
+          TPLogger.log("Failed to save key: \(error)")
           self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
         }
       }
@@ -1389,7 +1389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "OpenAI API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] OpenAI key prompt completed")
+      TPLogger.log("OpenAI key prompt completed")
 
       switch result {
       case .canceled:
@@ -1404,7 +1404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("OpenAI key cleared")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to clear key: \(error)")
+          TPLogger.log("Failed to clear key: \(error)")
           self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
         }
       case .save(let value):
@@ -1417,7 +1417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("OpenAI key saved")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to save key: \(error)")
+          TPLogger.log("Failed to save key: \(error)")
           self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
         }
       }
@@ -1431,7 +1431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "Anthropic API Key",
         message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
       )
-      NSLog("[TextPolish] Anthropic key prompt completed")
+      TPLogger.log("Anthropic key prompt completed")
 
       switch result {
       case .canceled:
@@ -1446,7 +1446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("Anthropic key cleared")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to clear key: \(error)")
+          TPLogger.log("Failed to clear key: \(error)")
           self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
         }
       case .save(let value):
@@ -1459,7 +1459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           self.feedback?.showInfo("Anthropic key saved")
           self.refreshCorrector()
         } catch {
-          NSLog("[TextPolish] Failed to save key: \(error)")
+          TPLogger.log("Failed to save key: \(error)")
           self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
         }
       }
@@ -2334,7 +2334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     let message = ErrorLogSanitizer.sanitize(parseOpenRouterErrorMessage(data: data))
-    NSLog("[TextPolish] OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    TPLogger.log("OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     if http.statusCode == 401 {
       throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
     }

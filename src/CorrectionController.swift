@@ -360,7 +360,7 @@ final class CorrectionController {
           message: message,
           error: error
         )
-        NSLog("[TextPolish] \(error)")
+        TPLogger.log("\(error)")
       }
     }
     currentTask = task

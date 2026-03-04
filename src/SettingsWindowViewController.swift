@@ -731,7 +731,7 @@ class SettingsWindowViewController: NSViewController {
 
     private func showErrorAlertIfNeeded(title: String, message: String) {
         if NSClassFromString("XCTestCase") != nil {
-            NSLog("[TextPolish] \(title): \(message)")
+            TPLogger.log("\(title): \(message)")
             return
         }
         let alert = NSAlert()
@@ -818,7 +818,7 @@ class SettingsWindowViewController: NSViewController {
             newSettings.anthropicExtraInstruction = anthropicExtraInstructionField.stringValue.isEmpty ? nil : anthropicExtraInstructionField.stringValue
         } catch {
             if NSClassFromString("XCTestCase") != nil {
-                NSLog("[TextPolish] Keychain save error suppressed in test environment: \(error)")
+                TPLogger.log("Keychain save error suppressed in test environment: \(error)")
             } else {
                 showErrorAlertIfNeeded(
                     title: "Failed to save API key",
@@ -872,7 +872,7 @@ class SettingsWindowViewController: NSViewController {
             try Settings.saveAndNotify(newSettings)
             settings = newSettings
         } catch {
-            NSLog("[TextPolish] Failed to save settings from Settings window: \(error)")
+            TPLogger.log("Failed to save settings from Settings window: \(error)")
             showErrorAlertIfNeeded(
                 title: "Failed to save settings",
                 message: error.localizedDescription
@@ -978,7 +978,7 @@ class SettingsWindowViewController: NSViewController {
             } catch {
                 await MainActor.run {
                     if NSClassFromString("XCTestCase") != nil {
-                        NSLog("[TextPolish] Gemini model detection error suppressed in test environment: \(error)")
+                        TPLogger.log("Gemini model detection error suppressed in test environment: \(error)")
                     } else {
                         let alert = NSAlert()
                         alert.messageText = "Failed to detect model"
@@ -1017,7 +1017,7 @@ class SettingsWindowViewController: NSViewController {
             } catch {
                 await MainActor.run {
                     if NSClassFromString("XCTestCase") != nil {
-                        NSLog("[TextPolish] OpenRouter model detection error suppressed in test environment: \(error)")
+                        TPLogger.log("OpenRouter model detection error suppressed in test environment: \(error)")
                     } else {
                         let alert = NSAlert()
                         alert.messageText = "Failed to detect model"

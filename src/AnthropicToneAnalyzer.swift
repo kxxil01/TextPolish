@@ -78,7 +78,7 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read Anthropic keychain: \(error)")
+      TPLogger.log("Failed to read Anthropic keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -147,7 +147,7 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         }
 
         let message = parseErrorMessage(data: data)
-        NSLog("[TextPolish] Anthropic Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        TPLogger.log("Anthropic Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
         let canRetry = attempt < retryPolicy.maxNetworkAttempts - 1
         if canRetry && (http.statusCode == 429 || (500...599).contains(http.statusCode)) {

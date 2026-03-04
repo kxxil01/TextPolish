@@ -673,7 +673,7 @@ struct Settings: Codable {
         let settings = try JSONDecoder().decode(Settings.self, from: data)
         return settings
       } catch {
-        NSLog("[TextPolish] Failed to decode settings at \(url.path): \(error). Falling back to defaults.")
+        TPLogger.log("Failed to decode settings at \(url.path): \(error). Falling back to defaults.")
       }
     }
 
@@ -684,20 +684,20 @@ struct Settings: Codable {
         do {
           try save(settings)
         } catch {
-          NSLog("[TextPolish] Could not migrate settings: \(error)")
+          TPLogger.log("Could not migrate settings: \(error)")
         }
         return settings
       } catch {
-        NSLog("[TextPolish] Failed to decode legacy settings at \(legacyURL.path): \(error). Falling back to defaults.")
+        TPLogger.log("Failed to decode legacy settings at \(legacyURL.path): \(error). Falling back to defaults.")
       }
     }
 
-    NSLog("[TextPolish] No valid settings found, creating defaults.")
+    TPLogger.log("No valid settings found, creating defaults.")
     let defaults = Settings.defaults()
     do {
       try save(defaults)
     } catch {
-      NSLog("[TextPolish] Could not write default settings: \(error)")
+      TPLogger.log("Could not write default settings: \(error)")
     }
 
     return defaults

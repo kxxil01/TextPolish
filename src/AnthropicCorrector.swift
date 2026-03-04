@@ -135,7 +135,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read Anthropic keychain: \(error)")
+      TPLogger.log("Failed to read Anthropic keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -212,7 +212,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         }
 
         let message = parseErrorMessage(data: data)
-        NSLog("[TextPolish] Anthropic HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        TPLogger.log("Anthropic HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
 
         if http.statusCode == 429, attempt < maxNetworkAttempts - 1 {
           lastError = AnthropicError.requestFailed(http.statusCode, message)

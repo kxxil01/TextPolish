@@ -227,7 +227,7 @@ final class ToneAnalysisController {
           message: message,
           error: error
         )
-        NSLog("[TextPolish] Tone analysis error: \(error)")
+        TPLogger.log("Tone analysis error: \(error)")
       }
     }
     currentTask = task

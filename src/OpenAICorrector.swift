@@ -135,7 +135,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return key
       }
     } catch {
-      NSLog("[TextPolish] Failed to read OpenAI keychain: \(error)")
+      TPLogger.log("Failed to read OpenAI keychain: \(error)")
     }
 
     if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
@@ -269,7 +269,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
 
     let message = parseErrorMessage(data: data)
-    NSLog("[TextPolish] OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    TPLogger.log("OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw OpenAIError.requestFailed(http.statusCode, message)
   }
 
