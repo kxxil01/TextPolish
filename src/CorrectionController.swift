@@ -213,25 +213,23 @@ final class CorrectionController {
         return
       }
 
-      let currentPid = ProcessInfo.processInfo.processIdentifier
-      let appToActivate: NSRunningApplication? = {
-        if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
-        if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
-        return nil
-      }()
-      if let appToActivate {
-        if !appToActivate.isActive {
-          _ = appToActivate.activate(options: [])
-          try? await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
-        }
-      }
-
-      let snapshot = self.pasteboard.snapshot()
-      defer { self.pasteboard.restore(snapshot) }
-
       var didPaste = false
 
       do {
+        let currentPid = ProcessInfo.processInfo.processIdentifier
+        let appToActivate: NSRunningApplication? = {
+          if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
+          if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
+          return nil
+        }()
+        if let appToActivate, !appToActivate.isActive {
+          _ = appToActivate.activate(options: [])
+          try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+        }
+
+        let snapshot = self.pasteboard.snapshot()
+        defer { self.pasteboard.restore(snapshot) }
+
         if mode == .all {
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
@@ -345,6 +343,22 @@ final class CorrectionController {
           )
         }
       } catch {
+        if didPaste, let operationError = error as? OperationError, case .timedOut = operationError {
+          self.feedback.showSuccess()
+          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+          DiagnosticsStore.shared.recordSuccess(
+            operation: .correction,
+            provider: activeProvider,
+            model: activeModel,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: retryCount,
+            fallbackCount: fallbackCount,
+            note: "Timed out after paste"
+          )
+          self.onSuccess?()
+          return
+        }
+
         let message =
           (error as? LocalizedError)?.errorDescription ??
           (error as NSError).localizedDescription
@@ -392,9 +406,14 @@ final class CorrectionController {
     pasteboard.setString(sentinel)
     try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
 
+    let remaining = try remainingDuration(until: deadline)
+    let minimumReliableCopyWindow = minDuration(.milliseconds(90), timings.copyTimeout)
+    guard remaining >= minimumReliableCopyWindow else {
+      throw OperationError.timedOut(operationTimeout)
+    }
+
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
-    let remaining = try remainingDuration(until: deadline)
     let waitTimeout = minDuration(timings.copyTimeout, remaining)
     return try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,

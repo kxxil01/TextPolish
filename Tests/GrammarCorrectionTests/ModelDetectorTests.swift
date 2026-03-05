@@ -319,4 +319,37 @@ final class ModelDetectorTests: XCTestCase {
             XCTAssertTrue(error is DecodingError, "Should throw DecodingError for malformed JSON")
         }
     }
+
+    func testMakeOpenRouterModelsURLPreservesCustomBasePath() throws {
+        let url = try ModelDetector.makeOpenRouterModelsURL(
+            baseURL: "https://gateway.example.com/proxy/openrouter"
+        )
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://gateway.example.com/proxy/openrouter/models",
+            "Should preserve configured OpenRouter path prefix when building models URL"
+        )
+    }
+
+    func testMakeOpenRouterModelsURLDoesNotDuplicateModelsPath() throws {
+        let url = try ModelDetector.makeOpenRouterModelsURL(
+            baseURL: "https://gateway.example.com/proxy/openrouter/models"
+        )
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://gateway.example.com/proxy/openrouter/models",
+            "Should avoid duplicating models segment"
+        )
+    }
+
+    func testMakeOpenRouterModelsURLReplacesChatCompletionsSuffix() throws {
+        let url = try ModelDetector.makeOpenRouterModelsURL(
+            baseURL: "https://gateway.example.com/proxy/openrouter/chat/completions"
+        )
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://gateway.example.com/proxy/openrouter/models",
+            "Should resolve models endpoint from chat completions URL"
+        )
+    }
 }

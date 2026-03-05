@@ -145,10 +145,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw OpenRouterError.invalidBaseURL
     }
-
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    components.path = OpenRouterEndpointPath.chatCompletionsPath(basePath: components.path)
 
     guard let url = components.url else { throw OpenRouterError.invalidBaseURL }
     return url

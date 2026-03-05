@@ -143,6 +143,73 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     }
   }
 
+  func testGeminiToneAnalyzerRetriesOnServerError() async throws {
+    var callCount = 0
+    var timestamps: [Date] = []
+
+    ToneMockURLProtocol.requestObserver = { _, date in
+      timestamps.append(date)
+    }
+
+    ToneMockURLProtocol.handler = { request in
+      callCount += 1
+      if callCount == 1 {
+        return Self.httpResponse(
+          for: request,
+          statusCode: 500,
+          body: #"{"error":{"message":"server down"}}"#
+        )
+      }
+
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"casual\",\"explanation\":\"ok\"}"}]}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test",
+      geminiBaseURL: "https://mock.local"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    XCTAssertEqual(callCount, 2)
+    XCTAssertEqual(timestamps.count, 2)
+    XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
+  }
+
+  func testGeminiToneAnalyzerBaseURLWithVersionDoesNotDuplicateVersionSegment() async throws {
+    var capturedPath: String?
+
+    ToneMockURLProtocol.handler = { request in
+      capturedPath = request.url?.path
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"casual\",\"explanation\":\"ok\"}"}]}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test",
+      geminiBaseURL: "https://mock.local/custom-prefix/v1beta"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    XCTAssertEqual(
+      capturedPath,
+      "/custom-prefix/v1beta/models/gemini-2.5-flash:generateContent",
+      "Gemini tone endpoint should not duplicate version segments from configured base URL"
+    )
+  }
+
   func testFallbackToneAnalyzerDoesNotFallbackForTextLengthValidation() async throws {
     let fallbackTracker = ToneCallTracker()
     let analyzer = FallbackToneAnalyzer(

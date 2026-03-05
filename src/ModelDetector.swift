@@ -58,7 +58,7 @@ enum ModelDetector {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw DetectorError.requestFailed("Invalid base URL")
         }
-        components.path = makeGeminiModelsPath(basePath: components.path)
+        components.path = GeminiEndpointPath.modelsPath(basePath: components.path, apiVersion: "v1beta")
 
         var items = components.queryItems ?? []
         items.removeAll { $0.name == "key" }
@@ -93,15 +93,16 @@ enum ModelDetector {
         return nil
     }
 
-    static func detectOpenRouterModel(apiKey: String) async throws -> String {
+    static func detectOpenRouterModel(
+        apiKey: String,
+        baseURL: String = "https://openrouter.ai/api/v1"
+    ) async throws -> String {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DetectorError.noApiKey
         }
 
-        guard let url = URL(string: "https://openrouter.ai/api/v1/models") else {
-            throw DetectorError.requestFailed("Invalid OpenRouter models URL")
-        }
-        var request = URLRequest(url: url)
+        let requestURL = try makeOpenRouterModelsURL(baseURL: baseURL)
+        var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("TextPolish/1.0", forHTTPHeaderField: "User-Agent")
@@ -178,15 +179,20 @@ enum ModelDetector {
         return false
     }
 
-    private static func makeGeminiModelsPath(basePath: String) -> String {
-        let segments = basePath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        if segments.count >= 2 && segments[segments.count - 2] == "v1beta" && segments.last == "models" {
-            return "/" + segments.joined(separator: "/")
+    static func makeOpenRouterModelsURL(baseURL: String) throws -> URL {
+        guard let url = URL(string: baseURL) else {
+            throw DetectorError.requestFailed("Invalid OpenRouter base URL")
         }
-        if segments.last == "v1beta" {
-            return "/" + (segments + ["models"]).joined(separator: "/")
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw DetectorError.requestFailed("Invalid OpenRouter base URL")
         }
-        return "/" + (segments + ["v1beta", "models"]).joined(separator: "/")
+        components.path = OpenRouterEndpointPath.modelsPath(basePath: components.path)
+
+        guard let requestURL = components.url else {
+            throw DetectorError.requestFailed("Invalid OpenRouter models URL")
+        }
+        return requestURL
     }
 
     private static func normalizeGeminiModelName(_ rawName: String) -> String {

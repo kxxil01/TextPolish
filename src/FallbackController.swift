@@ -22,6 +22,7 @@ final class FallbackController {
         self.onFallbackComplete = onFallbackComplete
     }
 
+    @MainActor
     func shouldAttemptFallback(for error: Error, corrector: GrammarCorrector) -> Bool {
         // Don't show alert in test environment to avoid blocking CI/CD
         #if DEBUG
@@ -47,30 +48,27 @@ final class FallbackController {
         return response == .alertFirstButtonReturn
     }
 
+    @MainActor
     func showFallbackAlert(for error: Error, corrector: GrammarCorrector, text: String) {
         if shouldAttemptFallback(for: error, corrector: corrector) {
-            Task {
+            Task { @MainActor in
                 _ = await performFallback(text: text, corrector: corrector)
             }
         }
     }
 
     @discardableResult
+    @MainActor
     func performFallback(text: String, corrector: GrammarCorrector) async -> Result<String, Error> {
         do {
             let corrected = try await fallbackProvider.correct(text)
-
-            await MainActor.run {
-                showSuccess()
-                showInfo("Used \(providerName(for: fallbackProvider)) as fallback")
-                onFallbackComplete?(true)
-            }
+            showSuccess()
+            showInfo("Used \(providerName(for: fallbackProvider)) as fallback")
+            onFallbackComplete?(true)
             return .success(corrected)
         } catch {
-            await MainActor.run {
-                showError("Fallback also failed: \(error.localizedDescription)")
-                onFallbackComplete?(false)
-            }
+            showError("Fallback also failed: \(error.localizedDescription)")
+            onFallbackComplete?(false)
             return .failure(error)
         }
     }

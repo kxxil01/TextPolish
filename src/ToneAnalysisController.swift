@@ -142,23 +142,21 @@ final class ToneAnalysisController {
         return
       }
 
-      let currentPid = ProcessInfo.processInfo.processIdentifier
-      let appToActivate: NSRunningApplication? = {
-        if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
-        if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
-        return nil
-      }()
-      if let appToActivate {
-        if !appToActivate.isActive {
-          _ = appToActivate.activate(options: [])
-          try? await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
-        }
-      }
-
-      let snapshot = self.pasteboard.snapshot()
-      defer { self.pasteboard.restore(snapshot) }
-
       do {
+        let currentPid = ProcessInfo.processInfo.processIdentifier
+        let appToActivate: NSRunningApplication? = {
+          if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
+          if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
+          return nil
+        }()
+        if let appToActivate, !appToActivate.isActive {
+          _ = appToActivate.activate(options: [])
+          try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+        }
+
+        let snapshot = self.pasteboard.snapshot()
+        defer { self.pasteboard.restore(snapshot) }
+
         let inputText = try await self.copySelectedText(timings: timings, deadline: deadline)
         try Task.checkCancellation()
 
@@ -260,9 +258,14 @@ final class ToneAnalysisController {
     try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
     try Task.checkCancellation()
 
+    let remaining = try remainingDuration(until: deadline)
+    let minimumReliableCopyWindow = minDuration(.milliseconds(90), timings.copyTimeout)
+    guard remaining >= minimumReliableCopyWindow else {
+      throw OperationError.timedOut(operationTimeout)
+    }
+
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
-    let remaining = try remainingDuration(until: deadline)
     let waitTimeout = minDuration(timings.copyTimeout, remaining)
     return try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,

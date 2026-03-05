@@ -10,7 +10,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private let timeoutSeconds: Double
   private let session: URLSession
   private let ownsSession: Bool
-  private let maxRateLimitBackoffSeconds: Double
+  private let retryPolicy: RetryPolicy
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
 
@@ -52,7 +52,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
       self.session = URLSession(configuration: configuration)
       self.ownsSession = true
     }
-    self.maxRateLimitBackoffSeconds = 12
+    self.retryPolicy = RetryPolicy()
     self.config = config
   }
 
@@ -99,12 +99,11 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw ToneAnalysisError.invalidBaseURL
     }
-
-    var basePath = components.path
-    if basePath.hasSuffix("/") {
-      basePath.removeLast()
-    }
-    components.path = basePath + "/\(apiVersion)/models/\(model):generateContent"
+    components.path = GeminiEndpointPath.generateContentPath(
+      basePath: components.path,
+      apiVersion: apiVersion,
+      model: model
+    )
 
     var items = components.queryItems ?? []
     items.removeAll { $0.name == "key" }
@@ -121,99 +120,105 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     var retryCount = 0
     defer { lastRetryCount = retryCount }
 
+    enum GeminiVersionFallback: Error {
+      case tryNextVersion
+    }
+
     for (index, version) in versionsToTry.enumerated() {
-      try Task.checkCancellation()
-      let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
-      var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-      request.httpMethod = "POST"
-      request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-      request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-
-      let body = GeminiToneRequest(
-        contents: [
-          .init(role: "user", parts: [.init(text: prompt)]),
-        ],
-        generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
-      )
-      request.httpBody = try JSONEncoder().encode(body)
-
       do {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-          lastError = ToneAnalysisError.requestFailed(-1, nil)
-          retryCount += 1
-          continue
-        }
+        let response: String = try await retryPolicy.performWithBackoff(
+          maxAttempts: retryPolicy.maxNetworkAttempts,
+          onRetry: { retryCount += 1 }
+        ) { attempt, isLastAttempt in
+          try Task.checkCancellation()
 
-        if (200..<300).contains(http.statusCode) {
-          let decoded = try JSONDecoder().decode(GeminiToneResponse.self, from: data)
-          let textParts = decoded.candidates?
-            .first?
-            .content?
-            .parts?
-            .compactMap(\.text)
-            ?? []
+          let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
+          var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+          request.httpMethod = "POST"
+          request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+          request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
-          // Check if response is empty
-          let joined = textParts.joined()
-          guard !joined.isEmpty else {
-            throw ToneAnalysisError.emptyResponse
+          let body = GeminiToneRequest(
+            contents: [
+              .init(role: "user", parts: [.init(text: prompt)]),
+            ],
+            generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
+          )
+          request.httpBody = try JSONEncoder().encode(body)
+
+          do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+              let error = ToneAnalysisError.requestFailed(-1, nil)
+              if isLastAttempt {
+                return .fail(error)
+              }
+              return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: error)
+            }
+
+            if (200..<300).contains(http.statusCode) {
+              let decoded = try JSONDecoder().decode(GeminiToneResponse.self, from: data)
+              let textParts = decoded.candidates?
+                .first?
+                .content?
+                .parts?
+                .compactMap(\.text)
+                ?? []
+              let joined = textParts.joined()
+              guard !joined.isEmpty else {
+                return .fail(ToneAnalysisError.emptyResponse)
+              }
+              return .success(joined)
+            }
+
+            let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
+            TPLogger.log("Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
+            let requestError = ToneAnalysisError.requestFailed(http.statusCode, message)
+
+            if http.statusCode == 404, index < versionsToTry.count - 1 {
+              lastError = requestError
+              return .fail(GeminiVersionFallback.tryNextVersion)
+            }
+
+            if http.statusCode == 429, !isLastAttempt {
+              let requestedRetryAfter = RetryAfterParser.retryAfterSeconds(from: http, data: data)
+                ?? retryPolicy.retryDelaySeconds(attempt: attempt)
+              let retryAfter = retryPolicy.clampedRateLimitBackoff(requestedRetryAfter)
+              return .retry(after: retryAfter, lastError: requestError)
+            }
+
+            if (500...599).contains(http.statusCode), !isLastAttempt {
+              return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: requestError)
+            }
+
+            return .fail(requestError)
+          } catch {
+            if error is CancellationError { throw error }
+            if let urlError = error as? URLError, urlError.code == .cancelled {
+              throw CancellationError()
+            }
+            if let toneError = error as? ToneAnalysisError {
+              return .fail(toneError)
+            }
+
+            let wrapped = ToneAnalysisError.requestFailed(-1, ErrorLogSanitizer.sanitize(error.localizedDescription))
+            if isLastAttempt {
+              return .fail(wrapped)
+            }
+            return .retry(after: retryPolicy.retryDelaySeconds(attempt: attempt), lastError: wrapped)
           }
-          return joined
         }
 
-        let message = ErrorLogSanitizer.sanitize(parseErrorMessage(data: data))
-        TPLogger.log("Gemini Tone HTTP \(http.statusCode) message=\(message ?? "nil")")
-
-        // Handle rate limiting with exponential backoff
-        if http.statusCode == 429 {
-          let requestedRetryAfter = extractRetryAfter(from: data) ?? 2
-          let retryAfter = clampedRateLimitBackoff(requestedRetryAfter)
-          retryCount += 1
-          try await Task.sleep(for: .seconds(retryAfter))
-          // Don't set lastError, just retry this same version
-          continue
-        }
-
-        if http.statusCode == 404, index < versionsToTry.count - 1 {
-          lastError = ToneAnalysisError.requestFailed(http.statusCode, message)
-          continue
-        }
-
-        throw ToneAnalysisError.requestFailed(http.statusCode, message)
+        return response
+      } catch GeminiVersionFallback.tryNextVersion {
+        continue
       } catch {
         if error is CancellationError { throw error }
-        if let urlError = error as? URLError, urlError.code == .cancelled {
-          throw CancellationError()
-        }
-        // If it's already a ToneAnalysisError, rethrow it
-        if error is ToneAnalysisError {
-          throw error
-        }
-        // Otherwise, treat as a network error
         lastError = error
-        retryCount += 1
-        continue
       }
     }
 
     throw lastError ?? ToneAnalysisError.requestFailed(-1, nil)
-  }
-
-  private func extractRetryAfter(from data: Data) -> Double? {
-    guard let string = String(data: data, encoding: .utf8) else { return nil }
-    guard let range = string.range(of: #""retryAfter"\s*:\s*"?(\d+)"?"#, options: .regularExpression) else { return nil }
-    let match = string[range]
-    let numberString = match.replacingOccurrences(of: #"[^0-9]"#, with: "", options: .regularExpression)
-    if let number = Int(numberString) {
-      return Double(number)
-    }
-    return nil
-  }
-
-  private func clampedRateLimitBackoff(_ requested: Double) -> Double {
-    let sanitized = requested.isFinite ? requested : 1
-    return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
   private struct GoogleErrorEnvelope: Decodable {

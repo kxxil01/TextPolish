@@ -94,4 +94,40 @@ final class StatusItemFeedbackTests: XCTestCase {
     XCTAssertEqual(button.title, "\u{2713}")
     XCTAssertEqual(button.toolTip, "Corrected")
   }
+
+  @MainActor
+  func testFlashRestoresUpdatedBaseTooltip() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    if environment["GITHUB_ACTIONS"] != nil || environment["CI"] != nil {
+      throw XCTSkip("Status bar unavailable on CI runners.")
+    }
+
+    let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    defer { NSStatusBar.system.removeStatusItem(statusItem) }
+
+    guard let button = statusItem.button else {
+      throw XCTSkip("Status item button unavailable on this runner.")
+    }
+
+    button.title = "Base"
+    button.toolTip = "InitialTip"
+    let baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: nil)
+    button.image = baseImage
+
+    let sleeper = TestSleeper()
+    let feedback = StatusItemFeedback(
+      statusItem: statusItem,
+      baseImage: baseImage,
+      sleepHandler: sleeper.sleep
+    )
+
+    feedback.updateBaseToolTip("ProviderTip")
+    feedback.showInfo("Working")
+
+    try await Task.sleep(for: .milliseconds(50))
+    sleeper.resumeAll()
+    try await Task.sleep(for: .milliseconds(20))
+
+    XCTAssertEqual(button.toolTip, "ProviderTip")
+  }
 }

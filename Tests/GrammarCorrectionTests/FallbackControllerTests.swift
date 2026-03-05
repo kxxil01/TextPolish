@@ -145,6 +145,7 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertFalse(mockShowSuccessCalled, "showSuccess should not be called on failure")
     }
 
+    @MainActor
     func testShowFallbackAlert() {
         // Given
         let testError = NSError(domain: "TestError", code: 1, userInfo: nil)
@@ -157,6 +158,7 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertNoThrow(fallbackController.showFallbackAlert(for: testError, corrector: mockFallbackProvider, text: testText))
     }
 
+    @MainActor
     func testFallbackControllerWithNilCallbacks() {
         // Given
         let controller = FallbackController(

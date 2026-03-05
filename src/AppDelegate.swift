@@ -647,6 +647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     } else {
       statusItem.button?.toolTip = appDisplayName
     }
+    feedback?.updateBaseToolTip(statusItem.button?.toolTip)
   }
 
   private func syncProviderHealthItem() {
@@ -1747,7 +1748,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Fetch free models
     lines.append("Scanning free models…")
     do {
-      let allModels = try await fetchOpenRouterModels()
+      let allModels = try await fetchOpenRouterModels(apiKey: apiKey)
       let freeModels = allModels.filter { $0.hasSuffix(":free") }
       lines.removeLast() // remove "Scanning…"
 
@@ -1769,7 +1770,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         apiKey: apiKey,
         preferFree: true,
         preferredFirst: settings.openRouterModel,
-        excluding: nil
+        excluding: nil,
+        prefetchedModels: allModels
       ) {
         if working == settings.openRouterModel {
           lines.append("  ✓ Current model \"\(working)\" is working")
@@ -1900,9 +1902,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     for (index, version) in versionsToTry.enumerated() {
       guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
-      var basePath = components.path
-      if basePath.hasSuffix("/") { basePath.removeLast() }
-      components.path = basePath + "/\(version)/models/\(normalizedModel):generateContent"
+      components.path = GeminiEndpointPath.generateContentPath(
+        basePath: components.path,
+        apiVersion: version,
+        model: normalizedModel
+      )
       components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
       guard let url = components.url else { return false }
 
@@ -2331,19 +2335,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw NSError(domain: "TextPolish", code: 20, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
     }
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    components.path = OpenRouterEndpointPath.chatCompletionsPath(basePath: components.path)
     guard let url = components.url else {
       throw NSError(domain: "TextPolish", code: 21, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter URL"])
     }
     return url
   }
 
-  private func probeOpenRouterModel(apiKey: String, model: String) async throws -> Bool {
-    let url = try makeOpenRouterChatCompletionsURL()
-    let probeTimeoutSeconds = max(1.0, min(settings.requestTimeoutSeconds, 4.0))
-    var request = URLRequest(url: url, timeoutInterval: probeTimeoutSeconds)
+  private static func probeOpenRouterModel(
+    url: URL,
+    timeoutSeconds: Double,
+    apiKey: String,
+    model: String
+  ) async throws -> Bool {
+    var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
     request.httpMethod = "POST"
     request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
     request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
@@ -2370,7 +2375,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return !content.isEmpty
     }
 
-    let message = ErrorLogSanitizer.sanitize(parseOpenRouterErrorMessage(data: data))
+    let parsedMessage: String? = {
+      if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data),
+         let message = decoded.error?.message,
+         !message.isEmpty
+      {
+        return message
+      }
+      return String(data: data, encoding: .utf8)
+    }()
+    let message = ErrorLogSanitizer.sanitize(parsedMessage)
     TPLogger.log("OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     if http.statusCode == 401 {
       throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
@@ -2382,9 +2396,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     apiKey: String,
     preferFree: Bool,
     preferredFirst: String?,
-    excluding: String?
+    excluding: String?,
+    prefetchedModels: [String]? = nil
   ) async throws -> String? {
-    let models = try await fetchOpenRouterModels()
+    let models: [String]
+    if let prefetchedModels {
+      models = prefetchedModels
+    } else {
+      models = try await fetchOpenRouterModels(apiKey: apiKey)
+    }
     let candidates = rankedOpenRouterModels(
       from: models,
       preferFree: preferFree,
@@ -2400,18 +2420,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard seen.insert(normalized).inserted else { continue }
       deduplicated.append(trimmed)
     }
+    let maxProbeCandidates = 9
+    if deduplicated.count > maxProbeCandidates {
+      deduplicated = Array(deduplicated.prefix(maxProbeCandidates))
+    }
+    guard !deduplicated.isEmpty else { return nil }
 
-    let limit = min(6, deduplicated.count)
-    for model in deduplicated.prefix(limit) {
-      if try await probeOpenRouterModel(apiKey: apiKey, model: model) {
-        return model
+    let probeURL = try makeOpenRouterChatCompletionsURL()
+    let probeTimeoutSeconds = max(1.0, min(settings.requestTimeoutSeconds, 4.0))
+
+    if let preferred = deduplicated.first,
+       try await Self.probeOpenRouterModel(
+         url: probeURL,
+         timeoutSeconds: probeTimeoutSeconds,
+         apiKey: apiKey,
+         model: preferred
+       )
+    {
+      return preferred
+    }
+
+    let remaining = Array(deduplicated.dropFirst())
+    let batchSize = 3
+    var batchStart = 0
+
+    while batchStart < remaining.count {
+      let batchEnd = min(batchStart + batchSize, remaining.count)
+      let batch = Array(remaining[batchStart..<batchEnd])
+
+      let firstSuccessIndex = try await withThrowingTaskGroup(of: (Int, Bool).self, returning: Int?.self) { group in
+        for (index, model) in batch.enumerated() {
+          group.addTask {
+            let success = try await Self.probeOpenRouterModel(
+              url: probeURL,
+              timeoutSeconds: probeTimeoutSeconds,
+              apiKey: apiKey,
+              model: model
+            )
+            return (index, success)
+          }
+        }
+
+        var outcomesByIndex: [Int: Bool] = [:]
+        var nextResolvableIndex = 0
+        for try await (index, success) in group {
+          outcomesByIndex[index] = success
+          while let outcome = outcomesByIndex[nextResolvableIndex] {
+            if outcome {
+              group.cancelAll()
+              return nextResolvableIndex
+            }
+            nextResolvableIndex += 1
+          }
+        }
+        return nil
       }
+
+      if let firstSuccessIndex {
+        return batch[firstSuccessIndex]
+      }
+
+      batchStart = batchEnd
     }
 
     return nil
   }
 
-  private func fetchOpenRouterModels() async throws -> [String] {
+  private func fetchOpenRouterModels(apiKey: String) async throws -> [String] {
     guard let baseURL = URL(string: settings.openRouterBaseURL) else {
       throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
     }
@@ -2419,9 +2494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
     }
 
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/models"
+    components.path = OpenRouterEndpointPath.modelsPath(basePath: components.path)
 
     guard let url = components.url else {
       throw NSError(domain: "TextPolish", code: 11, userInfo: [NSLocalizedDescriptionKey: "Invalid models URL"])
@@ -2430,6 +2503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
     request.httpMethod = "GET"
     request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
     let (data, response) = try await URLSession.shared.data(for: request)
     guard let http = response as? HTTPURLResponse else {
@@ -2462,9 +2536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
         throw NSError(domain: "TextPolish", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini base URL"])
       }
-      var basePath = components.path
-      if basePath.hasSuffix("/") { basePath.removeLast() }
-      components.path = basePath + "/\(version)/models"
+      components.path = GeminiEndpointPath.modelsPath(basePath: components.path, apiVersion: version)
 
       var items = components.queryItems ?? []
       items.removeAll { $0.name == "key" }

@@ -56,6 +56,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
+  private let ownsSession: Bool
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
@@ -65,7 +66,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   var diagnosticsProvider: Settings.Provider { .gemini }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings) throws {
+  init(settings: Settings, session: URLSession? = nil) throws {
     keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv =
       ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
@@ -81,11 +82,17 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       self.model = rawModel
     }
     self.timeoutSeconds = settings.requestTimeoutSeconds
-    let configuration = URLSessionConfiguration.default
-    configuration.waitsForConnectivity = true
-    configuration.timeoutIntervalForRequest = timeoutSeconds
-    configuration.timeoutIntervalForResource = timeoutSeconds
-    self.session = URLSession(configuration: configuration)
+    if let session {
+      self.session = session
+      self.ownsSession = false
+    } else {
+      let configuration = URLSessionConfiguration.default
+      configuration.waitsForConnectivity = true
+      configuration.timeoutIntervalForRequest = timeoutSeconds
+      configuration.timeoutIntervalForResource = timeoutSeconds
+      self.session = URLSession(configuration: configuration)
+      self.ownsSession = true
+    }
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
     self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
@@ -94,7 +101,9 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   deinit {
-    session.invalidateAndCancel()
+    if ownsSession {
+      session.invalidateAndCancel()
+    }
   }
 
   func correct(_ text: String) async throws -> String {
@@ -149,12 +158,11 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw GeminiError.invalidBaseURL
     }
-
-    var basePath = components.path
-    if basePath.hasSuffix("/") {
-      basePath.removeLast()
-    }
-    components.path = basePath + "/\(apiVersion)/models/\(model):generateContent"
+    components.path = GeminiEndpointPath.generateContentPath(
+      basePath: components.path,
+      apiVersion: apiVersion,
+      model: model
+    )
 
     var items = components.queryItems ?? []
     items.removeAll { $0.name == "key" }

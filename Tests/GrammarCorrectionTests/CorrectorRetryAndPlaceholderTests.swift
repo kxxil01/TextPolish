@@ -139,6 +139,36 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     XCTAssertEqual(result, input)
   }
 
+  func testGeminiBaseURLWithVersionDoesNotDuplicateVersionSegment() async throws {
+    var capturedPath: String?
+
+    MockURLProtocol.handler = { request in
+      capturedPath = request.url?.path
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test-key",
+      geminiBaseURL: "https://mock.local/custom-prefix/v1beta",
+      geminiMaxAttempts: 1
+    )
+    let corrector = try GeminiCorrector(settings: settings, session: Self.makeMockSession())
+    let result = try await corrector.correct("Hello")
+
+    XCTAssertEqual(result, "Hello")
+    XCTAssertEqual(
+      capturedPath,
+      "/custom-prefix/v1beta/models/gemini-2.5-flash:generateContent",
+      "Gemini endpoint should not duplicate version segments from configured base URL"
+    )
+  }
+
   private static func extractPrompt(from request: URLRequest) throws -> String {
     guard let body = requestBodyData(from: request) else { return "" }
     let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]

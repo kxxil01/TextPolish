@@ -280,6 +280,77 @@ final class CorrectionControllerTests: XCTestCase {
   }
 
   @MainActor
+  func testCorrectionTimeoutAfterPasteStillReportsSuccess() async {
+    let completion = expectation(description: "operation completes as success after paste")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let timings = CorrectionController.Timings(
+      activationDelay: .zero,
+      selectAllDelay: .zero,
+      copySettleDelay: .zero,
+      copyTimeout: .milliseconds(10),
+      pasteSettleDelay: .zero,
+      postPasteDelay: .milliseconds(250)
+    )
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: timings,
+      operationTimeout: .milliseconds(80),
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 1, "Text should still be pasted")
+    XCTAssertEqual(feedback.successCount, 1, "Post-paste timeout should be treated as successful completion")
+    XCTAssertTrue(feedback.errorMessages.isEmpty, "Post-paste timeout should not surface as an error")
+  }
+
+  @MainActor
+  func testNearDeadlineCopyFailsWithTimeoutBeforeIssuingCopyCommand() async {
+    let completion = expectation(description: "copy timeout surfaced")
+    let feedback = StubFeedback()
+    feedback.onError = { message in
+      if message.contains("timed out") {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: CorrectionController.Timings(
+        activationDelay: .zero,
+        selectAllDelay: .zero,
+        copySettleDelay: .zero,
+        copyTimeout: .milliseconds(900),
+        pasteSettleDelay: .zero,
+        postPasteDelay: .zero
+      ),
+      operationTimeout: .milliseconds(20),
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandCCount, 0, "Should not issue copy command when deadline is already too close")
+    XCTAssertEqual(pasteboard.waitCallCount, 0, "Should not wait on pasteboard when deadline is already too close")
+    XCTAssertEqual(keyboard.commandVCount, 0)
+  }
+
+  @MainActor
   func testRecovererUsesFallbackCorrector() async {
     // SKIPPED: This test requires valid API keys to test fallback behavior
     // FallbackControllerTests covers the fallback UI flow without requiring API keys

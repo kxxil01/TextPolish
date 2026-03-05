@@ -13,8 +13,8 @@ final class StatusItemFeedback: FeedbackPresenter {
 
   private let statusItem: NSStatusItem
   private var baseImage: NSImage?
-  private let baseToolTip: String?
-  private let baseTitle: String?
+  private var baseToolTip: String?
+  private var baseTitle: String?
   private let sleepHandler: SleepHandler
   private var resetTask: Task<Void, Never>?
 
@@ -32,6 +32,14 @@ final class StatusItemFeedback: FeedbackPresenter {
 
   func updateBaseImage(_ image: NSImage?) {
     self.baseImage = image
+  }
+
+  func updateBaseToolTip(_ toolTip: String?) {
+    baseToolTip = toolTip
+  }
+
+  func updateBaseTitle(_ title: String?) {
+    baseTitle = title
   }
 
   func showSuccess() {

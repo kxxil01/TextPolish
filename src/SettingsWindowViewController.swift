@@ -1006,7 +1006,8 @@ class SettingsWindowViewController: NSViewController {
                 }
 
                 let detectedModel = try await ModelDetector.detectOpenRouterModel(
-                    apiKey: apiKey
+                    apiKey: apiKey,
+                    baseURL: openRouterBaseURLField.stringValue
                 )
 
                 await MainActor.run {

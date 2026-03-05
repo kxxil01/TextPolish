@@ -92,10 +92,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw ToneAnalysisError.invalidBaseURL
     }
-
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    components.path = basePath + "/chat/completions"
+    components.path = OpenRouterEndpointPath.chatCompletionsPath(basePath: components.path)
 
     guard let url = components.url else { throw ToneAnalysisError.invalidBaseURL }
     return url
