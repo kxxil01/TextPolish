@@ -10,10 +10,13 @@ protocol ToneAnalysisResultPresenter {
 @MainActor
 final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   private let contentStack = NSStackView()
+  private let meaningLabel = NSTextField(wrappingLabelWithString: "")
+  private let intentLabel = NSTextField(wrappingLabelWithString: "")
+  private let riskLabel = NSTextField(labelWithString: "")
+  private let riskReasonLabel = NSTextField(wrappingLabelWithString: "")
   private let toneLabel = NSTextField(labelWithString: "")
-  private let sentimentLabel = NSTextField(labelWithString: "")
-  private let formalityLabel = NSTextField(labelWithString: "")
-  private let explanationLabel = NSTextField(wrappingLabelWithString: "")
+  private let ambiguitiesLabel = NSTextField(wrappingLabelWithString: "")
+  private let repliesLabel = NSTextField(wrappingLabelWithString: "")
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
 
   private nonisolated(unsafe) var localMonitor: Any?
@@ -35,7 +38,7 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
   }
 
   private func setupWindow() {
-    title = "Tone Analysis"
+    title = "Message Analysis"
     isFloatingPanel = true
     becomesKeyOnlyIfNeeded = true
     level = .floating
@@ -56,17 +59,63 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     contentStack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
     containerView.addSubview(contentStack)
 
+    // Meaning summary
+    let meaningTitle = NSTextField(labelWithString: "Meaning:")
+    meaningTitle.font = NSFont.boldSystemFont(ofSize: 13)
+    meaningTitle.textColor = .labelColor
+    contentStack.addArrangedSubview(meaningTitle)
+    meaningLabel.font = NSFont.systemFont(ofSize: 12)
+    meaningLabel.textColor = .labelColor
+    meaningLabel.preferredMaxLayoutWidth = 300
+    meaningLabel.lineBreakMode = .byWordWrapping
+    contentStack.addArrangedSubview(meaningLabel)
+
+    // Intent summary
+    let intentTitle = NSTextField(labelWithString: "Likely Intent:")
+    intentTitle.font = NSFont.boldSystemFont(ofSize: 13)
+    intentTitle.textColor = .labelColor
+    contentStack.addArrangedSubview(intentTitle)
+    intentLabel.font = NSFont.systemFont(ofSize: 12)
+    intentLabel.textColor = .labelColor
+    intentLabel.preferredMaxLayoutWidth = 300
+    intentLabel.lineBreakMode = .byWordWrapping
+    contentStack.addArrangedSubview(intentLabel)
+
+    // Misunderstanding risk
+    let riskRow = makeRow(label: "Misunderstanding Risk:", valueLabel: riskLabel)
+    riskLabel.textColor = .systemOrange
+    contentStack.addArrangedSubview(riskRow)
+    riskReasonLabel.font = NSFont.systemFont(ofSize: 12)
+    riskReasonLabel.textColor = .secondaryLabelColor
+    riskReasonLabel.preferredMaxLayoutWidth = 300
+    riskReasonLabel.lineBreakMode = .byWordWrapping
+    contentStack.addArrangedSubview(riskReasonLabel)
+
     // Tone row
     let toneRow = makeRow(label: "Tone:", valueLabel: toneLabel)
     contentStack.addArrangedSubview(toneRow)
 
-    // Sentiment row
-    let sentimentRow = makeRow(label: "Sentiment:", valueLabel: sentimentLabel)
-    contentStack.addArrangedSubview(sentimentRow)
+    // Ambiguities
+    let ambiguitiesTitle = NSTextField(labelWithString: "Ambiguities:")
+    ambiguitiesTitle.font = NSFont.boldSystemFont(ofSize: 13)
+    ambiguitiesTitle.textColor = .labelColor
+    contentStack.addArrangedSubview(ambiguitiesTitle)
+    ambiguitiesLabel.font = NSFont.systemFont(ofSize: 12)
+    ambiguitiesLabel.textColor = .secondaryLabelColor
+    ambiguitiesLabel.preferredMaxLayoutWidth = 300
+    ambiguitiesLabel.lineBreakMode = .byWordWrapping
+    contentStack.addArrangedSubview(ambiguitiesLabel)
 
-    // Formality row
-    let formalityRow = makeRow(label: "Formality:", valueLabel: formalityLabel)
-    contentStack.addArrangedSubview(formalityRow)
+    // Suggested replies
+    let repliesTitle = NSTextField(labelWithString: "Suggested Replies:")
+    repliesTitle.font = NSFont.boldSystemFont(ofSize: 13)
+    repliesTitle.textColor = .labelColor
+    contentStack.addArrangedSubview(repliesTitle)
+    repliesLabel.font = NSFont.systemFont(ofSize: 12)
+    repliesLabel.textColor = .secondaryLabelColor
+    repliesLabel.preferredMaxLayoutWidth = 300
+    repliesLabel.lineBreakMode = .byWordWrapping
+    contentStack.addArrangedSubview(repliesLabel)
 
     // Separator
     let separator = NSBox()
@@ -74,13 +123,6 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     separator.translatesAutoresizingMaskIntoConstraints = false
     contentStack.addArrangedSubview(separator)
     separator.widthAnchor.constraint(equalTo: contentStack.widthAnchor, constant: -40).isActive = true
-
-    // Explanation
-    explanationLabel.font = NSFont.systemFont(ofSize: 12)
-    explanationLabel.textColor = .secondaryLabelColor
-    explanationLabel.preferredMaxLayoutWidth = 260
-    explanationLabel.lineBreakMode = .byWordWrapping
-    contentStack.addArrangedSubview(explanationLabel)
 
     // Close button
     closeButton.target = self
@@ -130,10 +172,13 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
 
   func showResult(_ result: ToneAnalysisResult) {
     ensureEscapeMonitor()
+    meaningLabel.stringValue = result.plainMeaning
+    intentLabel.stringValue = result.likelyIntent
+    riskLabel.stringValue = result.misunderstandingRisk.level.displayName
+    riskReasonLabel.stringValue = result.misunderstandingRisk.reason
     toneLabel.stringValue = "\(toneEmoji(result.tone)) \(result.tone.rawValue)"
-    sentimentLabel.stringValue = "\(sentimentEmoji(result.sentiment)) \(result.sentiment.rawValue)"
-    formalityLabel.stringValue = result.formality.rawValue
-    explanationLabel.stringValue = result.explanation
+    ambiguitiesLabel.stringValue = formatList(result.ambiguities, emptyFallback: "None identified.")
+    repliesLabel.stringValue = formatList(result.suggestedReplies, emptyFallback: "No reply suggestion.")
 
     positionNearCursor()
     makeKeyAndOrderFront(nil)
@@ -141,10 +186,13 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
 
   func showError(_ message: String) {
     ensureEscapeMonitor()
+    meaningLabel.stringValue = message
+    intentLabel.stringValue = "-"
+    riskLabel.stringValue = "-"
+    riskReasonLabel.stringValue = "-"
     toneLabel.stringValue = "Error"
-    sentimentLabel.stringValue = "-"
-    formalityLabel.stringValue = "-"
-    explanationLabel.stringValue = message
+    ambiguitiesLabel.stringValue = "-"
+    repliesLabel.stringValue = "-"
 
     positionNearCursor()
     makeKeyAndOrderFront(nil)
@@ -226,13 +274,9 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     }
   }
 
-  private func sentimentEmoji(_ sentiment: Sentiment) -> String {
-    switch sentiment {
-    case .positive: return "👍"
-    case .negative: return "👎"
-    case .neutral: return "➖"
-    case .mixed: return "🔀"
-    }
+  private func formatList(_ values: [String], emptyFallback: String) -> String {
+    guard !values.isEmpty else { return emptyFallback }
+    return values.map { "• \($0)" }.joined(separator: "\n")
   }
 
   deinit {

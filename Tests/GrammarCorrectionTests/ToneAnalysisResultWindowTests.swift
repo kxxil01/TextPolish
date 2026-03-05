@@ -35,9 +35,11 @@ final class ToneAnalysisResultWindowTests: XCTestCase {
         window.showResult(
             ToneAnalysisResult(
                 tone: .neutral,
-                sentiment: .neutral,
-                formality: .casual,
-                explanation: "Test"
+                plainMeaning: "Test meaning",
+                likelyIntent: "Test intent",
+                misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "Clear"),
+                ambiguities: ["Phrase A can mean X or Y"],
+                suggestedReplies: ["Can you clarify which one you mean?"]
             )
         )
         XCTAssertTrue(window.hasActiveEscapeMonitor, "Monitor should be restored when showing the window again")

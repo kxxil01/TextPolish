@@ -198,22 +198,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   }
 
   private func makePrompt(text: String) -> String {
-    let toneOptions = DetectedTone.allCases.map(\.rawValue).joined(separator: ", ")
-    let sentimentOptions = Sentiment.allCases.map(\.rawValue).joined(separator: ", ")
-    let formalityOptions = FormalityLevel.allCases.map(\.rawValue).joined(separator: ", ")
-
-    return """
-    Analyze the tone of the following text. Return a JSON object with exactly these fields:
-    - "tone": one of [\(toneOptions)]
-    - "sentiment": one of [\(sentimentOptions)]
-    - "formality": one of [\(formalityOptions)]
-    - "explanation": a brief 1-2 sentence explanation of why you classified it this way
-
-    Respond with ONLY the JSON object, no other text, no code fences.
-
-    TEXT:
-    \(text)
-    """
+    ToneAnalysisPromptBuilder.makePrompt(text: text)
   }
 }
 

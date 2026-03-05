@@ -32,58 +32,33 @@ enum DetectedTone: String, Codable, CaseIterable, Sendable {
   }
 }
 
-/// Represents the sentiment of text
-enum Sentiment: String, Codable, CaseIterable, Sendable {
-  case positive = "Positive"
-  case negative = "Negative"
-  case neutral = "Neutral"
-  case mixed = "Mixed"
+enum MisunderstandingRiskLevel: String, Codable, CaseIterable, Sendable {
+  case low
+  case medium
+  case high
 
-  init(from decoder: Decoder) throws {
-    let container = try decoder.singleValueContainer()
-    let raw = try container.decode(String.self).lowercased()
-    switch raw {
-    case "positive": self = .positive
-    case "negative": self = .negative
-    case "neutral": self = .neutral
-    case "mixed": self = .mixed
-    default: self = .neutral
+  var displayName: String {
+    switch self {
+    case .low: return "Low"
+    case .medium: return "Medium"
+    case .high: return "High"
     }
   }
 }
 
-/// Represents the formality level of text
-enum FormalityLevel: String, Codable, CaseIterable, Sendable {
-  case formal = "Formal"
-  case semiFormal = "Semi-formal"
-  case casual = "Casual"
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.singleValueContainer()
-    let raw = try container.decode(String.self).lowercased()
-    switch raw {
-    case "formal": self = .formal
-    case "semi-formal", "semiformal": self = .semiFormal
-    case "casual": self = .casual
-    default: self = .casual
-    }
-  }
+struct MisunderstandingRisk: Sendable {
+  let level: MisunderstandingRiskLevel
+  let reason: String
 }
 
 /// The result of tone analysis
 struct ToneAnalysisResult: Sendable {
   let tone: DetectedTone
-  let sentiment: Sentiment
-  let formality: FormalityLevel
-  let explanation: String
-}
-
-/// Internal JSON structure for API responses
-struct ToneAnalysisJSON: Decodable {
-  let tone: DetectedTone
-  let sentiment: Sentiment
-  let formality: FormalityLevel
-  let explanation: String
+  let plainMeaning: String
+  let likelyIntent: String
+  let misunderstandingRisk: MisunderstandingRisk
+  let ambiguities: [String]
+  let suggestedReplies: [String]
 }
 
 /// Errors specific to tone analysis
@@ -146,6 +121,31 @@ protocol ToneAnalyzer: Sendable {
   func analyze(_ text: String) async throws -> ToneAnalysisResult
 }
 
+enum ToneAnalysisPromptBuilder {
+  static func makePrompt(text: String) -> String {
+    let toneOptions = DetectedTone.allCases.map(\.rawValue).joined(separator: ", ")
+    return """
+    Analyze the message meaning and intent. Return a JSON object with exactly these fields:
+    - "tone": one of [\(toneOptions)]
+    - "plain_meaning": 1-2 clear sentences that paraphrase what the message means in plain language
+    - "likely_intent": a short phrase describing what the sender likely wants
+    - "misunderstanding_risk": object with:
+      - "level": one of ["low", "medium", "high"]
+      - "reason": one short reason for that risk level
+    - "ambiguities": array of 0-3 short strings describing ambiguous phrases (empty array if none)
+    - "suggested_reply": array of 0-2 concise, safe reply options (empty array if not needed)
+
+    Rules:
+    - Keep the output in the same language as the input message.
+    - Be concise and literal; do not add facts not implied by the message.
+    - Respond with ONLY the JSON object (no markdown, no code fences, no extra text).
+
+    TEXT:
+    \(text)
+    """
+  }
+}
+
 /// Common JSON parsing utilities
 enum ToneAnalysisJSONParser {
   static func parseResponse(_ response: String) throws -> ToneAnalysisResult {
@@ -169,15 +169,119 @@ enum ToneAnalysisJSONParser {
     }
 
     do {
-      let parsed = try JSONDecoder().decode(ToneAnalysisJSON.self, from: data)
-      return ToneAnalysisResult(
-        tone: parsed.tone,
-        sentiment: parsed.sentiment,
-        formality: parsed.formality,
-        explanation: parsed.explanation
+      let object = try JSONSerialization.jsonObject(with: data, options: [])
+      guard let dictionary = object as? [String: Any] else {
+        throw ToneAnalysisError.invalidResponse("Top-level response must be a JSON object")
+      }
+
+      let tone = try parseTone(from: dictionary)
+      let plainMeaning = try requiredString(key: "plain_meaning", in: dictionary)
+      let likelyIntent = try requiredString(key: "likely_intent", in: dictionary)
+      let misunderstandingRisk = try requiredRisk(key: "misunderstanding_risk", in: dictionary)
+      let ambiguities = try requiredStringArray(
+        key: "ambiguities",
+        in: dictionary,
+        limit: 3
       )
+      let suggestedReplies = try requiredStringArray(
+        key: "suggested_reply",
+        in: dictionary,
+        limit: 2
+      )
+
+      return ToneAnalysisResult(
+        tone: tone,
+        plainMeaning: plainMeaning,
+        likelyIntent: likelyIntent,
+        misunderstandingRisk: misunderstandingRisk,
+        ambiguities: ambiguities,
+        suggestedReplies: suggestedReplies
+      )
+    } catch let error as ToneAnalysisError {
+      throw error
     } catch {
       throw ToneAnalysisError.invalidResponse(error.localizedDescription)
     }
+  }
+
+  private static func parseTone(from dictionary: [String: Any]) throws -> DetectedTone {
+    let rawTone = try requiredString(key: "tone", in: dictionary)
+    switch rawTone.lowercased() {
+    case "friendly": return .friendly
+    case "frustrated": return .frustrated
+    case "formal": return .formal
+    case "casual": return .casual
+    case "direct": return .direct
+    case "neutral": return .neutral
+    case "sarcastic": return .sarcastic
+    case "enthusiastic": return .enthusiastic
+    case "concerned": return .concerned
+    case "professional": return .professional
+    default:
+      throw ToneAnalysisError.invalidResponse("Invalid tone value: \(rawTone)")
+    }
+  }
+
+  private static func requiredRisk(
+    key: String,
+    in dictionary: [String: Any]
+  ) throws -> MisunderstandingRisk {
+    guard let nested = dictionary[key] as? [String: Any] else {
+      throw ToneAnalysisError.invalidResponse("Missing required object field: \(key)")
+    }
+
+    let levelString = try requiredString(key: "level", in: nested)
+    let reason = try requiredString(key: "reason", in: nested)
+
+    let level: MisunderstandingRiskLevel
+    switch levelString.lowercased() {
+    case "low":
+      level = .low
+    case "medium":
+      level = .medium
+    case "high":
+      level = .high
+    default:
+      throw ToneAnalysisError.invalidResponse("Invalid misunderstanding_risk.level: \(levelString)")
+    }
+
+    return MisunderstandingRisk(level: level, reason: reason)
+  }
+
+  private static func requiredString(key: String, in dictionary: [String: Any]) throws -> String {
+    guard let value = dictionary[key] as? String else {
+      throw ToneAnalysisError.invalidResponse("Missing required string field: \(key)")
+    }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      throw ToneAnalysisError.invalidResponse("Empty required string field: \(key)")
+    }
+    return trimmed
+  }
+
+  private static func requiredStringArray(
+    key: String,
+    in dictionary: [String: Any],
+    limit: Int
+  ) throws -> [String] {
+    guard let rawValues = dictionary[key] as? [Any] else {
+      throw ToneAnalysisError.invalidResponse("Missing required array field: \(key)")
+    }
+
+    var result: [String] = []
+    for rawValue in rawValues {
+      guard let stringValue = rawValue as? String else {
+        throw ToneAnalysisError.invalidResponse("Array \(key) must contain only strings")
+      }
+      let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+      if trimmed.isEmpty {
+        continue
+      }
+      result.append(trimmed)
+      if result.count >= limit {
+        break
+      }
+    }
+    return result
   }
 }

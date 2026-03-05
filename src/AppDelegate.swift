@@ -135,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
 
     let toneResultWindow = ToneAnalysisResultWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
       styleMask: [.titled, .closable],
       backing: .buffered,
       defer: false

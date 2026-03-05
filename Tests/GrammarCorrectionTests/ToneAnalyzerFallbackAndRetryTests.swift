@@ -29,7 +29,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"neutral\",\"explanation\":\"ok\"}"}}]}"#
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
       )
     }
 
@@ -69,7 +69,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"neutral\",\"explanation\":\"ok\"}"}]}"#
+        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}"#
       )
     }
 
@@ -164,7 +164,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"casual\",\"explanation\":\"ok\"}"}]}}]}"#
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
       )
     }
 
@@ -190,7 +190,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"sentiment\":\"neutral\",\"formality\":\"casual\",\"explanation\":\"ok\"}"}]}}]}"#
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
       )
     }
 
@@ -321,9 +321,11 @@ private struct CountingSuccessToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
     await tracker.increment()
     return ToneAnalysisResult(
       tone: .neutral,
-      sentiment: .neutral,
-      formality: .casual,
-      explanation: "ok"
+      plainMeaning: "ok",
+      likelyIntent: "ok",
+      misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
+      ambiguities: [],
+      suggestedReplies: []
     )
   }
 }

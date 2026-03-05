@@ -110,9 +110,11 @@ final class ToneAnalysisControllerTests: XCTestCase {
       try await Task.sleep(for: delay)
       return ToneAnalysisResult(
         tone: .neutral,
-        sentiment: .neutral,
-        formality: .casual,
-        explanation: "ok"
+        plainMeaning: "ok",
+        likelyIntent: "ok",
+        misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
+        ambiguities: [],
+        suggestedReplies: []
       )
     }
   }
@@ -121,9 +123,11 @@ final class ToneAnalysisControllerTests: XCTestCase {
     func analyze(_ text: String) async throws -> ToneAnalysisResult {
       ToneAnalysisResult(
         tone: .neutral,
-        sentiment: .neutral,
-        formality: .casual,
-        explanation: "ok"
+        plainMeaning: "ok",
+        likelyIntent: "ok",
+        misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
+        ambiguities: [],
+        suggestedReplies: []
       )
     }
   }
