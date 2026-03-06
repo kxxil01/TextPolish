@@ -47,6 +47,46 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
   }
 
+  func testOpenAIToneAnalyzerHonorsRetryAfterHeader() async throws {
+    var callCount = 0
+    var timestamps: [Date] = []
+
+    ToneMockURLProtocol.requestObserver = { _, date in
+      timestamps.append(date)
+    }
+
+    ToneMockURLProtocol.handler = { request in
+      callCount += 1
+      if callCount == 1 {
+        return Self.httpResponse(
+          for: request,
+          statusCode: 429,
+          body: #"{"error":{"message":"rate limited","retry_after":1}}"#,
+          headers: ["Retry-After": "1"]
+        )
+      }
+
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test",
+      openAIBaseURL: "https://mock.local"
+    )
+    let analyzer = try OpenAIToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    XCTAssertEqual(callCount, 2)
+    XCTAssertEqual(timestamps.count, 2)
+    XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
+  }
+
   func testAnthropicToneAnalyzerRetriesOnRateLimit() async throws {
     var callCount = 0
     var timestamps: [Date] = []
@@ -208,6 +248,25 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       "/custom-prefix/v1beta/models/gemini-2.5-flash:generateContent",
       "Gemini tone endpoint should not duplicate version segments from configured base URL"
     )
+  }
+
+  func testGeminiToneAnalyzerRejectsWhitespaceOnlyTextBeforeCredentialLookup() async throws {
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: nil,
+      geminiBaseURL: "https://mock.local"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+
+    do {
+      _ = try await analyzer.analyze(" \n  ")
+      XCTFail("Expected whitespace-only text to be rejected")
+    } catch let error as ToneAnalysisError {
+      guard case .textTooShort = error else {
+        return XCTFail("Expected textTooShort, got \(error)")
+      }
+    }
   }
 
   func testFallbackToneAnalyzerDoesNotFallbackForTextLengthValidation() async throws {

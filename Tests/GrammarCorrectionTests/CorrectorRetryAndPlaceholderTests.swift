@@ -50,6 +50,48 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(delay, 0.9, "Expected retry delay before second attempt")
   }
 
+  func testOpenAIRetryHonorsRetryAfterHeader() async throws {
+    var timestamps: [Date] = []
+    var callCount = 0
+
+    MockURLProtocol.requestObserver = { _, date in
+      timestamps.append(date)
+    }
+
+    MockURLProtocol.handler = { request in
+      callCount += 1
+      if callCount == 1 {
+        return Self.httpResponse(
+          for: request,
+          statusCode: 429,
+          body: #"{"error":{"message":"rate limited","retry_after":1}}"#,
+          headers: ["Retry-After": "1"]
+        )
+      }
+
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"choices":[{"message":{"content":"Hello"}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test-key",
+      openAIBaseURL: "https://mock.local",
+      openAIMaxAttempts: 1
+    )
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
+    let result = try await corrector.correct("Hello")
+
+    XCTAssertEqual(result, "Hello")
+    XCTAssertEqual(timestamps.count, 2, "Expected two network attempts")
+    let delay = timestamps[1].timeIntervalSince(timestamps[0])
+    XCTAssertGreaterThanOrEqual(delay, 0.9, "Expected Retry-After delay before second attempt")
+  }
+
   func testAnthropicRetrySleepsOnNon429Error() async throws {
     var timestamps: [Date] = []
     var callCount = 0
@@ -231,13 +273,18 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     return URLSession(configuration: configuration)
   }
 
-  private static func httpResponse(for request: URLRequest, statusCode: Int, body: String) -> (HTTPURLResponse, Data) {
+  private static func httpResponse(
+    for request: URLRequest,
+    statusCode: Int,
+    body: String,
+    headers: [String: String] = ["Content-Type": "application/json"]
+  ) -> (HTTPURLResponse, Data) {
     let data = body.data(using: .utf8) ?? Data()
     let response = HTTPURLResponse(
       url: request.url ?? URL(string: "https://mock.local")!,
       statusCode: statusCode,
       httpVersion: nil,
-      headerFields: ["Content-Type": "application/json"]
+      headerFields: headers
     )!
     return (response, data)
   }

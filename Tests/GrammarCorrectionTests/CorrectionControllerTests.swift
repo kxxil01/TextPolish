@@ -62,7 +62,9 @@ final class CorrectionControllerTests: XCTestCase {
     private(set) var setStringCalls: [String] = []
     private(set) var waitCallCount = 0
     private(set) var lastTimeout: Duration?
+    private(set) var restoreCallCount = 0
     private var changeCountValue = 0
+    var onSetString: ((String) -> Void)?
 
     init(waitResults: [Result<String, Error>] = []) {
       self.waitResults = waitResults
@@ -72,15 +74,22 @@ final class CorrectionControllerTests: XCTestCase {
       PasteboardController.Snapshot(items: [])
     }
 
-    func restore(_ snapshot: PasteboardController.Snapshot) {}
+    func restore(_ snapshot: PasteboardController.Snapshot) {
+      restoreCallCount += 1
+    }
 
     func setString(_ string: String) {
       setStringCalls.append(string)
       changeCountValue += 1
+      onSetString?(string)
     }
 
     var changeCount: Int {
       changeCountValue
+    }
+
+    func simulateExternalClipboardChange() {
+      changeCountValue += 1
     }
 
     func waitForCopiedString(
@@ -130,6 +139,27 @@ final class CorrectionControllerTests: XCTestCase {
 
     func correct(_ text: String) async throws -> String {
       try await Task.sleep(for: delay)
+      return text + "!"
+    }
+  }
+
+  private actor CorrectorCallTracker {
+    private var count = 0
+
+    func increment() {
+      count += 1
+    }
+
+    func value() -> Int {
+      count
+    }
+  }
+
+  private struct CountingCorrector: GrammarCorrector, Sendable {
+    let tracker: CorrectorCallTracker
+
+    func correct(_ text: String) async throws -> String {
+      await tracker.increment()
       return text + "!"
     }
   }
@@ -248,6 +278,7 @@ final class CorrectionControllerTests: XCTestCase {
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
   }
 
   @MainActor
@@ -311,6 +342,7 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertEqual(keyboard.commandVCount, 1, "Text should still be pasted")
     XCTAssertEqual(feedback.successCount, 1, "Post-paste timeout should be treated as successful completion")
     XCTAssertTrue(feedback.errorMessages.isEmpty, "Post-paste timeout should not surface as an error")
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
   }
 
   @MainActor
@@ -348,6 +380,140 @@ final class CorrectionControllerTests: XCTestCase {
     XCTAssertEqual(keyboard.commandCCount, 0, "Should not issue copy command when deadline is already too close")
     XCTAssertEqual(pasteboard.waitCallCount, 0, "Should not wait on pasteboard when deadline is already too close")
     XCTAssertEqual(keyboard.commandVCount, 0)
+  }
+
+  @MainActor
+  func testClipboardIsRestoredWhenStillOwnedAfterSuccess() async {
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
+  }
+
+  @MainActor
+  func testWhitespaceOnlySelectionFailsBeforeCallingProvider() async {
+    let completion = expectation(description: "blank selection surfaced")
+    let feedback = StubFeedback()
+    feedback.onError = { message in
+      if message == "No text selected" {
+        completion.fulfill()
+      }
+    }
+
+    let tracker = CorrectorCallTracker()
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("   \n  ")])
+    let controller = CorrectionController(
+      corrector: CountingCorrector(tracker: tracker),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    let callCount = await tracker.value()
+    XCTAssertEqual(callCount, 0)
+    XCTAssertEqual(keyboard.commandVCount, 0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
+  }
+
+  @MainActor
+  func testClipboardChangeBeforePasteAbortsAndSkipsRestore() async {
+    let completion = expectation(description: "clipboard change surfaced")
+    let feedback = StubFeedback()
+    feedback.onError = { message in
+      if message.contains("Clipboard changed") {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    pasteboard.onSetString = { string in
+      if string == "hello!" {
+        Task { @MainActor in
+          try? await Task.sleep(for: .milliseconds(5))
+          pasteboard.simulateExternalClipboardChange()
+        }
+      }
+    }
+
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: CorrectionController.Timings(
+        activationDelay: .zero,
+        selectAllDelay: .zero,
+        copySettleDelay: .zero,
+        copyTimeout: .milliseconds(10),
+        pasteSettleDelay: .milliseconds(20),
+        postPasteDelay: .zero
+      ),
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 0)
+  }
+
+  @MainActor
+  func testFocusChangeBeforePasteAbortsSafely() async {
+    let completion = expectation(description: "focus change surfaced")
+    let feedback = StubFeedback()
+    feedback.onError = { message in
+      if message.contains("Target app changed") {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    var frontmostPIDs: [pid_t?] = [101, 202, 202]
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      frontmostApplicationPIDProvider: {
+        if frontmostPIDs.isEmpty {
+          return 202
+        }
+        return frontmostPIDs.removeFirst()
+      },
+      applicationResolver: { _ in nil }
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
   }
 
   @MainActor

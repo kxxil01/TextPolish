@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var statusMenu: NSMenu?
   private var lastTargetApplication: NSRunningApplication?
   private var workspaceActivationObserver: Any?
+  private var midnightRefreshTimer: Timer?
   private var isMenuOpen = false
   private var pendingAfterMenuAction: (@MainActor () async -> Void)?
   private var settingsWindowController: SettingsWindowController?
@@ -108,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     loadTodayToneAnalysisCount()
     let initialIcon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
     statusItem.button?.image = initialIcon
+    statusItem.button?.title = StatusItemCountFormatter.title(for: todayCorrectionCount + todayToneAnalysisCount)
     statusItem.button?.toolTip = appDisplayName
     statusItem.button?.target = self
     statusItem.button?.action = #selector(statusItemClicked(_:))
@@ -198,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       updaterController.updater.automaticallyChecksForUpdates = false
       TPLogger.log("Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
     }
+    scheduleNextDailyReset()
     maybeShowWelcome()
   }
 
@@ -233,7 +236,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     updateStatus = .checking
     syncUpdateMenuItems()
     feedback?.showInfo("Checking for updates...")
-    NSApp.activate(ignoringOtherApps: true)
     updaterController.checkForUpdates(sender)
   }
 
@@ -294,8 +296,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.addItem(analyzeToneItem)
 
     let cancelItem = NSMenuItem(
-      title: "Cancel Correction",
-      action: #selector(cancelCorrection),
+      title: "Cancel Active Operation",
+      action: #selector(cancelActiveOperation),
       keyEquivalent: ""
     )
     cancelItem.target = self
@@ -753,6 +755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     todayCorrectionCount += 1
     UserDefaults.standard.set(todayCorrectionCount, forKey: correctionCountKey)
     updateStatusItemIcon()
+    scheduleNextDailyReset()
   }
 
   private func loadTodayToneAnalysisCount() {
@@ -778,6 +781,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     todayToneAnalysisCount += 1
     UserDefaults.standard.set(todayToneAnalysisCount, forKey: toneAnalysisCountKey)
     updateStatusItemIcon()
+    scheduleNextDailyReset()
   }
 
   private func formattedToday() -> String {
@@ -787,69 +791,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateStatusItemIcon() {
-    let icon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
+    let count = todayCorrectionCount + todayToneAnalysisCount
+    let icon = makeIconWithBadge(count: count)
     statusItem.button?.image = icon
+    let title = StatusItemCountFormatter.title(for: count)
+    statusItem.button?.title = title
     feedback?.updateBaseImage(icon)
+    feedback?.updateBaseTitle(title)
   }
 
   private func makeIconWithBadge(count: Int) -> NSImage? {
     guard let base = baseImage else { return nil }
     let size = NSSize(width: 18, height: 18)
-
-    // When count == 0, return template image (adapts to menu bar)
-    if count == 0 {
-      let image = NSImage(size: size, flipped: false) { rect in
-        base.draw(in: rect)
-        return true
-      }
-      image.isTemplate = true
-      return image
-    }
-
-    // When count > 0, draw tinted icon with badge
     let image = NSImage(size: size, flipped: false) { rect in
-      // Draw base icon tinted to menu bar foreground color
-      let tintedBase = base.copy() as! NSImage
-      tintedBase.lockFocus()
-      NSColor.white.set()
-      let imageRect = NSRect(origin: .zero, size: tintedBase.size)
-      imageRect.fill(using: .sourceAtop)
-      tintedBase.unlockFocus()
-      tintedBase.draw(in: rect)
-
-      // Draw badge circle
-      let badgeSize: CGFloat = 10
-      let badgeRect = NSRect(
-        x: rect.width - badgeSize + 2,
-        y: rect.height - badgeSize + 2,
-        width: badgeSize,
-        height: badgeSize
-      )
-
-      NSColor.systemRed.setFill()
-      NSBezierPath(ovalIn: badgeRect).fill()
-
-      // Draw badge text
-      let text = count > 99 ? "99+" : "\(count)"
-      let font = NSFont.systemFont(ofSize: 7, weight: .bold)
-      let attrs: [NSAttributedString.Key: Any] = [
-        .font: font,
-        .foregroundColor: NSColor.white,
-      ]
-      let textSize = text.size(withAttributes: attrs)
-      let textRect = NSRect(
-        x: badgeRect.midX - textSize.width / 2,
-        y: badgeRect.midY - textSize.height / 2,
-        width: textSize.width,
-        height: textSize.height
-      )
-      text.draw(in: textRect, withAttributes: attrs)
-
+      base.draw(in: rect)
       return true
     }
-
-    image.isTemplate = false
+    image.isTemplate = true
     return image
+  }
+
+  private func scheduleNextDailyReset(now: Date = Date(), calendar: Calendar = .current) {
+    midnightRefreshTimer?.invalidate()
+    let nextResetDate = DailyResetScheduler.nextResetDate(after: now, calendar: calendar)
+    midnightRefreshTimer = Timer(
+      fireAt: nextResetDate,
+      interval: 0,
+      target: self,
+      selector: #selector(handleDailyResetTimer),
+      userInfo: nil,
+      repeats: false
+    )
+    if let midnightRefreshTimer {
+      RunLoop.main.add(midnightRefreshTimer, forMode: .common)
+    }
+  }
+
+  @objc private func handleDailyResetTimer() {
+    refreshCorrectionCountIfNewDay()
+    refreshToneAnalysisCountIfNewDay()
+    updateStatusItemIcon()
+    scheduleNextDailyReset()
   }
 
   private func keychainLabel(for account: String) -> String? {
@@ -896,7 +878,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
         do {
-          try Keychain.deletePassword(service: service, account: account)
+          try Keychain.deleteConfiguredPassword(primaryService: service, account: account)
           TPLogger.log("Keychain delete success account=\(account)")
           continuation.resume()
         } catch {
@@ -1211,13 +1193,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
-  @objc private func cancelCorrection() {
+  @objc private func cancelActiveOperation() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
-      if self.correctionController?.cancelCurrentCorrection() == true {
+      let didCancelCorrection = self.correctionController?.cancelCurrentCorrection() == true
+      let didCancelTone = self.toneAnalysisController?.cancelCurrentAnalysis() == true
+      if didCancelCorrection || didCancelTone {
         self.feedback?.showInfo("Canceling...")
       } else {
-        self.feedback?.showInfo("No correction in progress")
+        self.feedback?.showInfo("No operation in progress")
       }
     }
   }
@@ -1579,11 +1563,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @objc private func toggleFallbackToOpenRouter() {
     runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      self.settings.enableGeminiOpenRouterFallback.toggle()
-      self.persistSettings()
-      self.syncFallbackMenuState()
+      self?.applyFallbackSettingToggle()
     }
+  }
+
+  func applyFallbackSettingToggle() {
+    settings.enableGeminiOpenRouterFallback.toggle()
+    persistSettings()
+    syncFallbackMenuState()
+    refreshCorrector()
   }
 
   @objc private func selectLanguageAuto() {
@@ -3064,7 +3052,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func syncCancelMenuState() {
-    cancelCorrectionItem?.isEnabled = correctionController?.isBusy == true
+    cancelCorrectionItem?.isEnabled =
+      correctionController?.isBusy == true || toneAnalysisController?.isBusy == true
   }
 
   private func promptForHotKey(title: String, message: String, defaultHotKey: Settings.HotKey) -> Settings.HotKey? {
@@ -3097,39 +3086,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var capturedHotKey: Settings.HotKey? = nil
     let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak textField] event in
-      let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+      let decision = HotKeyPromptInterpreter.interpret(
+        eventType: event.type,
+        keyCode: event.keyCode,
+        modifiers: event.modifierFlags
+      )
 
-      let keyCode = event.keyCode
-
-      if event.type == .flagsChanged {
+      switch decision {
+      case .passThrough:
         return event
-      }
-
-      if keyCode == 53 {
+      case .cancel:
         NSApp.stopModal(withCode: .alertFirstButtonReturn)
         return nil
-      }
-
-      if keyCode == 48 {
+      case .reset:
         NSApp.stopModal(withCode: .alertSecondButtonReturn)
         return nil
-      }
-
-      if modifiers.isEmpty {
+      case .missingModifier:
         textField?.stringValue = "Add a modifier (Command/Option/Control/Shift)"
         NSSound.beep()
         return nil
+      case .capture(let hotKey):
+        capturedHotKey = hotKey
+        NSApp.stopModal(withCode: .alertThirdButtonReturn)
+        return nil
       }
-
-      var carbonModifiers: UInt32 = 0
-      if modifiers.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
-      if modifiers.contains(.control) { carbonModifiers |= UInt32(controlKey) }
-      if modifiers.contains(.option) { carbonModifiers |= UInt32(optionKey) }
-      if modifiers.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
-
-      capturedHotKey = Settings.HotKey(keyCode: UInt32(keyCode), modifiers: carbonModifiers)
-      NSApp.stopModal(withCode: .alertThirdButtonReturn)
-      return nil
     }
 
     let response = alert.runModal()
@@ -3146,6 +3126,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 }
+
+#if DEBUG
+extension AppDelegate {
+  func debugFinishLaunching() {
+    applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+  }
+
+  var debugCorrectionOperationTimeout: Duration? {
+    correctionController?.debugOperationTimeout
+  }
+
+  var debugToneOperationTimeout: Duration? {
+    toneAnalysisController?.debugOperationTimeout
+  }
+
+  var debugHasMidnightRefreshTimer: Bool {
+    midnightRefreshTimer != nil
+  }
+
+  var debugStatusItemTitle: String? {
+    statusItem.button?.title
+  }
+}
+#endif
 
 extension AppDelegate: SPUUpdaterDelegate {
   nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {

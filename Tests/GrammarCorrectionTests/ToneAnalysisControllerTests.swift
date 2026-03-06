@@ -65,6 +65,7 @@ final class ToneAnalysisControllerTests: XCTestCase {
     private var waitResults: [Result<String, Error>]
     private var changeCountValue = 0
     private(set) var waitCallCount = 0
+    private(set) var restoreCallCount = 0
 
     init(waitResults: [Result<String, Error>] = []) {
       self.waitResults = waitResults
@@ -74,7 +75,9 @@ final class ToneAnalysisControllerTests: XCTestCase {
       PasteboardController.Snapshot(items: [])
     }
 
-    func restore(_ snapshot: PasteboardController.Snapshot) {}
+    func restore(_ snapshot: PasteboardController.Snapshot) {
+      restoreCallCount += 1
+    }
 
     func setString(_ string: String) {
       changeCountValue += 1
@@ -82,6 +85,10 @@ final class ToneAnalysisControllerTests: XCTestCase {
 
     var changeCount: Int {
       changeCountValue
+    }
+
+    func simulateExternalClipboardChange() {
+      changeCountValue += 1
     }
 
     func waitForCopiedString(
@@ -197,5 +204,63 @@ final class ToneAnalysisControllerTests: XCTestCase {
     XCTAssertEqual(keyboard.commandCCount, 0, "Should not issue copy command when deadline is already too close")
     XCTAssertEqual(pasteboard.waitCallCount, 0, "Should not wait on pasteboard when deadline is already too close")
     XCTAssertTrue(presenter.shownResults.isEmpty)
+  }
+
+  func testRestoreRunsWhenClipboardStillOwned() async {
+    let completion = expectation(description: "tone analysis finished")
+    let feedback = StubFeedback()
+    let presenter = StubResultPresenter()
+    let pasteboard = StubPasteboard(waitResults: [.success("This is enough text")])
+    let controller = ToneAnalysisController(
+      analyzer: ImmediateToneAnalyzer(),
+      feedback: feedback,
+      resultPresenter: presenter,
+      timings: Self.fastTimings,
+      keyboard: StubKeyboard(isTrusted: true),
+      pasteboard: pasteboard
+    )
+
+    Task { @MainActor in
+      while presenter.shownResults.isEmpty {
+        await Task.yield()
+      }
+      completion.fulfill()
+    }
+
+    controller.analyzeSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
+  }
+
+  func testExternalClipboardChangeSkipsRestore() async {
+    let completion = expectation(description: "tone analysis finished")
+    let feedback = StubFeedback()
+    let presenter = StubResultPresenter()
+    let pasteboard = StubPasteboard(waitResults: [.success("This is enough text")])
+    let controller = ToneAnalysisController(
+      analyzer: SlowToneAnalyzer(delay: .milliseconds(120)),
+      feedback: feedback,
+      resultPresenter: presenter,
+      timings: Self.fastTimings,
+      keyboard: StubKeyboard(isTrusted: true),
+      pasteboard: pasteboard
+    )
+
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(20))
+      pasteboard.simulateExternalClipboardChange()
+    }
+    Task { @MainActor in
+      while presenter.shownResults.isEmpty {
+        await Task.yield()
+      }
+      completion.fulfill()
+    }
+
+    controller.analyzeSelection()
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 0)
   }
 }

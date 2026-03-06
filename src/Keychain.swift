@@ -8,10 +8,18 @@ enum Keychain {
   }
 
   static let defaultPrimaryService = "com.kxxil01.TextPolish"
+  static let legacyPrimaryService = "com.ilham.GrammarCorrection"
 
   static func primaryService(bundleIdentifier: String?) -> String {
-    let trimmedBundleIdentifier = trim(bundleIdentifier)
-    return trimmedBundleIdentifier.isEmpty ? defaultPrimaryService : trimmedBundleIdentifier
+    defaultPrimaryService
+  }
+
+  static func configuredServices(primaryService: String) -> [String] {
+    let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
+    if normalizedPrimaryService == legacyPrimaryService {
+      return [normalizedPrimaryService]
+    }
+    return [normalizedPrimaryService, legacyPrimaryService]
   }
 
   static func getPassword(service: String, account: String) throws -> String? {
@@ -76,9 +84,13 @@ enum Keychain {
   }
 
   static func getConfiguredPassword(primaryService: String, account: String) throws -> String? {
-    let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
-    let password = trim(try getPassword(service: normalizedPrimaryService, account: account))
-    return password.isEmpty ? nil : password
+    for service in configuredServices(primaryService: primaryService) {
+      let password = trim(try getPassword(service: service, account: account))
+      if !password.isEmpty {
+        return password
+      }
+    }
+    return nil
   }
 
   static func hasConfiguredPassword(primaryService: String, account: String) -> Bool {
@@ -96,6 +108,12 @@ enum Keychain {
   ) throws {
     let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
     try setPassword(password, service: normalizedPrimaryService, account: account, label: label)
+  }
+
+  static func deleteConfiguredPassword(primaryService: String, account: String) throws {
+    for service in configuredServices(primaryService: primaryService) {
+      try deletePassword(service: service, account: account)
+    }
   }
 
   private static func trim(_ value: String?) -> String {

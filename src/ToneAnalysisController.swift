@@ -155,9 +155,20 @@ final class ToneAnalysisController {
         }
 
         let snapshot = self.pasteboard.snapshot()
-        defer { self.pasteboard.restore(snapshot) }
+        var ownedClipboardChangeCount: Int?
+        defer {
+          if let ownedClipboardChangeCount,
+             self.pasteboard.changeCount == ownedClipboardChangeCount
+          {
+            self.pasteboard.restore(snapshot)
+          }
+        }
 
-        let inputText = try await self.copySelectedText(timings: timings, deadline: deadline)
+        let inputText = try await self.copySelectedText(
+          timings: timings,
+          deadline: deadline,
+          updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
+        )
         try Task.checkCancellation()
 
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,13 +248,27 @@ final class ToneAnalysisController {
     }
   }
 
-  private func copySelectedText(timings: Timings, deadline: ContinuousClock.Instant) async throws -> String {
+  private func copySelectedText(
+    timings: Timings,
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: @escaping (Int) -> Void
+  ) async throws -> String {
     do {
-      return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
+      return try await attemptCopy(
+        excluding: copySentinel(),
+        timings: timings,
+        deadline: deadline,
+        updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+      )
     } catch {
       if shouldRetryCopy(error) {
         try Task.checkCancellation()
-        return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
+        return try await attemptCopy(
+          excluding: copySentinel(),
+          timings: timings,
+          deadline: deadline,
+          updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+        )
       }
       throw error
     }
@@ -252,9 +277,11 @@ final class ToneAnalysisController {
   private func attemptCopy(
     excluding sentinel: String,
     timings: Timings,
-    deadline: ContinuousClock.Instant
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: @escaping (Int) -> Void
   ) async throws -> String {
     pasteboard.setString(sentinel)
+    updateOwnedClipboardChangeCount(pasteboard.changeCount)
     try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
     try Task.checkCancellation()
 
@@ -267,11 +294,13 @@ final class ToneAnalysisController {
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
     let waitTimeout = minDuration(timings.copyTimeout, remaining)
-    return try await pasteboard.waitForCopiedString(
+    let copiedText = try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,
       excluding: sentinel,
       timeout: waitTimeout
     )
+    updateOwnedClipboardChangeCount(pasteboard.changeCount)
+    return copiedText
   }
 
   private func shouldRetryCopy(_ error: Error) -> Bool {
@@ -348,3 +377,11 @@ final class ToneAnalysisController {
     _ = try remainingDuration(until: deadline)
   }
 }
+
+#if DEBUG
+extension ToneAnalysisController {
+  var debugOperationTimeout: Duration {
+    operationTimeout
+  }
+}
+#endif

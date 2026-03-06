@@ -561,7 +561,13 @@ struct Settings: Codable {
 
   private static func validatedURLString(_ value: String, fallback: String) -> String {
     let trimmedValue = trimmed(value)
-    guard !trimmedValue.isEmpty, URL(string: trimmedValue) != nil else {
+    guard !trimmedValue.isEmpty,
+          let components = URLComponents(string: trimmedValue),
+          let scheme = components.scheme?.lowercased(),
+          ["http", "https"].contains(scheme),
+          let host = components.host,
+          !host.isEmpty
+    else {
       return fallback
     }
     return trimmedValue

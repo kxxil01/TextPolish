@@ -114,6 +114,13 @@ struct ToneAnalysisConfig: Sendable {
     maxTextLength: 10000,
     maxOutputTokens: 512
   )
+
+  func validatedInputText(_ text: String) throws -> String {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.count >= minTextLength else { throw ToneAnalysisError.textTooShort }
+    guard trimmed.count <= maxTextLength else { throw ToneAnalysisError.textTooLong }
+    return trimmed
+  }
 }
 
 /// Protocol for tone analysis providers

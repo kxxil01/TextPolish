@@ -57,11 +57,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     lastRetryCount = 0
-    // Validate original text length before trimming
-    guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
-    guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
-
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = try config.validatedInputText(text)
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)

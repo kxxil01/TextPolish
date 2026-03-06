@@ -13,6 +13,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private let retryPolicy: RetryPolicy
   private let config: ToneAnalysisConfig
   private(set) var lastRetryCount: Int = 0
+  private var lastRateLimitRetryAfterSeconds: Double?
 
   var diagnosticsProvider: Settings.Provider { .openAI }
   var diagnosticsModel: String { model }
@@ -57,11 +58,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
   func analyze(_ text: String) async throws -> ToneAnalysisResult {
     lastRetryCount = 0
-    // Validate original text length before trimming
-    guard text.count >= config.minTextLength else { throw ToneAnalysisError.textTooShort }
-    guard text.count <= config.maxTextLength else { throw ToneAnalysisError.textTooLong }
-
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = try config.validatedInputText(text)
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
@@ -111,6 +108,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
   private func generate(prompt: String, apiKey: String) async throws -> String {
     var retryCount = 0
+    lastRateLimitRetryAfterSeconds = nil
     defer { lastRetryCount = retryCount }
     let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
 
@@ -142,8 +140,9 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
           if canRetry && status == 429 {
             retryCount += 1
             let retryAfter = retryPolicy.clampedRateLimitBackoff(
-              retryPolicy.retryDelaySeconds(attempt: attempt)
+              lastRateLimitRetryAfterSeconds ?? retryPolicy.retryDelaySeconds(attempt: attempt)
             )
+            lastRateLimitRetryAfterSeconds = nil
             try await Task.sleep(for: .seconds(retryAfter))
             continue
           }
@@ -198,6 +197,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     }
 
     if (200..<300).contains(http.statusCode) {
+      lastRateLimitRetryAfterSeconds = nil
       let decoded = try JSONDecoder().decode(OpenAIToneResponse.self, from: data)
       let content = decoded.choices?.first?.message?.content ?? ""
       guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
@@ -205,6 +205,8 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     }
 
     let message = parseErrorMessage(data: data)
+    lastRateLimitRetryAfterSeconds =
+      http.statusCode == 429 ? RetryAfterParser.retryAfterSeconds(from: http, data: data) : nil
     TPLogger.log("OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw ToneAnalysisError.requestFailed(http.statusCode, message)
   }

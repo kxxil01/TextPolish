@@ -218,6 +218,35 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.provider, .openRouter)
   }
 
+  func testKeychainPrimaryServiceUsesCanonicalServiceName() {
+    XCTAssertEqual(Keychain.primaryService(bundleIdentifier: nil), Keychain.defaultPrimaryService)
+    XCTAssertEqual(
+      Keychain.primaryService(bundleIdentifier: "com.example.SomeDebugHost"),
+      Keychain.defaultPrimaryService
+    )
+  }
+
+  func testKeychainConfiguredServicesIncludesLegacyFallback() {
+    XCTAssertEqual(
+      Keychain.configuredServices(primaryService: Keychain.defaultPrimaryService),
+      [Keychain.defaultPrimaryService, Keychain.legacyPrimaryService]
+    )
+  }
+
+  func testNormalizeRejectsRelativeAndSchemeLessBaseURLs() throws {
+    let json = """
+    {
+      "geminiBaseURL": "/v1",
+      "openAIBaseURL": "api.openai.com/v1"
+    }
+    """
+    let data = Data(json.utf8)
+    let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+    XCTAssertEqual(decoded.geminiBaseURL, "https://generativelanguage.googleapis.com")
+    XCTAssertEqual(decoded.openAIBaseURL, "https://api.openai.com/v1")
+  }
+
   func testDefaultsMatchExpectedValues() {
     let defaults = Settings.defaults()
 

@@ -17,16 +17,30 @@ struct FeedbackCooldown: Sendable {
   }
 }
 
+#if DEBUG
+extension CorrectionController {
+  var debugOperationTimeout: Duration {
+    operationTimeout
+  }
+}
+#endif
+
 @MainActor
 final class CorrectionController {
   private enum OperationError: LocalizedError {
     case timedOut(Duration)
+    case clipboardChanged
+    case targetApplicationChanged
 
     var errorDescription: String? {
       switch self {
       case .timedOut(let timeout):
         let seconds = max(1, Int(timeout.components.seconds))
         return "Correction timed out after \(seconds) seconds"
+      case .clipboardChanged:
+        return "Clipboard changed during correction before paste"
+      case .targetApplicationChanged:
+        return "Target app changed before corrected text could be pasted"
       }
     }
   }
@@ -109,6 +123,8 @@ final class CorrectionController {
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
+  private let frontmostApplicationPIDProvider: @MainActor () -> pid_t?
+  private let applicationResolver: @MainActor (pid_t) -> NSRunningApplication?
 
   init(
     corrector: GrammarCorrector,
@@ -121,6 +137,8 @@ final class CorrectionController {
     recoverer: (@MainActor (Error) async -> RecoveryAction?)? = nil,
     shouldAttemptFallback: (@MainActor (Error) -> Bool)? = nil,
     fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)? = nil,
+    frontmostApplicationPIDProvider: (@MainActor () -> pid_t?)? = nil,
+    applicationResolver: (@MainActor (pid_t) -> NSRunningApplication?)? = nil,
     onSuccess: (@MainActor () -> Void)? = nil
   ) {
     self.corrector = corrector
@@ -133,6 +151,12 @@ final class CorrectionController {
     self.recoverer = recoverer
     self.shouldAttemptFallback = shouldAttemptFallback
     self.fallbackCorrectorFactory = fallbackCorrectorFactory
+    self.frontmostApplicationPIDProvider = frontmostApplicationPIDProvider ?? {
+      NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
+    self.applicationResolver = applicationResolver ?? { pid in
+      NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
+    }
     self.onSuccess = onSuccess
   }
 
@@ -217,10 +241,21 @@ final class CorrectionController {
 
       do {
         let currentPid = ProcessInfo.processInfo.processIdentifier
-        let appToActivate: NSRunningApplication? = {
-          if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
-          if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
+        let targetPID: pid_t? = {
+          if let targetApplication, targetApplication.processIdentifier != currentPid {
+            return targetApplication.processIdentifier
+          }
+          if let frontmostPID = self.frontmostApplicationPIDProvider(), frontmostPID != currentPid {
+            return frontmostPID
+          }
           return nil
+        }()
+        let appToActivate: NSRunningApplication? = {
+          if let targetApplication, targetApplication.processIdentifier != currentPid {
+            return targetApplication
+          }
+          guard let targetPID else { return nil }
+          return self.applicationResolver(targetPID)
         }()
         if let appToActivate, !appToActivate.isActive {
           _ = appToActivate.activate(options: [])
@@ -228,15 +263,41 @@ final class CorrectionController {
         }
 
         let snapshot = self.pasteboard.snapshot()
-        defer { self.pasteboard.restore(snapshot) }
+        var ownedClipboardChangeCount: Int?
+        defer {
+          if let ownedClipboardChangeCount,
+             self.pasteboard.changeCount == ownedClipboardChangeCount
+          {
+            self.pasteboard.restore(snapshot)
+          }
+        }
 
         if mode == .all {
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
         }
 
-        let inputText = try await self.copySelectedText(timings: timings, deadline: deadline)
+        let inputText = try await self.copySelectedText(
+          timings: timings,
+          deadline: deadline,
+          updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
+        )
         try Task.checkCancellation()
+        let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else {
+          self.feedback.showError("No text selected")
+          DiagnosticsStore.shared.recordFailure(
+            operation: .correction,
+            provider: activeProvider,
+            model: activeModel,
+            latencySeconds: Date().timeIntervalSince(operationStartedAt),
+            retryCount: 0,
+            fallbackCount: fallbackCount,
+            message: "No text selected",
+            error: nil
+          )
+          return
+        }
 
         var corrected: String?
         do {
@@ -298,8 +359,21 @@ final class CorrectionController {
 
         try Task.checkCancellation()
         self.pasteboard.setString(corrected)
+        ownedClipboardChangeCount = self.pasteboard.changeCount
         try await self.sleepRespectingDeadline(timings.pasteSettleDelay, until: deadline)
         try Task.checkCancellation()
+        guard self.pasteboard.changeCount == ownedClipboardChangeCount else {
+          throw OperationError.clipboardChanged
+        }
+        if let targetPID, self.frontmostApplicationPIDProvider() != targetPID {
+          if let appToActivate = self.applicationResolver(targetPID), !appToActivate.isActive {
+            _ = appToActivate.activate(options: [])
+            try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+          }
+          guard self.frontmostApplicationPIDProvider() == targetPID else {
+            throw OperationError.targetApplicationChanged
+          }
+        }
         self.keyboard.sendCommandV()
         didPaste = true
         try await self.sleepRespectingDeadline(timings.postPasteDelay, until: deadline)
@@ -386,13 +460,27 @@ final class CorrectionController {
     }
   }
 
-  private func copySelectedText(timings: Timings, deadline: ContinuousClock.Instant) async throws -> String {
+  private func copySelectedText(
+    timings: Timings,
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: @escaping (Int) -> Void
+  ) async throws -> String {
     do {
-      return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
+      return try await attemptCopy(
+        excluding: copySentinel(),
+        timings: timings,
+        deadline: deadline,
+        updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+      )
     } catch {
       if shouldRetryCopy(error) {
         try Task.checkCancellation()
-        return try await attemptCopy(excluding: copySentinel(), timings: timings, deadline: deadline)
+        return try await attemptCopy(
+          excluding: copySentinel(),
+          timings: timings,
+          deadline: deadline,
+          updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+        )
       }
       throw error
     }
@@ -401,9 +489,11 @@ final class CorrectionController {
   private func attemptCopy(
     excluding sentinel: String,
     timings: Timings,
-    deadline: ContinuousClock.Instant
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: @escaping (Int) -> Void
   ) async throws -> String {
     pasteboard.setString(sentinel)
+    updateOwnedClipboardChangeCount(pasteboard.changeCount)
     try await sleepRespectingDeadline(timings.copySettleDelay, until: deadline)
 
     let remaining = try remainingDuration(until: deadline)
@@ -415,11 +505,13 @@ final class CorrectionController {
     let beforeCopyChangeCount = pasteboard.changeCount
     keyboard.sendCommandC()
     let waitTimeout = minDuration(timings.copyTimeout, remaining)
-    return try await pasteboard.waitForCopiedString(
+    let copiedText = try await pasteboard.waitForCopiedString(
       after: beforeCopyChangeCount,
       excluding: sentinel,
       timeout: waitTimeout
     )
+    updateOwnedClipboardChangeCount(pasteboard.changeCount)
+    return copiedText
   }
 
   private func shouldRetryCopy(_ error: Error) -> Bool {

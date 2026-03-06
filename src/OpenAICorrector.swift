@@ -58,6 +58,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let extraInstruction: String?
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
+  private var lastRateLimitRetryAfterSeconds: Double?
 
   var diagnosticsProvider: Settings.Provider { .openAI }
   var diagnosticsModel: String { model }
@@ -170,6 +171,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
     var lastError: Error?
     var retryCount = 0
+    lastRateLimitRetryAfterSeconds = nil
     defer { lastRetryCount = retryCount }
     let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
 
@@ -202,8 +204,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             if status == 429, attempt < maxNetworkAttempts - 1 {
               lastError = openAIError
               let retryAfter = retryPolicy.clampedRateLimitBackoff(
-                retryPolicy.retryDelaySeconds(attempt: attempt)
+                lastRateLimitRetryAfterSeconds
+                  ?? retryPolicy.retryDelaySeconds(attempt: attempt)
               )
+              lastRateLimitRetryAfterSeconds = nil
               retryCount += 1
               try await Task.sleep(for: .seconds(retryAfter))
               continue
@@ -263,12 +267,15 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
 
     if (200..<300).contains(http.statusCode) {
+      lastRateLimitRetryAfterSeconds = nil
       let decoded = try JSONDecoder().decode(OpenAIChatCompletionsResponse.self, from: data)
       let content = decoded.choices?.first?.message?.content ?? ""
       return content
     }
 
     let message = parseErrorMessage(data: data)
+    lastRateLimitRetryAfterSeconds =
+      http.statusCode == 429 ? RetryAfterParser.retryAfterSeconds(from: http, data: data) : nil
     TPLogger.log("OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw OpenAIError.requestFailed(http.statusCode, message)
   }
