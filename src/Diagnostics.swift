@@ -54,6 +54,7 @@ final class DiagnosticsStore {
   static let shared = DiagnosticsStore()
 
   private(set) var lastSnapshot: DiagnosticsSnapshot?
+  private(set) var lastFailureSnapshot: DiagnosticsSnapshot?
   private(set) var healthStatus = ProviderHealthStatus(
     state: .unknown,
     message: "No recent activity",
@@ -135,6 +136,7 @@ final class DiagnosticsStore {
       message: message
     )
     lastSnapshot = snapshot
+    lastFailureSnapshot = snapshot
     if let error, let status = providerHealthStatus(for: error) {
       healthStatus = status
     }
@@ -142,13 +144,37 @@ final class DiagnosticsStore {
   }
 
   func formattedSnapshot() -> String {
-    guard let snapshot = lastSnapshot else {
-      return "No activity recorded yet."
-    }
-
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .short
+
+    let healthLines = [
+      "State: \(healthStatus.state.rawValue)",
+      "Message: \(healthStatus.message)",
+      "Updated: \(formatter.string(from: healthStatus.updatedAt))",
+    ]
+    let lastActivityLines = formattedSnapshotLines(lastSnapshot, emptyFallback: "No activity recorded yet.", formatter: formatter)
+    let lastErrorLines = formattedSnapshotLines(
+      lastFailureSnapshot,
+      emptyFallback: "No errors recorded.",
+      formatter: formatter
+    )
+
+    return [
+      section(title: "Provider Health", lines: healthLines),
+      section(title: "Recent Activity", lines: lastActivityLines),
+      section(title: "Last Error", lines: lastErrorLines),
+    ].joined(separator: "\n\n")
+  }
+
+  private func formattedSnapshotLines(
+    _ snapshot: DiagnosticsSnapshot?,
+    emptyFallback: String,
+    formatter: DateFormatter
+  ) -> [String] {
+    guard let snapshot else {
+      return [emptyFallback]
+    }
 
     var lines: [String] = [
       "Operation: \(snapshot.operation.rawValue)",
@@ -169,7 +195,11 @@ final class DiagnosticsStore {
     }
 
     lines.append("Updated: \(formatter.string(from: snapshot.timestamp))")
-    return lines.joined(separator: "\n")
+    return lines
+  }
+
+  private func section(title: String, lines: [String]) -> String {
+    ([title] + lines).joined(separator: "\n")
   }
 
   func healthMenuTitle() -> String {

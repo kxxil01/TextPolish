@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var lastTargetApplication: NSRunningApplication?
   private var workspaceActivationObserver: Any?
   private var midnightRefreshTimer: Timer?
+  private var hotKeyPressDebouncer = HotKeyPressDebouncer(cooldown: .milliseconds(350))
   private var isMenuOpen = false
   private var pendingAfterMenuAction: (@MainActor () async -> Void)?
   private var settingsWindowController: SettingsWindowController?
@@ -1141,20 +1142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func setupHotKeys() {
     hotKeyManager.onHotKey = { [weak self] id in
       guard let self else { return }
-      self.captureFrontmostApplication()
-      let target = self.lastTargetApplication
-      let correctionTimings = self.timingsOverride(for: target)
-      let toneTimings = self.toneTimingsOverride(for: target)
-      switch id {
-      case HotKeyManager.HotKeyID.correctSelection.rawValue:
-        self.correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
-      case HotKeyManager.HotKeyID.correctAll.rawValue:
-        self.correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
-      case HotKeyManager.HotKeyID.analyzeTone.rawValue:
-        self.toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
-      default:
-        break
-      }
+      _ = self.handleRegisteredHotKey(id)
     }
 
     do {
@@ -1173,6 +1161,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
       feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
     }
+  }
+
+  @discardableResult
+  private func handleRegisteredHotKey(
+    _ id: Int,
+    now: ContinuousClock.Instant = ContinuousClock.now
+  ) -> Bool {
+    guard hotKeyPressDebouncer.shouldAccept(id: id, now: now) else {
+      return false
+    }
+
+    captureFrontmostApplication()
+    let target = lastTargetApplication
+    let correctionTimings = timingsOverride(for: target)
+    let toneTimings = toneTimingsOverride(for: target)
+
+    switch id {
+    case HotKeyManager.HotKeyID.correctSelection.rawValue:
+      correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
+    case HotKeyManager.HotKeyID.correctAll.rawValue:
+      correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
+    case HotKeyManager.HotKeyID.analyzeTone.rawValue:
+      toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
+    default:
+      return false
+    }
+
+    return true
   }
 
   @objc private func correctSelection() {
@@ -3147,6 +3163,11 @@ extension AppDelegate {
 
   var debugStatusItemTitle: String? {
     statusItem.button?.title
+  }
+
+  @discardableResult
+  func debugHandleRegisteredHotKey(_ id: Int, now: ContinuousClock.Instant) -> Bool {
+    handleRegisteredHotKey(id, now: now)
   }
 }
 #endif

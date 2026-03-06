@@ -25,6 +25,32 @@ final class AppDelegateSupportTests: XCTestCase {
     XCTAssertGreaterThan(nextReset, now)
   }
 
+  func testHotKeyPressDebouncerRejectsRapidRepeatForSameHotKey() {
+    var debouncer = HotKeyPressDebouncer(cooldown: .milliseconds(350))
+    let start = ContinuousClock.now
+
+    XCTAssertTrue(debouncer.shouldAccept(id: 1, now: start))
+    XCTAssertFalse(debouncer.shouldAccept(id: 1, now: start + .milliseconds(200)))
+    XCTAssertTrue(debouncer.shouldAccept(id: 1, now: start + .milliseconds(350)))
+  }
+
+  func testHotKeyPressDebouncerTracksEachHotKeyIndependently() {
+    var debouncer = HotKeyPressDebouncer(cooldown: .milliseconds(350))
+    let start = ContinuousClock.now
+
+    XCTAssertTrue(debouncer.shouldAccept(id: 1, now: start))
+    XCTAssertTrue(debouncer.shouldAccept(id: 2, now: start + .milliseconds(50)))
+    XCTAssertFalse(debouncer.shouldAccept(id: 1, now: start + .milliseconds(100)))
+    XCTAssertFalse(debouncer.shouldAccept(id: 2, now: start + .milliseconds(150)))
+    XCTAssertTrue(debouncer.shouldAccept(id: 2, now: start + .milliseconds(400)))
+  }
+
+  func testEscapeKeyCancellationMatcherAcceptsBareEscapeOnly() {
+    XCTAssertTrue(EscapeKeyCancellationMatcher.shouldCancel(keyCode: UInt16(kVK_Escape), modifiers: []))
+    XCTAssertFalse(EscapeKeyCancellationMatcher.shouldCancel(keyCode: UInt16(kVK_Escape), modifiers: [.command]))
+    XCTAssertFalse(EscapeKeyCancellationMatcher.shouldCancel(keyCode: UInt16(kVK_Return), modifiers: []))
+  }
+
   func testHotKeyPromptInterpreterUsesBareEscapeAndTabAsControls() {
     XCTAssertEqual(
       HotKeyPromptInterpreter.interpret(
@@ -79,5 +105,17 @@ final class AppDelegateSupportTests: XCTestCase {
 
     XCTAssertEqual(delegate.debugCorrectionOperationTimeout, .seconds(44))
     XCTAssertEqual(delegate.debugToneOperationTimeout, .seconds(42))
+  }
+
+  @MainActor
+  func testAppDelegateDebouncesRapidRegisteredHotKeys() {
+    let _ = NSApplication.shared
+    let delegate = AppDelegate()
+    let start = ContinuousClock.now
+
+    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start))
+    XCTAssertFalse(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start + .milliseconds(200)))
+    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start + .milliseconds(400)))
+    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.analyzeTone.rawValue, now: start + .milliseconds(450)))
   }
 }

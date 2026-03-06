@@ -24,6 +24,33 @@ enum DailyResetScheduler {
   }
 }
 
+struct HotKeyPressDebouncer {
+  private var lastAcceptedByID: [Int: ContinuousClock.Instant] = [:]
+  let cooldown: Duration
+
+  init(cooldown: Duration) {
+    self.cooldown = cooldown
+  }
+
+  mutating func shouldAccept(id: Int, now: ContinuousClock.Instant) -> Bool {
+    if let lastAccepted = lastAcceptedByID[id], now < lastAccepted + cooldown {
+      return false
+    }
+    lastAcceptedByID[id] = now
+    return true
+  }
+}
+
+enum EscapeKeyCancellationMatcher {
+  static func shouldCancel(
+    keyCode: UInt16,
+    modifiers: NSEvent.ModifierFlags
+  ) -> Bool {
+    let relevantModifiers = modifiers.intersection([.command, .control, .option, .shift])
+    return keyCode == UInt16(kVK_Escape) && relevantModifiers.isEmpty
+  }
+}
+
 enum HotKeyPromptDecision: Equatable {
   case passThrough
   case cancel

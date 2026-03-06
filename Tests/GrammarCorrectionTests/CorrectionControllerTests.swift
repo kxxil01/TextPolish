@@ -1,3 +1,4 @@
+import Carbon
 import XCTest
 
 @testable import GrammarCorrection
@@ -279,6 +280,92 @@ final class CorrectionControllerTests: XCTestCase {
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0)
     XCTAssertEqual(pasteboard.restoreCallCount, 1)
+  }
+
+  @MainActor
+  func testBareEscapeCancelsActiveCorrectionAndRemovesMonitors() async {
+    let monitorInstalled = expectation(description: "escape monitor installed")
+    let completion = expectation(description: "canceled")
+    let feedback = StubFeedback()
+    feedback.onInfo = { message in
+      if message == "Canceled" {
+        completion.fulfill()
+      }
+    }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    var globalHandler: ((UInt16, NSEvent.ModifierFlags) -> Void)?
+    var removedMonitors: [String] = []
+
+    let controller = CorrectionController(
+      corrector: SlowCorrector(delay: .milliseconds(200)),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      addGlobalKeyMonitor: { handler in
+        globalHandler = handler
+        monitorInstalled.fulfill()
+        return "global"
+      },
+      addLocalKeyMonitor: { _ in
+        "local"
+      },
+      removeEventMonitor: { monitor in
+        removedMonitors.append(monitor as? String ?? "unknown")
+      }
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [monitorInstalled], timeout: 1.0)
+    globalHandler?(UInt16(kVK_Escape), [])
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandVCount, 0)
+    XCTAssertEqual(pasteboard.restoreCallCount, 1)
+    XCTAssertEqual(Set(removedMonitors), Set(["global", "local"]))
+  }
+
+  @MainActor
+  func testModifiedEscapeDoesNotCancelActiveCorrection() async {
+    let monitorInstalled = expectation(description: "escape monitor installed")
+    let completion = expectation(description: "correction finished")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    var globalHandler: ((UInt16, NSEvent.ModifierFlags) -> Void)?
+
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      addGlobalKeyMonitor: { handler in
+        globalHandler = handler
+        monitorInstalled.fulfill()
+        return "global"
+      },
+      addLocalKeyMonitor: { _ in
+        "local"
+      },
+      removeEventMonitor: { _ in }
+    )
+
+    controller.correctSelection()
+
+    await fulfillment(of: [monitorInstalled], timeout: 1.0)
+    globalHandler?(UInt16(kVK_Escape), [.command])
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(feedback.infoMessages.contains("Canceled"), false)
+    XCTAssertEqual(keyboard.commandVCount, 1)
   }
 
   @MainActor

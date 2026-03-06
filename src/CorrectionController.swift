@@ -27,6 +27,10 @@ extension CorrectionController {
 
 @MainActor
 final class CorrectionController {
+  typealias GlobalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Void) -> Any?
+  typealias LocalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Bool) -> Any?
+  typealias EventMonitorRemover = (Any) -> Void
+
   private enum OperationError: LocalizedError {
     case timedOut(Duration)
     case clipboardChanged
@@ -116,6 +120,9 @@ final class CorrectionController {
   private let recoverer: (@MainActor (Error) async -> RecoveryAction?)?
   private let shouldAttemptFallback: (@MainActor (Error) -> Bool)?
   private let fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)?
+  private let addGlobalKeyMonitor: GlobalKeyMonitorInstaller
+  private let addLocalKeyMonitor: LocalKeyMonitorInstaller
+  private let removeEventMonitor: EventMonitorRemover
   private let onSuccess: (@MainActor () -> Void)?
 
   private var timings: Timings
@@ -123,6 +130,8 @@ final class CorrectionController {
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
+  private nonisolated(unsafe) var globalEscapeMonitor: Any?
+  private nonisolated(unsafe) var localEscapeMonitor: Any?
   private let frontmostApplicationPIDProvider: @MainActor () -> pid_t?
   private let applicationResolver: @MainActor (pid_t) -> NSRunningApplication?
 
@@ -139,6 +148,9 @@ final class CorrectionController {
     fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)? = nil,
     frontmostApplicationPIDProvider: (@MainActor () -> pid_t?)? = nil,
     applicationResolver: (@MainActor (pid_t) -> NSRunningApplication?)? = nil,
+    addGlobalKeyMonitor: GlobalKeyMonitorInstaller? = nil,
+    addLocalKeyMonitor: LocalKeyMonitorInstaller? = nil,
+    removeEventMonitor: EventMonitorRemover? = nil,
     onSuccess: (@MainActor () -> Void)? = nil
   ) {
     self.corrector = corrector
@@ -157,6 +169,9 @@ final class CorrectionController {
     self.applicationResolver = applicationResolver ?? { pid in
       NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
     }
+    self.addGlobalKeyMonitor = addGlobalKeyMonitor ?? CorrectionController.defaultAddGlobalKeyMonitor
+    self.addLocalKeyMonitor = addLocalKeyMonitor ?? CorrectionController.defaultAddLocalKeyMonitor
+    self.removeEventMonitor = removeEventMonitor ?? CorrectionController.defaultRemoveEventMonitor
     self.onSuccess = onSuccess
   }
 
@@ -235,6 +250,11 @@ final class CorrectionController {
           error: nil
         )
         return
+      }
+
+      self.installEscapeCancellationMonitors()
+      defer {
+        self.removeEscapeCancellationMonitorsIfNeeded()
       }
 
       var didPaste = false
@@ -454,6 +474,43 @@ final class CorrectionController {
     currentTask = task
   }
 
+  private func installEscapeCancellationMonitors() {
+    if globalEscapeMonitor == nil {
+      globalEscapeMonitor = addGlobalKeyMonitor { [weak self] keyCode, modifiers in
+        guard EscapeKeyCancellationMatcher.shouldCancel(keyCode: keyCode, modifiers: modifiers) else {
+          return
+        }
+        Task { @MainActor [weak self] in
+          _ = self?.cancelCurrentCorrection()
+        }
+      }
+    }
+
+    if localEscapeMonitor == nil {
+      localEscapeMonitor = addLocalKeyMonitor { [weak self] keyCode, modifiers in
+        guard EscapeKeyCancellationMatcher.shouldCancel(keyCode: keyCode, modifiers: modifiers) else {
+          return false
+        }
+        Task { @MainActor [weak self] in
+          _ = self?.cancelCurrentCorrection()
+        }
+        return true
+      }
+    }
+  }
+
+  private func removeEscapeCancellationMonitorsIfNeeded() {
+    if let globalEscapeMonitor {
+      removeEventMonitor(globalEscapeMonitor)
+      self.globalEscapeMonitor = nil
+    }
+
+    if let localEscapeMonitor {
+      removeEventMonitor(localEscapeMonitor)
+      self.localEscapeMonitor = nil
+    }
+  }
+
   private func maybeShowBusyFeedback() {
     if busyFeedbackGate.shouldShow(now: ContinuousClock.now) {
       feedback.showInfo("Correction in progress")
@@ -582,6 +639,29 @@ final class CorrectionController {
     let boundedDelay = minDuration(delay, remaining)
     try await Task.sleep(for: boundedDelay)
     _ = try remainingDuration(until: deadline)
+  }
+
+  private static func defaultAddGlobalKeyMonitor(
+    handler: @escaping (UInt16, NSEvent.ModifierFlags) -> Void
+  ) -> Any? {
+    NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+      handler(event.keyCode, event.modifierFlags)
+    }
+  }
+
+  private static func defaultAddLocalKeyMonitor(
+    handler: @escaping (UInt16, NSEvent.ModifierFlags) -> Bool
+  ) -> Any? {
+    NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      if handler(event.keyCode, event.modifierFlags) {
+        return nil
+      }
+      return event
+    }
+  }
+
+  private static func defaultRemoveEventMonitor(_ monitor: Any) {
+    NSEvent.removeMonitor(monitor)
   }
 
   private func createFallbackCorrector() -> GrammarCorrector? {

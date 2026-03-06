@@ -8,13 +8,14 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
   private let spinner = NSProgressIndicator()
   private var localMonitor: Any?
+  private var hasPresentedOnce = false
 
   var onRunDiagnostic: (() -> Void)?
 
   init() {
     super.init(
       contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
-      styleMask: [.titled, .closable, .nonactivatingPanel],
+      styleMask: [.titled, .closable],
       backing: .buffered,
       defer: false
     )
@@ -31,8 +32,13 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   func show() {
     update(with: DiagnosticsStore.shared.lastSnapshot)
     installKeyMonitorIfNeeded()
-    center()
+    if !hasPresentedOnce {
+      center()
+      hasPresentedOnce = true
+    }
+    NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
+    orderFrontRegardless()
   }
 
   func dismiss() {
@@ -62,8 +68,11 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   private func setupWindow() {
     title = "Diagnostics"
     isFloatingPanel = true
-    becomesKeyOnlyIfNeeded = true
+    becomesKeyOnlyIfNeeded = false
+    hidesOnDeactivate = false
+    isReleasedWhenClosed = false
     level = .floating
+    collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     isMovableByWindowBackground = true
     backgroundColor = NSColor.windowBackgroundColor
     hasShadow = true
