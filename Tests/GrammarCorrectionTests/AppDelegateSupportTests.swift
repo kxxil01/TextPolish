@@ -118,4 +118,29 @@ final class AppDelegateSupportTests: XCTestCase {
     XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start + .milliseconds(400)))
     XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.analyzeTone.rawValue, now: start + .milliseconds(450)))
   }
+
+  @MainActor
+  func testAppDelegatePartialSettingSavePreservesNewerDiskAnthropicModel() throws {
+    let _ = NSApplication.shared
+    UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
+    defer { try? Settings.save(Settings()) }
+
+    var initial = Settings(provider: .anthropic, enableGeminiOpenRouterFallback: false)
+    initial.anthropicModel = "claude-3-7-sonnet"
+    try Settings.save(initial)
+
+    let delegate = AppDelegate()
+    delegate.debugFinishLaunching()
+
+    var updatedOnDisk = Settings.loadOrCreateDefault()
+    updatedOnDisk.anthropicModel = "claude-haiku-4-5"
+    updatedOnDisk.enableGeminiOpenRouterFallback = false
+    try Settings.save(updatedOnDisk)
+
+    delegate.applyFallbackSettingToggle()
+
+    let persisted = Settings.loadOrCreateDefault()
+    XCTAssertEqual(persisted.anthropicModel, "claude-haiku-4-5")
+    XCTAssertTrue(persisted.enableGeminiOpenRouterFallback)
+  }
 }

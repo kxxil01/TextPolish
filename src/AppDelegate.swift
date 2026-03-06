@@ -717,13 +717,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private var suppressSettingsNotification = false
 
-  private func persistSettings() {
-    var normalized = settings
-    normalized.normalizeRuntimeValues()
+  private func applySettingsMutation(_ mutate: (inout Settings) -> Void) {
+    var latest = Settings.loadOrCreateDefault()
+    mutate(&latest)
+    latest.normalizeRuntimeValues()
     do {
       suppressSettingsNotification = true
-      try Settings.saveAndNotify(normalized)
-      settings = normalized
+      try Settings.saveAndNotify(latest)
+      settings = latest
       suppressSettingsNotification = false
     } catch {
       suppressSettingsNotification = false
@@ -965,8 +966,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           let current = normalizeGeminiModel(settings.geminiModel)
           guard !chosen.isEmpty, chosen != current else { return nil }
 
-          settings.geminiModel = chosen
-          persistSettings()
+          applySettingsMutation { $0.geminiModel = chosen }
           syncProviderMenuStates()
           refreshCorrector()
           return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
@@ -992,8 +992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           excluding: current.isEmpty ? nil : current
         ) else { return nil }
 
-        settings.openRouterModel = chosen
-        persistSettings()
+        applySettingsMutation { $0.openRouterModel = chosen }
         syncProviderMenuStates()
         refreshCorrector()
         let message = "OpenRouter switched to a working free model: \(chosen)"
@@ -1232,8 +1231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func selectGeminiProvider() {
-    settings.provider = .gemini
-    persistSettings()
+    applySettingsMutation { $0.provider = .gemini }
     syncProviderMenuStates()
     refreshCorrector()
 
@@ -1249,8 +1247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func selectOpenRouterProvider() {
-    settings.provider = .openRouter
-    persistSettings()
+    applySettingsMutation { $0.provider = .openRouter }
     syncProviderMenuStates()
     refreshCorrector()
 
@@ -1266,8 +1263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func selectOpenAIProvider() {
-    settings.provider = .openAI
-    persistSettings()
+    applySettingsMutation { $0.provider = .openAI }
     syncProviderMenuStates()
     refreshCorrector()
 
@@ -1283,8 +1279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func selectAnthropicProvider() {
-    settings.provider = .anthropic
-    persistSettings()
+    applySettingsMutation { $0.provider = .anthropic }
     syncProviderMenuStates()
     refreshCorrector()
 
@@ -1315,8 +1310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing Gemini key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountGemini)
-          self.settings.geminiApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.geminiApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("Gemini key cleared")
           self.refreshCorrector()
@@ -1328,8 +1322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Saving Gemini key… (check for a Keychain prompt)")
         do {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountGemini)
-          self.settings.geminiApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.geminiApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("Gemini key saved")
           self.refreshCorrector()
@@ -1357,8 +1350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing OpenRouter key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenRouter)
-          self.settings.openRouterApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.openRouterApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenRouter key cleared")
           self.refreshCorrector()
@@ -1370,8 +1362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Saving OpenRouter key… (check for a Keychain prompt)")
         do {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenRouter)
-          self.settings.openRouterApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.openRouterApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenRouter key saved")
           self.refreshCorrector()
@@ -1399,8 +1390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing OpenAI key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenAI)
-          self.settings.openAIApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.openAIApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenAI key cleared")
           self.refreshCorrector()
@@ -1412,8 +1402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Saving OpenAI key… (check for a Keychain prompt)")
         do {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenAI)
-          self.settings.openAIApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.openAIApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("OpenAI key saved")
           self.refreshCorrector()
@@ -1441,8 +1430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Clearing Anthropic key…")
         do {
           try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountAnthropic)
-          self.settings.anthropicApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.anthropicApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("Anthropic key cleared")
           self.refreshCorrector()
@@ -1454,8 +1442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback?.showInfo("Saving Anthropic key… (check for a Keychain prompt)")
         do {
           try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountAnthropic)
-          self.settings.anthropicApiKey = nil
-          self.persistSettings()
+          self.applySettingsMutation { $0.anthropicApiKey = nil }
           self.syncProviderMenuStates()
           self.feedback?.showInfo("Anthropic key saved")
           self.refreshCorrector()
@@ -1479,8 +1466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let value, !value.isEmpty else { return }
       let normalized = self.normalizeGeminiModel(value)
       guard !normalized.isEmpty else { return }
-      self.settings.geminiModel = normalized
-      self.persistSettings()
+      self.applySettingsMutation { $0.geminiModel = normalized }
       self.syncProviderMenuStates()
       self.refreshCorrector()
     }
@@ -1498,8 +1484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let value, !value.isEmpty else { return }
       let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { return }
-      self.settings.openRouterModel = trimmed
-      self.persistSettings()
+      self.applySettingsMutation { $0.openRouterModel = trimmed }
       self.syncProviderMenuStates()
       self.refreshCorrector()
     }
@@ -1517,8 +1502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let value, !value.isEmpty else { return }
       let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { return }
-      self.settings.openAIModel = trimmed
-      self.persistSettings()
+      self.applySettingsMutation { $0.openAIModel = trimmed }
       self.syncProviderMenuStates()
       self.refreshCorrector()
     }
@@ -1536,8 +1520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let value, !value.isEmpty else { return }
       let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { return }
-      self.settings.anthropicModel = trimmed
-      self.persistSettings()
+      self.applySettingsMutation { $0.anthropicModel = trimmed }
       self.syncProviderMenuStates()
       self.refreshCorrector()
     }
@@ -1584,8 +1567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applyFallbackSettingToggle() {
-    settings.enableGeminiOpenRouterFallback.toggle()
-    persistSettings()
+    applySettingsMutation { $0.enableGeminiOpenRouterFallback.toggle() }
     syncFallbackMenuState()
     refreshCorrector()
   }
@@ -1780,8 +1762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if working == settings.openRouterModel {
           lines.append("  ✓ Current model \"\(working)\" is working")
         } else {
-          settings.openRouterModel = working
-          persistSettings()
+          applySettingsMutation { $0.openRouterModel = working }
           lines.append("  ✓ Set model to \"\(working)\" (verified working)")
         }
       } else {
@@ -2129,8 +2110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
     guard settings.correctionLanguage != language else { return }
-    settings.correctionLanguage = language
-    persistSettings()
+    applySettingsMutation { $0.correctionLanguage = language }
     syncLanguageMenuState()
   }
 
@@ -2893,9 +2873,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if newHotKey == self.settings.hotKeyCorrectAll {
           let oldSelection = self.settings.hotKeyCorrectSelection
           let oldAll = self.settings.hotKeyCorrectAll
-          self.settings.hotKeyCorrectSelection = oldAll
-          self.settings.hotKeyCorrectAll = oldSelection
-          self.persistSettings()
+          self.applySettingsMutation {
+            $0.hotKeyCorrectSelection = oldAll
+            $0.hotKeyCorrectAll = oldSelection
+          }
           do {
             try self.hotKeyManager.registerHotKeys(
               correctSelection: self.settings.hotKeyCorrectSelection,
@@ -2904,9 +2885,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
             self.syncHotKeyMenuItems()
           } catch {
-            self.settings.hotKeyCorrectSelection = oldSelection
-            self.settings.hotKeyCorrectAll = oldAll
-            self.persistSettings()
+            self.applySettingsMutation {
+              $0.hotKeyCorrectSelection = oldSelection
+              $0.hotKeyCorrectAll = oldAll
+            }
             self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
           }
           return
@@ -2919,8 +2901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           return
         }
         let oldHotKey = self.settings.hotKeyCorrectSelection
-        self.settings.hotKeyCorrectSelection = newHotKey
-        self.persistSettings()
+        self.applySettingsMutation { $0.hotKeyCorrectSelection = newHotKey }
         do {
           try self.hotKeyManager.registerHotKeys(
             correctSelection: self.settings.hotKeyCorrectSelection,
@@ -2929,8 +2910,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           )
           self.syncHotKeyMenuItems()
         } catch {
-          self.settings.hotKeyCorrectSelection = oldHotKey
-          self.persistSettings()
+          self.applySettingsMutation { $0.hotKeyCorrectSelection = oldHotKey }
           self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
         }
       }
@@ -2949,9 +2929,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if newHotKey == self.settings.hotKeyCorrectSelection {
           let oldSelection = self.settings.hotKeyCorrectSelection
           let oldAll = self.settings.hotKeyCorrectAll
-          self.settings.hotKeyCorrectSelection = oldAll
-          self.settings.hotKeyCorrectAll = oldSelection
-          self.persistSettings()
+          self.applySettingsMutation {
+            $0.hotKeyCorrectSelection = oldAll
+            $0.hotKeyCorrectAll = oldSelection
+          }
           do {
             try self.hotKeyManager.registerHotKeys(
               correctSelection: self.settings.hotKeyCorrectSelection,
@@ -2960,9 +2941,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
             self.syncHotKeyMenuItems()
           } catch {
-            self.settings.hotKeyCorrectSelection = oldSelection
-            self.settings.hotKeyCorrectAll = oldAll
-            self.persistSettings()
+            self.applySettingsMutation {
+              $0.hotKeyCorrectSelection = oldSelection
+              $0.hotKeyCorrectAll = oldAll
+            }
             self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
           }
           return
@@ -2975,8 +2957,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           return
         }
         let oldHotKey = self.settings.hotKeyCorrectAll
-        self.settings.hotKeyCorrectAll = newHotKey
-        self.persistSettings()
+        self.applySettingsMutation { $0.hotKeyCorrectAll = newHotKey }
         do {
           try self.hotKeyManager.registerHotKeys(
             correctSelection: self.settings.hotKeyCorrectSelection,
@@ -2985,8 +2966,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           )
           self.syncHotKeyMenuItems()
         } catch {
-          self.settings.hotKeyCorrectAll = oldHotKey
-          self.persistSettings()
+          self.applySettingsMutation { $0.hotKeyCorrectAll = oldHotKey }
           self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
         }
       }
@@ -3010,8 +2990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           return
         }
         let oldHotKey = self.settings.hotKeyAnalyzeTone
-        self.settings.hotKeyAnalyzeTone = newHotKey
-        self.persistSettings()
+        self.applySettingsMutation { $0.hotKeyAnalyzeTone = newHotKey }
         do {
           try self.hotKeyManager.registerHotKeys(
             correctSelection: self.settings.hotKeyCorrectSelection,
@@ -3020,8 +2999,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           )
           self.syncHotKeyMenuItems()
         } catch {
-          self.settings.hotKeyAnalyzeTone = oldHotKey
-          self.persistSettings()
+          self.applySettingsMutation { $0.hotKeyAnalyzeTone = oldHotKey }
           self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
         }
       }
@@ -3031,10 +3009,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @objc private func resetHotKeys() {
     runAfterMenuDismissed { [weak self] in
       guard let self else { return }
-      self.settings.hotKeyCorrectSelection = .correctSelectionDefault
-      self.settings.hotKeyCorrectAll = .correctAllDefault
-      self.settings.hotKeyAnalyzeTone = .analyzeToneDefault
-      self.persistSettings()
+      self.applySettingsMutation {
+        $0.hotKeyCorrectSelection = .correctSelectionDefault
+        $0.hotKeyCorrectAll = .correctAllDefault
+        $0.hotKeyAnalyzeTone = .analyzeToneDefault
+      }
       do {
         try self.hotKeyManager.registerHotKeys(
           correctSelection: self.settings.hotKeyCorrectSelection,
