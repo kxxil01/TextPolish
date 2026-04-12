@@ -110,7 +110,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     return url
   }
 
-  private func generate(prompt: String, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     let versionsToTry = ["v1beta", "v1"]
     var lastError: Error?
     var retryCount = 0
@@ -136,7 +136,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
           let body = GeminiToneRequest(
             contents: [
-              .init(role: "user", parts: [.init(text: prompt)]),
+              .init(role: "user", parts: [.init(text: prompt.system + "\n\n" + prompt.user)]),
             ],
             generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
           )
@@ -241,7 +241,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     return nil
   }
 
-  private func makePrompt(text: String) -> String {
+  private func makePrompt(text: String) -> PromptPair {
     ToneAnalysisPromptBuilder.makePrompt(text: text)
   }
 }
