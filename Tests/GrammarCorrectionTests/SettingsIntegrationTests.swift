@@ -171,26 +171,29 @@ final class SettingsIntegrationTests: XCTestCase {
         )
     }
 
-    func testTabSwitching() {
+    func testSegmentSwitching() {
         // When
-        settingsWindowViewController?.tabView?.selectTabViewItem(at: 1)
+        settingsWindowViewController?.segmentedControl?.selectedSegment = 1
 
         // Then
-        XCTAssertEqual(settingsWindowViewController?.tabView?.selectedTabViewItem?.label, "Gemini", "Should switch to Gemini tab")
+        XCTAssertEqual(
+            settingsWindowViewController?.segmentedControl?.selectedSegment, 1,
+            "Should switch to Hotkeys segment"
+        )
     }
 
-    func testAllTabsAreAccessible() {
+    func testAllSegmentsAreAccessible() {
         // Given
-        let tabLabels = settingsWindowViewController?.tabView?.tabViewItems.map { $0.label } ?? []
+        guard let sc = settingsWindowViewController?.segmentedControl else {
+            XCTFail("Segmented control should exist")
+            return
+        }
+        let labels = (0..<sc.segmentCount).map { sc.label(forSegment: $0) ?? "" }
 
         // Then
-        XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
-        XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
-        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
-        XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
-        XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
+        XCTAssertTrue(labels.contains("Provider"), "Provider segment should exist")
+        XCTAssertTrue(labels.contains("Hotkeys"), "Hotkeys segment should exist")
+        XCTAssertTrue(labels.contains("Advanced"), "Advanced segment should exist")
     }
 
     func testSettingsValidationOnSave() {

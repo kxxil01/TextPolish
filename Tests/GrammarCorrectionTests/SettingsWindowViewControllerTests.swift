@@ -27,20 +27,18 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNotNil(viewController.view, "View should be initialized")
     }
 
-    func testTabViewCreation() {
-        XCTAssertNotNil(viewController.tabView, "Tab view should be created")
-        XCTAssertEqual(viewController.tabView?.tabViewItems.count, 7, "Should have 7 tabs")
+    func testSegmentedControlCreation() {
+        XCTAssertNotNil(viewController.segmentedControl, "Segmented control should be created")
+        XCTAssertEqual(viewController.segmentedControl.segmentCount, 3, "Should have 3 segments")
     }
 
-    func testAllTabsCreated() {
-        let tabLabels = viewController.tabView?.tabViewItems.map { $0.label } ?? []
-        XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
-        XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
-        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
-        XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
-        XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
+    func testAllSegmentsExist() {
+        let segmentLabels = (0..<viewController.segmentedControl.segmentCount).map {
+            viewController.segmentedControl.label(forSegment: $0) ?? ""
+        }
+        XCTAssertTrue(segmentLabels.contains("Provider"), "Provider segment should exist")
+        XCTAssertTrue(segmentLabels.contains("Hotkeys"), "Hotkeys segment should exist")
+        XCTAssertTrue(segmentLabels.contains("Advanced"), "Advanced segment should exist")
     }
 
     func testProviderTabElements() {
