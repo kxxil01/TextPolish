@@ -196,6 +196,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
           let body = GeminiGenerateContentRequest(
+            systemInstruction: nil,
             contents: [
               .init(role: "user", parts: [.init(text: prompt)]),
             ],
@@ -368,11 +369,19 @@ private struct GeminiGenerateContentRequest: Encodable {
     let parts: [Part]
   }
 
+  struct SystemInstruction: Encodable {
+    struct Part: Encodable {
+      let text: String
+    }
+    let parts: [Part]
+  }
+
   struct GenerationConfig: Encodable {
     let temperature: Double
     let maxOutputTokens: Int
   }
 
+  let systemInstruction: SystemInstruction?
   let contents: [Content]
   let generationConfig: GenerationConfig
 }

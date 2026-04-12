@@ -186,6 +186,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       let body = AnthropicMessagesRequest(
         model: model,
         maxTokens: 1024,
+        system: nil,
         messages: [
           .init(role: "user", content: prompt),
         ]
@@ -320,12 +321,22 @@ private struct AnthropicMessagesRequest: Encodable {
 
   let model: String
   let maxTokens: Int
+  let system: String?
   let messages: [Message]
 
   enum CodingKeys: String, CodingKey {
     case model
     case maxTokens = "max_tokens"
+    case system
     case messages
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(model, forKey: .model)
+    try container.encode(maxTokens, forKey: .maxTokens)
+    try container.encodeIfPresent(system, forKey: .system)
+    try container.encode(messages, forKey: .messages)
   }
 }
 
