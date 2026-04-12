@@ -44,6 +44,13 @@ enum PromptGuardrails {
     guard trimmed.count <= maxLength else { throw GuardrailError.textTooLong }
   }
 
+  /// Escapes closing delimiter tags in user text to prevent delimiter collision.
+  /// Replaces `</user_text>` with `<\/user_text>` so the model can't be tricked
+  /// by user content that contains the closing tag.
+  static func escapeDelimiters(_ text: String) -> String {
+    text.replacingOccurrences(of: "</user_text>", with: "<\\/user_text>")
+  }
+
   // MARK: - Output Guards
 
   static func detectRefusal(_ output: String) -> Bool {
@@ -60,12 +67,20 @@ enum PromptGuardrails {
       "i am unable to",
       "as an ai language model",
       "as an ai assistant",
+      "as a large language model",
       "i can't help with",
       "i cannot help with",
       "i apologize, but i'm unable",
       "i apologize, but i cannot",
       "i'm sorry, but i can't assist",
       "i'm sorry, but i cannot assist",
+      "i'm not able to assist",
+      "i am not able to assist",
+      "against my programming",
+      "against my guidelines",
+      "my guidelines prevent me",
+      "i must decline",
+      "i need to decline",
     ]
 
     return refusalPhrases.contains { lower.contains($0) }

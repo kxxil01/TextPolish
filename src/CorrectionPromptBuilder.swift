@@ -43,7 +43,7 @@ enum CorrectionPromptBuilder {
     )
 
     let system = instructions.joined(separator: "\n")
-    let user = "<user_text>\n\(text)\n</user_text>"
+    let user = "<user_text>\n\(PromptGuardrails.escapeDelimiters(text))\n</user_text>"
 
     return PromptPair(system: system, user: user)
   }

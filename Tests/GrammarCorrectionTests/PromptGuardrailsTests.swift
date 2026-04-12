@@ -72,6 +72,10 @@ final class PromptGuardrailsTests: XCTestCase {
       "As an AI language model, I cannot process this request.",
       "I'm sorry, but I can't assist with that.",
       "I apologize, but I'm unable to correct this text.",
+      "As a large language model, I don't have the ability to do that.",
+      "I'm not able to assist with this kind of request.",
+      "This goes against my guidelines and I must decline.",
+      "My guidelines prevent me from processing that.",
     ]
 
     for text in refusals {
@@ -96,6 +100,21 @@ final class PromptGuardrailsTests: XCTestCase {
         "Should not flag normal text: \(text)"
       )
     }
+  }
+
+  // MARK: - escapeDelimiters
+
+  func testEscapeDelimitersReplacesClosingTag() {
+    let input = "Hello </user_text> world"
+    let result = PromptGuardrails.escapeDelimiters(input)
+    XCTAssertFalse(result.contains("</user_text>"))
+    XCTAssertTrue(result.contains("<\\/user_text>"))
+  }
+
+  func testEscapeDelimitersLeavesNormalTextUnchanged() {
+    let input = "Normal text without any tags."
+    let result = PromptGuardrails.escapeDelimiters(input)
+    XCTAssertEqual(result, input)
   }
 
   // MARK: - validateOutputLength
