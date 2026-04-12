@@ -68,6 +68,9 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
+    if PromptGuardrails.detectRefusal(output) {
+      throw ToneAnalysisError.invalidResponse("AI refused to analyze the text")
+    }
 
     return try ToneAnalysisJSONParser.parseResponse(output)
   }
@@ -135,8 +138,9 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
           request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
           let body = GeminiToneRequest(
+            systemInstruction: .init(parts: [.init(text: prompt.system)]),
             contents: [
-              .init(role: "user", parts: [.init(text: prompt.system + "\n\n" + prompt.user)]),
+              .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
             generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
           )
@@ -255,11 +259,19 @@ private struct GeminiToneRequest: Encodable {
     let parts: [Part]
   }
 
+  struct SystemInstruction: Encodable {
+    struct Part: Encodable {
+      let text: String
+    }
+    let parts: [Part]
+  }
+
   struct GenerationConfig: Encodable {
     let temperature: Double
     let maxOutputTokens: Int
   }
 
+  let systemInstruction: SystemInstruction?
   let contents: [Content]
   let generationConfig: GenerationConfig
 }

@@ -61,6 +61,9 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
+    if PromptGuardrails.detectRefusal(output) {
+      throw ToneAnalysisError.invalidResponse("AI refused to analyze the text")
+    }
 
     return try ToneAnalysisJSONParser.parseResponse(output)
   }
@@ -124,8 +127,9 @@ final class AnthropicToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProv
         let body = AnthropicToneRequest(
           model: model,
           maxTokens: config.maxOutputTokens,
+          system: prompt.system,
           messages: [
-            .init(role: "user", content: prompt.system + "\n\n" + prompt.user),
+            .init(role: "user", content: prompt.user),
           ]
         )
         request.httpBody = try JSONEncoder().encode(body)
@@ -212,12 +216,22 @@ private struct AnthropicToneRequest: Encodable {
 
   let model: String
   let maxTokens: Int
+  let system: String?
   let messages: [Message]
 
   enum CodingKeys: String, CodingKey {
     case model
     case maxTokens = "max_tokens"
+    case system
     case messages
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(model, forKey: .model)
+    try container.encode(maxTokens, forKey: .maxTokens)
+    try container.encodeIfPresent(system, forKey: .system)
+    try container.encode(messages, forKey: .messages)
   }
 }
 

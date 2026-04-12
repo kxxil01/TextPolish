@@ -61,6 +61,9 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
     let apiKey = try resolveApiKey()
     let prompt = makePrompt(text: trimmed)
     let output = try await generate(prompt: prompt, apiKey: apiKey)
+    if PromptGuardrails.detectRefusal(output) {
+      throw ToneAnalysisError.invalidResponse("AI refused to analyze the text")
+    }
 
     return try ToneAnalysisJSONParser.parseResponse(output)
   }
@@ -112,7 +115,8 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
         let body = OpenRouterToneRequest(
           model: model,
           messages: [
-            .init(role: "user", content: prompt.system + "\n\n" + prompt.user),
+            .init(role: "system", content: prompt.system),
+            .init(role: "user", content: prompt.user),
           ],
           temperature: 0.0,
           maxTokens: config.maxOutputTokens
