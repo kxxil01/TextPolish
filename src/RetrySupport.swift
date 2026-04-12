@@ -5,7 +5,7 @@ struct RetryPolicy: Sendable {
   let maxBackoffSeconds: Double
   let maxRateLimitBackoffSeconds: Double
 
-  init(maxNetworkAttempts: Int = 3, maxBackoffSeconds: Double = 10, maxRateLimitBackoffSeconds: Double = 12) {
+  init(maxNetworkAttempts: Int = 2, maxBackoffSeconds: Double = 10, maxRateLimitBackoffSeconds: Double = 12) {
     self.maxNetworkAttempts = max(1, maxNetworkAttempts)
     self.maxBackoffSeconds = max(1, maxBackoffSeconds)
     self.maxRateLimitBackoffSeconds = max(1, maxRateLimitBackoffSeconds)

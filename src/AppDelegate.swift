@@ -903,15 +903,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private func correctionOperationTimeoutDuration() -> Duration {
     let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
-    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
-    let timeoutSeconds = min(180, max(12, requestSeconds * multiplier + 4))
+    let timeoutSeconds = min(30, max(12, requestSeconds + 4))
     return .seconds(timeoutSeconds)
   }
 
   private func toneOperationTimeoutDuration() -> Duration {
     let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
-    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
-    let timeoutSeconds = min(120, max(8, requestSeconds * multiplier + 2))
+    let timeoutSeconds = min(25, max(8, requestSeconds + 2))
     return .seconds(timeoutSeconds)
   }
 
