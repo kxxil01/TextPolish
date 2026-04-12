@@ -151,17 +151,17 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertFalse(saved, "Save should fail when a hotkey has no modifier")
     }
 
-    func testProviderChanged() {
+    func testProviderTileClicked() {
         // Given
         viewController.loadSettings()
-        viewController.openRouterProviderButton.state = .on
 
-        // When
-        viewController.providerChanged(viewController.geminiProviderButton!)
+        // When — click OpenRouter tile (tag 1)
+        viewController.providerTileClicked(viewController.openRouterProviderButton!)
 
         // Then
-        XCTAssertEqual(viewController.geminiProviderButton.state, .on, "Gemini button should be on")
-        XCTAssertEqual(viewController.openRouterProviderButton.state, .off, "OpenRouter button should be off")
+        XCTAssertEqual(viewController.settings.provider, .openRouter, "Provider should switch to OpenRouter")
+        XCTAssertEqual(viewController.openRouterProviderButton.state, .on, "OpenRouter button should be on")
+        XCTAssertEqual(viewController.geminiProviderButton.state, .off, "Gemini button should be off")
     }
 
     func testLanguageChanged() {

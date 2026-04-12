@@ -5,8 +5,12 @@ class KeyComboField: NSView {
     var hotKey: Settings.HotKey? {
         didSet {
             updateDisplay()
+            onChange?(hotKey)
         }
     }
+
+    /// Called when the user captures a new hotkey. Set by the settings view controller for live save.
+    var onChange: ((Settings.HotKey?) -> Void)?
 
     public let textField = NSTextField()
     private var isRecording = false

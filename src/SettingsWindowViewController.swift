@@ -63,10 +63,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
 
-    // MARK: - Legacy (test compatibility)
+    // MARK: - Per-provider Advanced Fields (promoted from local vars — issue #5)
 
-    /// Kept so tests that reference `tabView` compile. Nil in the new design.
-    var tabView: NSTabView?
+    var activeSimField: NSTextField!
+    var activeAttField: NSTextField!
 
     // MARK: - State
 
@@ -165,6 +165,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         correctAllField = KeyComboField(frame: .zero)
         analyzeToneField = KeyComboField(frame: .zero)
 
+        correctSelectionField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        correctAllField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+
         // Advanced
         requestTimeoutField = NSTextField()
         requestTimeoutField.placeholderString = "20"
@@ -185,6 +189,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         geminiMinSimilarityField = NSTextField()
         openRouterMinSimilarityField = NSTextField()
+
+        activeSimField = NSTextField()
+        activeSimField.placeholderString = "0.65"
+        activeSimField.delegate = self
+
+        activeAttField = NSTextField()
+        activeAttField.placeholderString = "2"
+        activeAttField.delegate = self
     }
 
     private func makeProviderTile(_ title: String, tag: Int) -> NSButton {
@@ -476,12 +488,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         simLabel.autoresizingMask = [.minYMargin]
         container.addSubview(simLabel)
 
-        let simField = NSTextField(frame: NSRect(x: fieldX, y: y, width: 80, height: 26))
-        simField.placeholderString = "0.65"
-        simField.delegate = self
-        simField.autoresizingMask = [.minYMargin]
-        simField.tag = 901 // identify in controlTextDidEndEditing
-        container.addSubview(simField)
+        activeSimField.frame = NSRect(x: fieldX, y: y, width: 80, height: 26)
+        activeSimField.autoresizingMask = [.minYMargin]
+        container.addSubview(activeSimField)
         y -= 36
 
         // Max Attempts
@@ -490,21 +499,18 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         attLabel.autoresizingMask = [.minYMargin]
         container.addSubview(attLabel)
 
-        let attField = NSTextField(frame: NSRect(x: fieldX, y: y, width: 80, height: 26))
-        attField.placeholderString = "2"
-        attField.delegate = self
-        attField.autoresizingMask = [.minYMargin]
-        attField.tag = 902 // identify in controlTextDidEndEditing
-        container.addSubview(attField)
+        activeAttField.frame = NSRect(x: fieldX, y: y, width: 80, height: 26)
+        activeAttField.autoresizingMask = [.minYMargin]
+        container.addSubview(activeAttField)
 
         if settings != nil {
-            loadAdvancedFields(simField: simField, attField: attField)
+            loadAdvancedFields()
         }
 
         return container
     }
 
-    private func loadAdvancedFields(simField: NSTextField? = nil, attField: NSTextField? = nil) {
+    private func loadAdvancedFields() {
         requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
 
         switch settings.correctionLanguage {
@@ -516,20 +522,20 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         switch settings.provider {
         case .gemini:
             extraInstructionField.stringValue = settings.geminiExtraInstruction ?? ""
-            simField?.stringValue = String(format: "%.2f", settings.geminiMinSimilarity)
-            attField?.stringValue = String(settings.geminiMaxAttempts)
+            activeSimField.stringValue = String(format: "%.2f", settings.geminiMinSimilarity)
+            activeAttField.stringValue = String(settings.geminiMaxAttempts)
         case .openRouter:
             extraInstructionField.stringValue = settings.openRouterExtraInstruction ?? ""
-            simField?.stringValue = String(format: "%.2f", settings.openRouterMinSimilarity)
-            attField?.stringValue = String(settings.openRouterMaxAttempts)
+            activeSimField.stringValue = String(format: "%.2f", settings.openRouterMinSimilarity)
+            activeAttField.stringValue = String(settings.openRouterMaxAttempts)
         case .openAI:
             extraInstructionField.stringValue = settings.openAIExtraInstruction ?? ""
-            simField?.stringValue = String(format: "%.2f", settings.openAIMinSimilarity)
-            attField?.stringValue = String(settings.openAIMaxAttempts)
+            activeSimField.stringValue = String(format: "%.2f", settings.openAIMinSimilarity)
+            activeAttField.stringValue = String(settings.openAIMaxAttempts)
         case .anthropic:
             extraInstructionField.stringValue = settings.anthropicExtraInstruction ?? ""
-            simField?.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
-            attField?.stringValue = String(settings.anthropicMaxAttempts)
+            activeSimField.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
+            activeAttField.stringValue = String(settings.anthropicMaxAttempts)
         }
     }
 
@@ -646,12 +652,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             liveSave()
             return
         }
-        if field.tag == 901 {
+        if field === activeSimField {
             setCurrentProviderMinSimilarity(Double(field.stringValue) ?? 0.65)
             liveSave()
             return
         }
-        if field.tag == 902 {
+        if field === activeAttField {
             setCurrentProviderMaxAttempts(Int(field.stringValue) ?? 2)
             liveSave()
             return
@@ -668,6 +674,23 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
         syncBackingFieldsFromSettings()
         delegate?.settingsDidChange(settings)
+    }
+
+    private func hotkeyDidChange() {
+        guard settings != nil else { return }
+        let selection = correctSelectionField.hotKey ?? settings.hotKeyCorrectSelection
+        let all = correctAllField.hotKey ?? settings.hotKeyCorrectAll
+        let tone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
+
+        if let error = validateHotKeys(selection: selection, all: all, tone: tone, current: settings) {
+            showErrorAlertIfNeeded(title: "Invalid hotkey", message: error)
+            return
+        }
+
+        settings.hotKeyCorrectSelection = selection
+        settings.hotKeyCorrectAll = all
+        settings.hotKeyAnalyzeTone = tone
+        liveSave()
     }
 
     private func saveCurrentProviderApiKey() {
@@ -745,27 +768,6 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         settings.provider = providers[sender.tag]
         liveSave()
         refreshProviderDetail()
-    }
-
-    @objc func providerChanged(_ sender: NSButton) {
-        geminiProviderButton.state = .off
-        openRouterProviderButton.state = .off
-        openAIProviderButton.state = .off
-        anthropicProviderButton.state = .off
-
-        if sender === geminiProviderButton {
-            geminiProviderButton.state = .on
-            settings?.provider = .gemini
-        } else if sender === openRouterProviderButton {
-            openRouterProviderButton.state = .on
-            settings?.provider = .openRouter
-        } else if sender === openAIProviderButton {
-            openAIProviderButton.state = .on
-            settings?.provider = .openAI
-        } else if sender === anthropicProviderButton {
-            anthropicProviderButton.state = .on
-            settings?.provider = .anthropic
-        }
     }
 
     func updateProviderButtons() {
@@ -917,8 +919,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         default: break
         }
 
-        newSettings.geminiExtraInstruction = extraInstructionField.stringValue.isEmpty
-            ? nil : extraInstructionField.stringValue
+        let extraValue = extraInstructionField.stringValue.isEmpty ? nil : extraInstructionField.stringValue
+        switch newSettings.provider {
+        case .gemini: newSettings.geminiExtraInstruction = extraValue
+        case .openRouter: newSettings.openRouterExtraInstruction = extraValue
+        case .openAI: newSettings.openAIExtraInstruction = extraValue
+        case .anthropic: newSettings.anthropicExtraInstruction = extraValue
+        }
 
         newSettings.normalizeRuntimeValues()
         do {
@@ -1017,59 +1024,37 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - Model Detection
 
     @objc func detectGeminiModel(_: NSButton) {
-        detectGeminiModelButton.isEnabled = false
-        detectGeminiModelButton.title = "Detecting..."
-        detectModelButton.isEnabled = false
-        detectModelButton.title = "Detecting..."
-
-        Task {
-            do {
-                var apiKey = providerApiKeyField.stringValue
-                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = geminiApiKeyField.stringValue
-                }
-                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = self.keychainKey(account: "geminiApiKey") ?? ""
-                }
-
-                let baseURL = providerBaseURLField.stringValue.isEmpty
-                    ? settings.geminiBaseURL : providerBaseURLField.stringValue
-                let detectedModel = try await ModelDetector.detectGeminiModel(
-                    apiKey: apiKey,
-                    baseURL: baseURL
-                )
-
-                await MainActor.run {
-                    providerModelField.stringValue = detectedModel
-                    settings?.geminiModel = detectedModel
-                    detectGeminiModelButton.title = "Detect Model"
-                    detectGeminiModelButton.isEnabled = true
-                    detectModelButton.title = "Detect"
-                    detectModelButton.isEnabled = true
-                    syncBackingFieldsFromSettings()
-                }
-            } catch {
-                await MainActor.run {
-                    if NSClassFromString("XCTestCase") != nil {
-                        TPLogger.log("Gemini model detection error suppressed in test environment: \(error)")
-                    } else {
-                        let alert = NSAlert()
-                        alert.messageText = "Failed to detect model"
-                        alert.informativeText = error.localizedDescription
-                        alert.runModal()
-                    }
-                    detectGeminiModelButton.title = "Detect Model"
-                    detectGeminiModelButton.isEnabled = true
-                    detectModelButton.title = "Detect"
-                    detectModelButton.isEnabled = true
-                }
-            }
-        }
+        detectModel(
+            account: "geminiApiKey",
+            backingKeyField: geminiApiKeyField,
+            backingButton: detectGeminiModelButton,
+            fallbackBaseURL: settings.geminiBaseURL,
+            detect: ModelDetector.detectGeminiModel,
+            applyModel: { [weak self] model in self?.settings?.geminiModel = model }
+        )
     }
 
     @objc func detectOpenRouterModel(_: NSButton) {
-        detectOpenRouterModelButton.isEnabled = false
-        detectOpenRouterModelButton.title = "Detecting..."
+        detectModel(
+            account: "openRouterApiKey",
+            backingKeyField: openRouterApiKeyField,
+            backingButton: detectOpenRouterModelButton,
+            fallbackBaseURL: settings.openRouterBaseURL,
+            detect: ModelDetector.detectOpenRouterModel,
+            applyModel: { [weak self] model in self?.settings?.openRouterModel = model }
+        )
+    }
+
+    private func detectModel(
+        account: String,
+        backingKeyField: NSTextField,
+        backingButton: NSButton,
+        fallbackBaseURL: String,
+        detect: @escaping (String, String) async throws -> String,
+        applyModel: @escaping (String) -> Void
+    ) {
+        backingButton.isEnabled = false
+        backingButton.title = "Detecting..."
         detectModelButton.isEnabled = false
         detectModelButton.title = "Detecting..."
 
@@ -1077,24 +1062,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             do {
                 var apiKey = providerApiKeyField.stringValue
                 if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = openRouterApiKeyField.stringValue
+                    apiKey = backingKeyField.stringValue
                 }
                 if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = self.keychainKey(account: "openRouterApiKey") ?? ""
+                    apiKey = self.keychainKey(account: account) ?? ""
                 }
 
                 let baseURL = providerBaseURLField.stringValue.isEmpty
-                    ? settings.openRouterBaseURL : providerBaseURLField.stringValue
-                let detectedModel = try await ModelDetector.detectOpenRouterModel(
-                    apiKey: apiKey,
-                    baseURL: baseURL
-                )
+                    ? fallbackBaseURL : providerBaseURLField.stringValue
+                let detectedModel = try await detect(apiKey, baseURL)
 
                 await MainActor.run {
                     providerModelField.stringValue = detectedModel
-                    settings?.openRouterModel = detectedModel
-                    detectOpenRouterModelButton.title = "Detect Model"
-                    detectOpenRouterModelButton.isEnabled = true
+                    applyModel(detectedModel)
+                    backingButton.title = "Detect Model"
+                    backingButton.isEnabled = true
                     detectModelButton.title = "Detect"
                     detectModelButton.isEnabled = true
                     syncBackingFieldsFromSettings()
@@ -1102,15 +1084,15 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             } catch {
                 await MainActor.run {
                     if NSClassFromString("XCTestCase") != nil {
-                        TPLogger.log("OpenRouter model detection error suppressed in test environment: \(error)")
+                        TPLogger.log("Model detection error suppressed in test environment: \(error)")
                     } else {
                         let alert = NSAlert()
                         alert.messageText = "Failed to detect model"
                         alert.informativeText = error.localizedDescription
                         alert.runModal()
                     }
-                    detectOpenRouterModelButton.title = "Detect Model"
-                    detectOpenRouterModelButton.isEnabled = true
+                    backingButton.title = "Detect Model"
+                    backingButton.isEnabled = true
                     detectModelButton.title = "Detect"
                     detectModelButton.isEnabled = true
                 }
