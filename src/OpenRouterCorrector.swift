@@ -85,7 +85,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     self.maxAttempts = max(1, settings.openRouterMaxAttempts)
     self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
-    self.extraInstruction = settings.openRouterExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.openRouterExtraInstruction)
     self.correctionLanguage = settings.correctionLanguage
   }
 
@@ -97,15 +97,23 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
+    try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
 
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
     for attempt in 1...maxAttempts {
-      let prompt = makePrompt(text: protected.text, attempt: attempt)
+      let prompt = CorrectionPromptBuilder.makePrompt(
+        text: protected.text,
+        attempt: attempt,
+        correctionLanguage: correctionLanguage,
+        extraInstruction: extraInstruction
+      )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw OpenRouterError.emptyResponse }
+      if PromptGuardrails.detectRefusal(cleaned) { continue }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
@@ -151,7 +159,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     return url
   }
 
-  private func generate(prompt: String, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     var retryCount = 0
     defer { lastRetryCount = retryCount }
 
@@ -171,7 +179,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       let body = OpenRouterChatCompletionsRequest(
         model: model,
         messages: [
-          .init(role: "user", content: prompt),
+          .init(role: "system", content: prompt.system),
+          .init(role: "user", content: prompt.user),
         ],
         temperature: 0.0,
         maxTokens: 1024
@@ -247,40 +256,6 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     }
 
     return nil
-  }
-
-  private func makePrompt(text: String, attempt: Int) -> String {
-    var instructions: [String] = [
-      "You are a grammar and typo corrector.",
-      "Fix only spelling, typos, grammar, and clear punctuation mistakes. Only change what is clearly wrong.",
-      "Make the smallest possible edits. Do not rewrite, rephrase, translate, or change meaning, context, or tone.",
-      "Match the original voice. If it is casual, keep it casual; if formal, keep it formal.",
-      "Keep it human and natural; it should sound like the same person wrote it, not AI.",
-      "Keep slang and abbreviations as-is. Do not make it more formal.",
-      "Do not add or remove words unless required to fix an error.",
-      "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons unless they already appear in the original text.",
-      "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
-      "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
-    ]
-
-    if attempt > 1 {
-      instructions.insert(
-        "IMPORTANT: Your previous output changed the text too much. This time, keep everything identical except for the minimal characters needed to correct errors.",
-        at: 2
-      )
-    }
-
-    if let languageInstruction = correctionLanguage.promptInstruction {
-      instructions.append(languageInstruction)
-    }
-
-    if let extraInstruction, !extraInstruction.isEmpty {
-      instructions.append("Extra instruction (apply lightly — still keep changes minimal): \(extraInstruction)")
-    }
-
-    instructions.append("Return only the corrected text. No explanations, no quotes, no code fences.")
-
-    return (instructions + ["", "TEXT:", text]).joined(separator: "\n")
   }
 
   private func isAcceptable(original: String, candidate: String) -> Bool {

@@ -96,7 +96,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
     self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
-    self.extraInstruction = settings.geminiExtraInstruction?.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.geminiExtraInstruction)
     self.correctionLanguage = settings.correctionLanguage
   }
 
@@ -110,15 +110,23 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
+    try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
 
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
     for attempt in 1...maxAttempts {
-      let prompt = makePrompt(text: protected.text, attempt: attempt)
+      let prompt = CorrectionPromptBuilder.makePrompt(
+        text: protected.text,
+        attempt: attempt,
+        correctionLanguage: correctionLanguage,
+        extraInstruction: extraInstruction
+      )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw GeminiError.emptyResponse }
+      if PromptGuardrails.detectRefusal(cleaned) { continue }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
@@ -177,7 +185,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case tryNextVersion
   }
 
-  private func generate(prompt: String, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     let versionsToTry = ["v1beta", "v1"]
     var lastError: Error?
     var retryCount = 0
@@ -196,11 +204,11 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
 
           let body = GeminiGenerateContentRequest(
-            systemInstruction: nil,
+            systemInstruction: .init(parts: [.init(text: prompt.system)]),
             contents: [
-              .init(role: "user", parts: [.init(text: prompt)]),
+              .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
-            generationConfig: .init(temperature: 0.0, maxOutputTokens: 1024)
+            generationConfig: .init(temperature: 0.0, maxOutputTokens: 4096)
           )
           request.httpBody = try JSONEncoder().encode(body)
 
@@ -317,40 +325,6 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       return item
     }
     return components.url?.absoluteString ?? url.absoluteString
-  }
-
-  private func makePrompt(text: String, attempt: Int) -> String {
-    var instructions: [String] = [
-      "You are a grammar and typo corrector.",
-      "Fix only spelling, typos, grammar, and clear punctuation mistakes. Only change what is clearly wrong.",
-      "Make the smallest possible edits. Do not rewrite, rephrase, translate, or change meaning, context, or tone.",
-      "Match the original voice. If it is casual, keep it casual; if formal, keep it formal.",
-      "Keep it human and natural; it should sound like the same person wrote it, not AI.",
-      "Keep slang and abbreviations as-is. Do not make it more formal.",
-      "Do not add or remove words unless required to fix an error.",
-      "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons unless they already appear in the original text.",
-      "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
-      "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
-    ]
-
-    if attempt > 1 {
-      instructions.insert(
-        "IMPORTANT: Your previous output changed the text too much. This time, keep everything identical except for the minimal characters needed to correct errors.",
-        at: 2
-      )
-    }
-
-    if let languageInstruction = correctionLanguage.promptInstruction {
-      instructions.append(languageInstruction)
-    }
-
-    if let extraInstruction, !extraInstruction.isEmpty {
-      instructions.append("Extra instruction (apply lightly — still keep changes minimal): \(extraInstruction)")
-    }
-
-    instructions.append("Return only the corrected text. No explanations, no quotes, no code fences.")
-
-    return (instructions + ["", "TEXT:", text]).joined(separator: "\n")
   }
 
   private func isAcceptable(original: String, candidate: String) -> Bool {
