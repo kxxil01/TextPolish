@@ -301,7 +301,7 @@ struct Settings: Codable {
   var anthropicExtraInstruction: String?
 
   private enum Defaults {
-    static let requestTimeoutSeconds: Double = 20
+    static let requestTimeoutSeconds: Double = 10
     static let geminiModel = "gemini-2.5-flash"
     static let geminiBaseURL = "https://generativelanguage.googleapis.com"
     static let openRouterModel = "google/gemma-3n-e4b-it:free"

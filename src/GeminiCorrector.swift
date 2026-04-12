@@ -94,7 +94,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       self.ownsSession = true
     }
     self.maxAttempts = max(1, settings.geminiMaxAttempts)
-    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
+    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 2, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
     self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.geminiExtraInstruction)
     self.correctionLanguage = settings.correctionLanguage
@@ -186,7 +186,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
-    let versionsToTry = ["v1beta", "v1"]
+    let versionsToTry = ["v1beta"]
     var lastError: Error?
     var retryCount = 0
     defer { lastRetryCount = retryCount }

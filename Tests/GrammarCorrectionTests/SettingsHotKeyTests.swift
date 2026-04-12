@@ -109,7 +109,7 @@ final class SettingsHotKeyTests: XCTestCase {
     let decoded = try JSONDecoder().decode(Settings.self, from: data)
 
     XCTAssertEqual(decoded.provider, .gemini)
-    XCTAssertEqual(decoded.requestTimeoutSeconds, 20)
+    XCTAssertEqual(decoded.requestTimeoutSeconds, 10)
     XCTAssertEqual(decoded.activationDelayMilliseconds, 80)
     XCTAssertEqual(decoded.selectAllDelayMilliseconds, 60)
     XCTAssertEqual(decoded.copySettleDelayMilliseconds, 20)

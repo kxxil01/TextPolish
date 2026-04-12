@@ -83,7 +83,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     configuration.timeoutIntervalForResource = timeoutSeconds
     self.session = URLSession(configuration: configuration)
     self.maxAttempts = max(1, settings.openRouterMaxAttempts)
-    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 3, maxRateLimitBackoffSeconds: 12)
+    self.retryPolicy = RetryPolicy(maxNetworkAttempts: 2, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
     self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.openRouterExtraInstruction)
     self.correctionLanguage = settings.correctionLanguage

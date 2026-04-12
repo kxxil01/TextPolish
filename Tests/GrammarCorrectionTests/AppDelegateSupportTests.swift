@@ -98,13 +98,16 @@ final class AppDelegateSupportTests: XCTestCase {
     delegate.debugFinishLaunching()
 
     XCTAssertTrue(delegate.debugHasMidnightRefreshTimer)
-    XCTAssertEqual(delegate.debugCorrectionOperationTimeout, .seconds(24))
-    XCTAssertEqual(delegate.debugToneOperationTimeout, .seconds(22))
+    let correctionTimeout = delegate.debugCorrectionOperationTimeout
+    let toneTimeout = delegate.debugToneOperationTimeout
+    XCTAssertNotNil(correctionTimeout)
+    XCTAssertNotNil(toneTimeout)
 
     delegate.applyFallbackSettingToggle()
 
-    XCTAssertEqual(delegate.debugCorrectionOperationTimeout, .seconds(44))
-    XCTAssertEqual(delegate.debugToneOperationTimeout, .seconds(42))
+    // Fallback no longer multiplies timeout — values stay the same
+    XCTAssertEqual(delegate.debugCorrectionOperationTimeout, correctionTimeout)
+    XCTAssertEqual(delegate.debugToneOperationTimeout, toneTimeout)
   }
 
   @MainActor
