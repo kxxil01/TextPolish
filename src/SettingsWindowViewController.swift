@@ -28,11 +28,15 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var geminiApiKeyField: NSTextField!
     var geminiModelField: NSTextField!
     var geminiBaseURLField: NSTextField!
+    var geminiMaxAttemptsField: NSTextField!
+    var geminiExtraInstructionField: NSTextField!
     var detectGeminiModelButton: NSButton!
 
     var openRouterApiKeyField: NSTextField!
     var openRouterModelField: NSTextField!
     var openRouterBaseURLField: NSTextField!
+    var openRouterMaxAttemptsField: NSTextField!
+    var openRouterExtraInstructionField: NSTextField!
     var detectOpenRouterModelButton: NSButton!
 
     var openAIApiKeyField: NSTextField!
@@ -41,6 +45,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var openAIMaxAttemptsField: NSTextField!
     var openAIMinSimilarityField: NSTextField!
     var openAIExtraInstructionField: NSTextField!
+    var detectOpenAIModelButton: NSButton!
 
     var anthropicApiKeyField: NSTextField!
     var anthropicModelField: NSTextField!
@@ -48,6 +53,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var anthropicMaxAttemptsField: NSTextField!
     var anthropicMinSimilarityField: NSTextField!
     var anthropicExtraInstructionField: NSTextField!
+    var detectAnthropicModelButton: NSButton!
 
     // MARK: - Hotkey Fields
 
@@ -139,11 +145,15 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         geminiApiKeyField = NSSecureTextField()
         geminiModelField = NSTextField()
         geminiBaseURLField = NSTextField()
+        geminiMaxAttemptsField = NSTextField()
+        geminiExtraInstructionField = NSTextField()
         detectGeminiModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectGeminiModel(_:)))
 
         openRouterApiKeyField = NSSecureTextField()
         openRouterModelField = NSTextField()
         openRouterBaseURLField = NSTextField()
+        openRouterMaxAttemptsField = NSTextField()
+        openRouterExtraInstructionField = NSTextField()
         detectOpenRouterModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectOpenRouterModel(_:)))
 
         openAIApiKeyField = NSSecureTextField()
@@ -152,6 +162,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         openAIMaxAttemptsField = NSTextField()
         openAIMinSimilarityField = NSTextField()
         openAIExtraInstructionField = NSTextField()
+        detectOpenAIModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectOpenAIModel(_:)))
 
         anthropicApiKeyField = NSSecureTextField()
         anthropicModelField = NSTextField()
@@ -159,6 +170,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         anthropicMaxAttemptsField = NSTextField()
         anthropicMinSimilarityField = NSTextField()
         anthropicExtraInstructionField = NSTextField()
+        detectAnthropicModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectAnthropicModel(_:)))
 
         // Hotkeys
         correctSelectionField = KeyComboField(frame: .zero)
@@ -201,13 +213,81 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     private func makeProviderTile(_ title: String, tag: Int) -> NSButton {
         let button = NSButton()
-        button.title = title
-        button.bezelStyle = .rounded
+        button.title = ""
+        button.bezelStyle = .smallSquare
         button.setButtonType(.onOff)
+        button.isBordered = false
         button.tag = tag
         button.target = self
         button.action = #selector(providerTileClicked(_:))
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 8
+
+        let symbols: [String] = ["\u{2726}", "\u{21C4}", "\u{25C9}", "\u{2662}"]
+        let symbol = symbols[min(tag, symbols.count - 1)]
+
+        let symbolLabel = NSTextField(labelWithString: symbol)
+        symbolLabel.font = NSFont.systemFont(ofSize: 18)
+        symbolLabel.alignment = .center
+        symbolLabel.tag = 100
+        button.addSubview(symbolLabel)
+
+        let nameLabel = NSTextField(labelWithString: title)
+        nameLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        nameLabel.alignment = .center
+        nameLabel.tag = 101
+        button.addSubview(nameLabel)
+
+        let badge = NSTextField(labelWithString: "")
+        badge.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        badge.alignment = .center
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 4
+        badge.tag = 102
+        button.addSubview(badge)
+
         return button
+    }
+
+    private func layoutTileSubviews(_ button: NSButton) {
+        let w = button.bounds.width
+        for sub in button.subviews {
+            switch sub.tag {
+            case 100: sub.frame = NSRect(x: 0, y: 28, width: w, height: 22)
+            case 101: sub.frame = NSRect(x: 0, y: 14, width: w, height: 16)
+            case 102:
+                let badge = sub as! NSTextField
+                let badgeWidth = max(badge.attributedStringValue.size().width + 12, 50)
+                badge.frame = NSRect(x: (w - badgeWidth) / 2, y: 1, width: badgeWidth, height: 14)
+            default: break
+            }
+        }
+    }
+
+    private func styleProviderTile(_ button: NSButton, isActive: Bool, hasKey: Bool) {
+        button.layer?.borderWidth = isActive ? 2 : 1
+        button.layer?.borderColor = isActive
+            ? NSColor.controlAccentColor.cgColor
+            : NSColor.separatorColor.cgColor
+        button.layer?.backgroundColor = isActive
+            ? NSColor.controlAccentColor.withAlphaComponent(0.06).cgColor
+            : NSColor.controlBackgroundColor.cgColor
+
+        guard let badge = button.subviews.first(where: { $0.tag == 102 }) as? NSTextField else { return }
+        if isActive {
+            badge.stringValue = "Active"
+            badge.textColor = .white
+            badge.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        } else if hasKey {
+            badge.stringValue = "Configured"
+            badge.textColor = .systemGreen
+            badge.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.12).cgColor
+        } else {
+            badge.stringValue = "No key"
+            badge.textColor = .tertiaryLabelColor
+            badge.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+        }
+        layoutTileSubviews(button)
     }
 
     // MARK: - UI Setup
@@ -263,14 +343,16 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
         let tileWidth = (contentWidth - 12) / 4
-        let tileY = container.frame.height - 58
+        let tileHeight: CGFloat = 56
+        let tileY = container.frame.height - tileHeight - 8
 
         // Provider tiles
         let tiles = [geminiProviderButton!, openRouterProviderButton!, openAIProviderButton!, anthropicProviderButton!]
         for (i, tile) in tiles.enumerated() {
-            tile.frame = NSRect(x: padding + (tileWidth + 4) * CGFloat(i), y: tileY, width: tileWidth, height: 48)
+            tile.frame = NSRect(x: padding + (tileWidth + 4) * CGFloat(i), y: tileY, width: tileWidth, height: tileHeight)
             tile.autoresizingMask = [.width, .minYMargin]
             container.addSubview(tile)
+            layoutTileSubviews(tile)
         }
 
         // Detail box
@@ -348,7 +430,18 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         openAIProviderButton?.state = provider == .openAI ? .on : .off
         anthropicProviderButton?.state = provider == .anthropic ? .on : .off
 
-        detectModelButton?.isHidden = !(provider == .gemini || provider == .openRouter)
+        let providerButtons: [(NSButton?, Settings.Provider, String)] = [
+            (geminiProviderButton, .gemini, "geminiApiKey"),
+            (openRouterProviderButton, .openRouter, "openRouterApiKey"),
+            (openAIProviderButton, .openAI, "openAIApiKey"),
+            (anthropicProviderButton, .anthropic, "anthropicApiKey"),
+        ]
+        for (button, p, account) in providerButtons {
+            guard let button else { continue }
+            styleProviderTile(button, isActive: provider == p, hasKey: hasKeychainKey(account: account))
+        }
+
+        detectModelButton?.isHidden = false
 
         let account = apiKeyAccount(for: provider)
         providerApiKeyField?.stringValue = ""
@@ -404,11 +497,27 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         instructionLabel.textColor = NSColor.secondaryLabelColor
         instructionLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(instructionLabel)
-        y -= 40
+        y -= 32
 
+        let cardHeight: CGFloat = 3 * 48 + 24
+        let card = NSBox(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
+        card.boxType = .custom
+        card.cornerRadius = 8
+        card.borderColor = NSColor.separatorColor
+        card.borderWidth = 1
+        card.fillColor = NSColor.controlBackgroundColor
+        card.titlePosition = .noTitle
+        card.contentViewMargins = NSSize(width: 16, height: 12)
+        card.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(card)
+
+        let dc = card.contentView!
+        let dw = dc.frame.width
         let labelWidth: CGFloat = 160
-        let fieldX = padding + labelWidth + 8
-        let fieldWidth = contentWidth - labelWidth - 8
+        let fieldX = labelWidth + 8
+        let fieldWidth = dw - fieldX - 8
+
+        var rowY = dc.frame.height - 40
 
         let rows: [(String, KeyComboField)] = [
             ("Correct Selection", correctSelectionField),
@@ -416,16 +525,25 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ("Analyze Tone", analyzeToneField),
         ]
 
-        for (name, field) in rows {
+        for (i, (name, field)) in rows.enumerated() {
             let label = createLabel(name, fontSize: 12, weight: .medium)
-            label.frame = NSRect(x: padding, y: y + 5, width: labelWidth, height: 20)
-            label.autoresizingMask = [.minYMargin]
-            container.addSubview(label)
+            label.frame = NSRect(x: 0, y: rowY + 5, width: labelWidth, height: 20)
+            dc.addSubview(label)
 
-            field.frame = NSRect(x: fieldX, y: y, width: fieldWidth, height: 30)
-            field.autoresizingMask = [.width, .minYMargin]
-            container.addSubview(field)
-            y -= 44
+            field.frame = NSRect(x: fieldX, y: rowY, width: fieldWidth, height: 30)
+            field.layer?.borderWidth = 1
+            field.layer?.borderColor = NSColor.separatorColor.cgColor
+            field.layer?.cornerRadius = 6
+            field.autoresizingMask = [.width]
+            dc.addSubview(field)
+            rowY -= 48
+
+            if i < rows.count - 1 {
+                let sep = NSBox(frame: NSRect(x: 0, y: rowY + 42, width: dw, height: 1))
+                sep.boxType = .separator
+                sep.autoresizingMask = [.width]
+                dc.addSubview(sep)
+            }
         }
 
         if settings != nil {
@@ -445,64 +563,101 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
-        let labelWidth: CGFloat = 140
-        let fieldX = padding + labelWidth + 8
-
         var y = container.frame.height - 32
+
+        let titleLabel = createLabel("Advanced Settings", fontSize: 16, weight: .bold)
+        titleLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 24)
+        titleLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(titleLabel)
+        y -= 28
+
+        let providerHint = createLabel(
+            settings != nil ? "Per-provider values for \(settings.provider.rawValue)" : "",
+            fontSize: 11, weight: .regular
+        )
+        providerHint.textColor = .secondaryLabelColor
+        providerHint.frame = NSRect(x: padding, y: y, width: contentWidth, height: 17)
+        providerHint.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(providerHint)
+        y -= 24
+
+        let cardBottom: CGFloat = 12
+        let cardHeight = y - cardBottom
+        let card = NSBox(frame: NSRect(x: padding, y: cardBottom, width: contentWidth, height: cardHeight))
+        card.boxType = .custom
+        card.cornerRadius = 8
+        card.borderColor = NSColor.separatorColor
+        card.borderWidth = 1
+        card.fillColor = NSColor.controlBackgroundColor
+        card.titlePosition = .noTitle
+        card.contentViewMargins = NSSize(width: 16, height: 12)
+        card.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(card)
+
+        let dc = card.contentView!
+        let dw = dc.frame.width
+        let labelWidth: CGFloat = 140
+        let fieldX = labelWidth + 8
+
+        var rowY = dc.frame.height - 32
 
         // Request Timeout
         let timeoutLabel = createLabel("Request Timeout (s)", fontSize: 12, weight: .medium)
-        timeoutLabel.frame = NSRect(x: padding, y: y + 3, width: labelWidth, height: 20)
-        timeoutLabel.autoresizingMask = [.minYMargin]
-        container.addSubview(timeoutLabel)
+        timeoutLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
+        dc.addSubview(timeoutLabel)
 
-        requestTimeoutField.frame = NSRect(x: fieldX, y: y, width: 80, height: 26)
-        requestTimeoutField.autoresizingMask = [.minYMargin]
-        container.addSubview(requestTimeoutField)
-        y -= 36
+        requestTimeoutField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
+        dc.addSubview(requestTimeoutField)
+        rowY -= 38
+
+        let sep1 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        sep1.boxType = .separator; sep1.autoresizingMask = [.width]; dc.addSubview(sep1)
 
         // Correction Language
         let langLabel = createLabel("Correction Language", fontSize: 12, weight: .medium)
-        langLabel.frame = NSRect(x: padding, y: y + 3, width: labelWidth, height: 20)
-        langLabel.autoresizingMask = [.minYMargin]
-        container.addSubview(langLabel)
+        langLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
+        dc.addSubview(langLabel)
 
-        languagePopup.frame = NSRect(x: fieldX, y: y, width: 200, height: 26)
-        languagePopup.autoresizingMask = [.minYMargin]
-        container.addSubview(languagePopup)
-        y -= 36
+        languagePopup.frame = NSRect(x: fieldX, y: rowY, width: dw - fieldX - 8, height: 26)
+        languagePopup.autoresizingMask = [.width]
+        dc.addSubview(languagePopup)
+        rowY -= 38
+
+        let sep2 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        sep2.boxType = .separator; sep2.autoresizingMask = [.width]; dc.addSubview(sep2)
 
         // Extra Instruction
         let extraLabel = createLabel("Extra Instruction", fontSize: 12, weight: .medium)
-        extraLabel.frame = NSRect(x: padding, y: y + 3, width: labelWidth, height: 20)
-        extraLabel.autoresizingMask = [.minYMargin]
-        container.addSubview(extraLabel)
+        extraLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
+        dc.addSubview(extraLabel)
 
-        extraInstructionField.frame = NSRect(x: fieldX, y: y - 44, width: contentWidth - labelWidth - 8, height: 70)
-        extraInstructionField.autoresizingMask = [.width, .minYMargin]
-        container.addSubview(extraInstructionField)
-        y -= 86
+        extraInstructionField.frame = NSRect(x: fieldX, y: rowY - 44, width: dw - fieldX - 8, height: 70)
+        extraInstructionField.autoresizingMask = [.width]
+        dc.addSubview(extraInstructionField)
+        rowY -= 86
+
+        let sep3 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        sep3.boxType = .separator; sep3.autoresizingMask = [.width]; dc.addSubview(sep3)
 
         // Min Similarity
         let simLabel = createLabel("Min Similarity", fontSize: 12, weight: .medium)
-        simLabel.frame = NSRect(x: padding, y: y + 3, width: labelWidth, height: 20)
-        simLabel.autoresizingMask = [.minYMargin]
-        container.addSubview(simLabel)
+        simLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
+        dc.addSubview(simLabel)
 
-        activeSimField.frame = NSRect(x: fieldX, y: y, width: 80, height: 26)
-        activeSimField.autoresizingMask = [.minYMargin]
-        container.addSubview(activeSimField)
-        y -= 36
+        activeSimField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
+        dc.addSubview(activeSimField)
+        rowY -= 38
+
+        let sep4 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        sep4.boxType = .separator; sep4.autoresizingMask = [.width]; dc.addSubview(sep4)
 
         // Max Attempts
         let attLabel = createLabel("Max Attempts", fontSize: 12, weight: .medium)
-        attLabel.frame = NSRect(x: padding, y: y + 3, width: labelWidth, height: 20)
-        attLabel.autoresizingMask = [.minYMargin]
-        container.addSubview(attLabel)
+        attLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
+        dc.addSubview(attLabel)
 
-        activeAttField.frame = NSRect(x: fieldX, y: y, width: 80, height: 26)
-        activeAttField.autoresizingMask = [.minYMargin]
-        container.addSubview(activeAttField)
+        activeAttField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
+        dc.addSubview(activeAttField)
 
         if settings != nil {
             loadAdvancedFields()
@@ -670,6 +825,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         geminiModelField.stringValue = settings.geminiModel
         geminiBaseURLField.stringValue = settings.geminiBaseURL
+        geminiMaxAttemptsField.stringValue = String(settings.geminiMaxAttempts)
+        geminiMinSimilarityField.stringValue = String(format: "%.2f", settings.geminiMinSimilarity)
+        geminiExtraInstructionField.stringValue = settings.geminiExtraInstruction ?? ""
         geminiApiKeyField.stringValue = ""
         geminiApiKeyField.placeholderString = hasKeychainKey(account: "geminiApiKey")
             ? "API key configured (leave blank to keep)"
@@ -677,6 +835,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         openRouterModelField.stringValue = settings.openRouterModel
         openRouterBaseURLField.stringValue = settings.openRouterBaseURL
+        openRouterMaxAttemptsField.stringValue = String(settings.openRouterMaxAttempts)
+        openRouterMinSimilarityField.stringValue = String(format: "%.2f", settings.openRouterMinSimilarity)
+        openRouterExtraInstructionField.stringValue = settings.openRouterExtraInstruction ?? ""
         openRouterApiKeyField.stringValue = ""
         openRouterApiKeyField.placeholderString = hasKeychainKey(account: "openRouterApiKey")
             ? "API key configured (leave blank to keep)"
@@ -702,8 +863,6 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ? "API key configured (leave blank to keep)"
             : "Enter your Anthropic API key"
 
-        geminiMinSimilarityField.stringValue = String(format: "%.2f", settings.geminiMinSimilarity)
-        openRouterMinSimilarityField.stringValue = String(format: "%.2f", settings.openRouterMinSimilarity)
     }
 
     // MARK: - Live Save
@@ -884,7 +1043,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         switch settings.provider {
         case .gemini: detectGeminiModel(sender)
         case .openRouter: detectOpenRouterModel(sender)
-        default: break
+        case .openAI: detectOpenAIModel(sender)
+        case .anthropic: detectAnthropicModel(sender)
         }
     }
 
@@ -926,6 +1086,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.geminiApiKey = nil
             newSettings.geminiModel = geminiModelField.stringValue
             newSettings.geminiBaseURL = geminiBaseURLField.stringValue
+            newSettings.geminiMaxAttempts = Int(geminiMaxAttemptsField.stringValue) ?? newSettings.geminiMaxAttempts
+            newSettings.geminiMinSimilarity = Double(geminiMinSimilarityField.stringValue) ?? newSettings.geminiMinSimilarity
+            newSettings.geminiExtraInstruction = geminiExtraInstructionField.stringValue.isEmpty
+                ? nil : geminiExtraInstructionField.stringValue
 
             try saveKeychainKeyIfNeeded(
                 account: "openRouterApiKey",
@@ -935,6 +1099,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.openRouterApiKey = nil
             newSettings.openRouterModel = openRouterModelField.stringValue
             newSettings.openRouterBaseURL = openRouterBaseURLField.stringValue
+            newSettings.openRouterMaxAttempts = Int(openRouterMaxAttemptsField.stringValue) ?? newSettings.openRouterMaxAttempts
+            newSettings.openRouterMinSimilarity = Double(openRouterMinSimilarityField.stringValue) ?? newSettings.openRouterMinSimilarity
+            newSettings.openRouterExtraInstruction = openRouterExtraInstructionField.stringValue.isEmpty
+                ? nil : openRouterExtraInstructionField.stringValue
 
             try saveKeychainKeyIfNeeded(
                 account: "openAIApiKey",
@@ -944,8 +1112,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.openAIApiKey = nil
             newSettings.openAIModel = openAIModelField.stringValue
             newSettings.openAIBaseURL = openAIBaseURLField.stringValue
-            newSettings.openAIMaxAttempts = Int(openAIMaxAttemptsField.stringValue) ?? 2
-            newSettings.openAIMinSimilarity = Double(openAIMinSimilarityField.stringValue) ?? 0.65
+            newSettings.openAIMaxAttempts = Int(openAIMaxAttemptsField.stringValue) ?? newSettings.openAIMaxAttempts
+            newSettings.openAIMinSimilarity = Double(openAIMinSimilarityField.stringValue) ?? newSettings.openAIMinSimilarity
             newSettings.openAIExtraInstruction = openAIExtraInstructionField.stringValue.isEmpty
                 ? nil : openAIExtraInstructionField.stringValue
 
@@ -957,8 +1125,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.anthropicApiKey = nil
             newSettings.anthropicModel = anthropicModelField.stringValue
             newSettings.anthropicBaseURL = anthropicBaseURLField.stringValue
-            newSettings.anthropicMaxAttempts = Int(anthropicMaxAttemptsField.stringValue) ?? 2
-            newSettings.anthropicMinSimilarity = Double(anthropicMinSimilarityField.stringValue) ?? 0.65
+            newSettings.anthropicMaxAttempts = Int(anthropicMaxAttemptsField.stringValue) ?? newSettings.anthropicMaxAttempts
+            newSettings.anthropicMinSimilarity = Double(anthropicMinSimilarityField.stringValue) ?? newSettings.anthropicMinSimilarity
             newSettings.anthropicExtraInstruction = anthropicExtraInstructionField.stringValue.isEmpty
                 ? nil : anthropicExtraInstructionField.stringValue
         } catch {
@@ -992,8 +1160,6 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         // Advanced
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
-        newSettings.geminiMinSimilarity = Double(geminiMinSimilarityField.stringValue) ?? 0.65
-        newSettings.openRouterMinSimilarity = Double(openRouterMinSimilarityField.stringValue) ?? 0.65
 
         switch languagePopup.indexOfSelectedItem {
         case 0: newSettings.correctionLanguage = .auto
@@ -1125,6 +1291,28 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             fallbackBaseURL: settings.openRouterBaseURL,
             detect: ModelDetector.detectOpenRouterModel,
             applyModel: { [weak self] model in self?.settings?.openRouterModel = model }
+        )
+    }
+
+    @objc func detectOpenAIModel(_: NSButton) {
+        detectModel(
+            account: "openAIApiKey",
+            backingKeyField: openAIApiKeyField,
+            backingButton: detectOpenAIModelButton,
+            fallbackBaseURL: settings.openAIBaseURL,
+            detect: ModelDetector.detectOpenAIModel,
+            applyModel: { [weak self] model in self?.settings?.openAIModel = model }
+        )
+    }
+
+    @objc func detectAnthropicModel(_: NSButton) {
+        detectModel(
+            account: "anthropicApiKey",
+            backingKeyField: anthropicApiKeyField,
+            backingButton: detectAnthropicModelButton,
+            fallbackBaseURL: settings.anthropicBaseURL,
+            detect: ModelDetector.detectAnthropicModel,
+            applyModel: { [weak self] model in self?.settings?.anthropicModel = model }
         )
     }
 
