@@ -9,12 +9,16 @@ protocol ToneAnalysisResultPresenter {
 
 @MainActor
 final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
+  private let scrollView = NSScrollView()
   private let contentStack = NSStackView()
   private let meaningLabel = NSTextField(wrappingLabelWithString: "")
   private let intentLabel = NSTextField(wrappingLabelWithString: "")
+  private let sentimentLabel = NSTextField(labelWithString: "")
+  private let formalityLabel = NSTextField(labelWithString: "")
+  private let toneLabel = NSTextField(labelWithString: "")
+  private let keyPhrasesStack = NSStackView()
   private let riskLabel = NSTextField(labelWithString: "")
   private let riskReasonLabel = NSTextField(wrappingLabelWithString: "")
-  private let toneLabel = NSTextField(labelWithString: "")
   private let ambiguitiesLabel = NSTextField(wrappingLabelWithString: "")
   private let repliesLabel = NSTextField(wrappingLabelWithString: "")
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
@@ -52,113 +56,149 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     containerView.translatesAutoresizingMaskIntoConstraints = false
     contentView = containerView
 
+    scrollView.translatesAutoresizingMaskIntoConstraints = false
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = true
+    scrollView.drawsBackground = false
+    scrollView.borderType = .noBorder
+    containerView.addSubview(scrollView)
+
+    let clipView = NSClipView()
+    clipView.drawsBackground = false
+    scrollView.contentView = clipView
+
+    let documentView = NSView()
+    documentView.translatesAutoresizingMaskIntoConstraints = false
+    scrollView.documentView = documentView
+
     contentStack.orientation = .vertical
     contentStack.alignment = .leading
-    contentStack.spacing = 12
+    contentStack.spacing = 6
     contentStack.translatesAutoresizingMaskIntoConstraints = false
     contentStack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
-    containerView.addSubview(contentStack)
+    documentView.addSubview(contentStack)
 
-    // Meaning summary
-    let meaningTitle = NSTextField(labelWithString: "Meaning:")
-    meaningTitle.font = NSFont.boldSystemFont(ofSize: 13)
-    meaningTitle.textColor = .labelColor
-    contentStack.addArrangedSubview(meaningTitle)
+    addSection("What it means")
     meaningLabel.font = NSFont.systemFont(ofSize: 12)
     meaningLabel.textColor = .labelColor
-    meaningLabel.preferredMaxLayoutWidth = 300
+    meaningLabel.preferredMaxLayoutWidth = 340
     meaningLabel.lineBreakMode = .byWordWrapping
     contentStack.addArrangedSubview(meaningLabel)
 
-    // Intent summary
-    let intentTitle = NSTextField(labelWithString: "Likely Intent:")
-    intentTitle.font = NSFont.boldSystemFont(ofSize: 13)
-    intentTitle.textColor = .labelColor
-    contentStack.addArrangedSubview(intentTitle)
+    addSection("Intent")
     intentLabel.font = NSFont.systemFont(ofSize: 12)
     intentLabel.textColor = .labelColor
-    intentLabel.preferredMaxLayoutWidth = 300
+    intentLabel.preferredMaxLayoutWidth = 340
     intentLabel.lineBreakMode = .byWordWrapping
     contentStack.addArrangedSubview(intentLabel)
 
-    // Misunderstanding risk
-    let riskRow = makeRow(label: "Misunderstanding Risk:", valueLabel: riskLabel)
-    riskLabel.textColor = .systemOrange
-    contentStack.addArrangedSubview(riskRow)
-    riskReasonLabel.font = NSFont.systemFont(ofSize: 12)
+    addSpacer(4)
+
+    let badgeRow = NSStackView()
+    badgeRow.orientation = .horizontal
+    badgeRow.spacing = 8
+    badgeRow.alignment = .centerY
+    badgeRow.addArrangedSubview(makeBadgeLabel("Tone:", valueLabel: toneLabel))
+    badgeRow.addArrangedSubview(makeBadgeLabel("Sentiment:", valueLabel: sentimentLabel))
+    badgeRow.addArrangedSubview(makeBadgeLabel("Formality:", valueLabel: formalityLabel))
+    contentStack.addArrangedSubview(badgeRow)
+
+    addSeparator()
+    addSection("Key Phrases")
+    keyPhrasesStack.orientation = .vertical
+    keyPhrasesStack.alignment = .leading
+    keyPhrasesStack.spacing = 4
+    keyPhrasesStack.translatesAutoresizingMaskIntoConstraints = false
+    contentStack.addArrangedSubview(keyPhrasesStack)
+
+    addSeparator()
+    addSection("Misunderstanding Risk")
+    let riskRow = NSStackView()
+    riskRow.orientation = .horizontal
+    riskRow.spacing = 6
+    riskRow.alignment = .firstBaseline
+    riskRow.addArrangedSubview(riskLabel)
+    riskReasonLabel.font = NSFont.systemFont(ofSize: 11)
     riskReasonLabel.textColor = .secondaryLabelColor
-    riskReasonLabel.preferredMaxLayoutWidth = 300
+    riskReasonLabel.preferredMaxLayoutWidth = 280
     riskReasonLabel.lineBreakMode = .byWordWrapping
-    contentStack.addArrangedSubview(riskReasonLabel)
+    riskRow.addArrangedSubview(riskReasonLabel)
+    contentStack.addArrangedSubview(riskRow)
 
-    // Tone row
-    let toneRow = makeRow(label: "Tone:", valueLabel: toneLabel)
-    contentStack.addArrangedSubview(toneRow)
-
-    // Ambiguities
-    let ambiguitiesTitle = NSTextField(labelWithString: "Ambiguities:")
-    ambiguitiesTitle.font = NSFont.boldSystemFont(ofSize: 13)
-    ambiguitiesTitle.textColor = .labelColor
-    contentStack.addArrangedSubview(ambiguitiesTitle)
+    addSeparator()
+    addSection("Ambiguities")
     ambiguitiesLabel.font = NSFont.systemFont(ofSize: 12)
     ambiguitiesLabel.textColor = .secondaryLabelColor
-    ambiguitiesLabel.preferredMaxLayoutWidth = 300
+    ambiguitiesLabel.preferredMaxLayoutWidth = 340
     ambiguitiesLabel.lineBreakMode = .byWordWrapping
     contentStack.addArrangedSubview(ambiguitiesLabel)
 
-    // Suggested replies
-    let repliesTitle = NSTextField(labelWithString: "Suggested Replies:")
-    repliesTitle.font = NSFont.boldSystemFont(ofSize: 13)
-    repliesTitle.textColor = .labelColor
-    contentStack.addArrangedSubview(repliesTitle)
+    addSeparator()
+    addSection("Suggested Replies")
     repliesLabel.font = NSFont.systemFont(ofSize: 12)
     repliesLabel.textColor = .secondaryLabelColor
-    repliesLabel.preferredMaxLayoutWidth = 300
+    repliesLabel.preferredMaxLayoutWidth = 340
     repliesLabel.lineBreakMode = .byWordWrapping
     contentStack.addArrangedSubview(repliesLabel)
 
-    // Separator
-    let separator = NSBox()
-    separator.boxType = .separator
-    separator.translatesAutoresizingMaskIntoConstraints = false
-    contentStack.addArrangedSubview(separator)
-    separator.widthAnchor.constraint(equalTo: contentStack.widthAnchor, constant: -40).isActive = true
-
-    // Close button
+    addSpacer(8)
     closeButton.target = self
     closeButton.action = #selector(closeButtonClicked)
     closeButton.keyEquivalent = "\r"
     closeButton.bezelStyle = .rounded
     contentStack.addArrangedSubview(closeButton)
 
-    // Constraints
     NSLayoutConstraint.activate([
-      contentStack.topAnchor.constraint(equalTo: containerView.topAnchor),
-      contentStack.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-      contentStack.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-      contentStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
-      containerView.widthAnchor.constraint(greaterThanOrEqualToConstant: 300),
-      containerView.widthAnchor.constraint(lessThanOrEqualToConstant: 400),
+      scrollView.topAnchor.constraint(equalTo: containerView.topAnchor),
+      scrollView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+      scrollView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+      scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+      contentStack.topAnchor.constraint(equalTo: documentView.topAnchor),
+      contentStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+      contentStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+      contentStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+      documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+      containerView.widthAnchor.constraint(greaterThanOrEqualToConstant: 380),
+      containerView.widthAnchor.constraint(lessThanOrEqualToConstant: 440),
+      containerView.heightAnchor.constraint(lessThanOrEqualToConstant: 520),
     ])
   }
 
-  private func makeRow(label: String, valueLabel: NSTextField) -> NSStackView {
+  private func addSection(_ title: String) {
+    let label = NSTextField(labelWithString: title)
+    label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    label.textColor = .tertiaryLabelColor
+    contentStack.addArrangedSubview(label)
+  }
+
+  private func addSeparator() {
+    let sep = NSBox()
+    sep.boxType = .separator
+    sep.translatesAutoresizingMaskIntoConstraints = false
+    contentStack.addArrangedSubview(sep)
+    sep.widthAnchor.constraint(equalTo: contentStack.widthAnchor, constant: -40).isActive = true
+  }
+
+  private func addSpacer(_ height: CGFloat) {
+    let spacer = NSView()
+    spacer.translatesAutoresizingMaskIntoConstraints = false
+    spacer.heightAnchor.constraint(equalToConstant: height).isActive = true
+    contentStack.addArrangedSubview(spacer)
+  }
+
+  private func makeBadgeLabel(_ title: String, valueLabel: NSTextField) -> NSStackView {
     let row = NSStackView()
     row.orientation = .horizontal
-    row.spacing = 8
+    row.spacing = 3
     row.alignment = .firstBaseline
-
-    let labelField = NSTextField(labelWithString: label)
-    labelField.font = NSFont.boldSystemFont(ofSize: 13)
-    labelField.textColor = .labelColor
-    labelField.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-
-    valueLabel.font = NSFont.systemFont(ofSize: 13)
+    let titleField = NSTextField(labelWithString: title)
+    titleField.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+    titleField.textColor = .tertiaryLabelColor
+    titleField.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+    valueLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
     valueLabel.textColor = .labelColor
-
-    row.addArrangedSubview(labelField)
+    row.addArrangedSubview(titleField)
     row.addArrangedSubview(valueLabel)
-
     return row
   }
 
@@ -174,12 +214,20 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     ensureEscapeMonitor()
     meaningLabel.stringValue = result.plainMeaning
     intentLabel.stringValue = result.likelyIntent
-    riskLabel.stringValue = result.misunderstandingRisk.level.displayName
-    riskReasonLabel.stringValue = result.misunderstandingRisk.reason
     toneLabel.stringValue = "\(toneEmoji(result.tone)) \(result.tone.rawValue)"
+    sentimentLabel.stringValue = sentimentEmoji(result.sentiment) + " " + result.sentiment.displayName
+    formalityLabel.stringValue = result.formality.displayName
+
+    riskLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    riskLabel.stringValue = result.misunderstandingRisk.level.displayName
+    riskLabel.textColor = riskColor(result.misunderstandingRisk.level)
+    riskReasonLabel.stringValue = result.misunderstandingRisk.reason
+
+    populateKeyPhrases(result.keyPhrases)
     ambiguitiesLabel.stringValue = formatList(result.ambiguities, emptyFallback: "None identified.")
     repliesLabel.stringValue = formatList(result.suggestedReplies, emptyFallback: "No reply suggestion.")
 
+    sizeToFitContent()
     positionNearCursor()
     makeKeyAndOrderFront(nil)
   }
@@ -188,14 +236,62 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     ensureEscapeMonitor()
     meaningLabel.stringValue = message
     intentLabel.stringValue = "-"
+    toneLabel.stringValue = "Error"
+    sentimentLabel.stringValue = "-"
+    formalityLabel.stringValue = "-"
     riskLabel.stringValue = "-"
     riskReasonLabel.stringValue = "-"
-    toneLabel.stringValue = "Error"
+    populateKeyPhrases([])
     ambiguitiesLabel.stringValue = "-"
     repliesLabel.stringValue = "-"
 
+    sizeToFitContent()
     positionNearCursor()
     makeKeyAndOrderFront(nil)
+  }
+
+  private func populateKeyPhrases(_ phrases: [KeyPhrase]) {
+    keyPhrasesStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    guard !phrases.isEmpty else {
+      let none = NSTextField(labelWithString: "All phrases are straightforward.")
+      none.font = NSFont.systemFont(ofSize: 12)
+      none.textColor = .secondaryLabelColor
+      keyPhrasesStack.addArrangedSubview(none)
+      return
+    }
+    for kp in phrases {
+      let row = NSTextField(wrappingLabelWithString: "\"\(kp.phrase)\" — \(kp.meaning)")
+      row.font = NSFont.systemFont(ofSize: 12)
+      row.textColor = .labelColor
+      row.preferredMaxLayoutWidth = 340
+      row.lineBreakMode = .byWordWrapping
+      keyPhrasesStack.addArrangedSubview(row)
+    }
+  }
+
+  private func sizeToFitContent() {
+    guard let documentView = scrollView.documentView else { return }
+    documentView.layoutSubtreeIfNeeded()
+    let intrinsicHeight = contentStack.fittingSize.height
+    let maxHeight: CGFloat = 520
+    let targetHeight = min(intrinsicHeight, maxHeight)
+    setContentSize(NSSize(width: frame.width, height: targetHeight))
+  }
+
+  private func riskColor(_ level: MisunderstandingRiskLevel) -> NSColor {
+    switch level {
+    case .low: return .systemGreen
+    case .medium: return .systemOrange
+    case .high: return .systemRed
+    }
+  }
+
+  private func sentimentEmoji(_ sentiment: Sentiment) -> String {
+    switch sentiment {
+    case .positive: return "👍"
+    case .neutral: return "➖"
+    case .negative: return "👎"
+    }
   }
 
   func dismiss() {
