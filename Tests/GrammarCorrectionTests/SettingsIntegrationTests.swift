@@ -10,11 +10,8 @@ final class SettingsIntegrationTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        settingsWindowController = SettingsWindowController()
+        settingsWindowController = SettingsWindowController(keychainServiceOverride: Self.testKeychainService)
         settingsWindowViewController = settingsWindowController.viewController
-        settingsWindowViewController?.keychainServiceOverride = Self.testKeychainService
-        let _ = settingsWindowViewController?.view
-        settingsWindowViewController?.viewDidLoad()
     }
 
     // Helper to create test settings without loading from disk/keychain

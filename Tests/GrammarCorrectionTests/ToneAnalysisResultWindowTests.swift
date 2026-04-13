@@ -37,6 +37,9 @@ final class ToneAnalysisResultWindowTests: XCTestCase {
                 tone: .neutral,
                 plainMeaning: "Test meaning",
                 likelyIntent: "Test intent",
+                sentiment: .neutral,
+                formality: .casual,
+                keyPhrases: [KeyPhrase(phrase: "no worries", meaning: "It's okay, don't be concerned")],
                 misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "Clear"),
                 ambiguities: ["Phrase A can mean X or Y"],
                 suggestedReplies: ["Can you clarify which one you mean?"]
