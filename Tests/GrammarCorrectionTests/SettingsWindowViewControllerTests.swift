@@ -29,7 +29,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
     func testSegmentedControlCreation() {
         XCTAssertNotNil(viewController.segmentedControl, "Segmented control should be created")
-        XCTAssertEqual(viewController.segmentedControl.segmentCount, 3, "Should have 3 segments")
+        XCTAssertEqual(viewController.segmentedControl.segmentCount, 4, "Should have 4 segments")
     }
 
     func testAllSegmentsExist() {
@@ -39,6 +39,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertTrue(segmentLabels.contains("Provider"), "Provider segment should exist")
         XCTAssertTrue(segmentLabels.contains("Hotkeys"), "Hotkeys segment should exist")
         XCTAssertTrue(segmentLabels.contains("Advanced"), "Advanced segment should exist")
+        XCTAssertTrue(segmentLabels.contains("About"), "About segment should exist")
     }
 
     func testProviderTabElements() {

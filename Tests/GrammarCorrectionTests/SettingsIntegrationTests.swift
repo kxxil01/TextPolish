@@ -199,6 +199,7 @@ final class SettingsIntegrationTests: XCTestCase {
         XCTAssertTrue(labels.contains("Provider"), "Provider segment should exist")
         XCTAssertTrue(labels.contains("Hotkeys"), "Hotkeys segment should exist")
         XCTAssertTrue(labels.contains("Advanced"), "Advanced segment should exist")
+        XCTAssertTrue(labels.contains("About"), "About segment should exist")
     }
 
     func testSettingsValidationOnSave() {
