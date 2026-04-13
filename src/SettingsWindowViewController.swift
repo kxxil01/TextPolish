@@ -216,7 +216,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let padding: CGFloat = 20
 
         segmentedControl = NSSegmentedControl(
-            labels: ["Provider", "Hotkeys", "Advanced"],
+            labels: ["Provider", "Hotkeys", "Advanced", "About"],
             trackingMode: .selectOne,
             target: self,
             action: #selector(segmentChanged(_:))
@@ -249,6 +249,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case 0: contentContainer.addSubview(buildProviderSection())
         case 1: contentContainer.addSubview(buildHotkeysSection())
         case 2: contentContainer.addSubview(buildAdvancedSection())
+        case 3: contentContainer.addSubview(buildAboutSection())
         default: break
         }
     }
@@ -537,6 +538,88 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             activeSimField.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
             activeAttField.stringValue = String(settings.anthropicMaxAttempts)
         }
+    }
+
+    private func buildAboutSection() -> NSView {
+        let container = NSView(frame: contentContainer.bounds)
+        container.autoresizingMask = [.width, .height]
+
+        let padding: CGFloat = 20
+        let contentWidth = container.frame.width - padding * 2
+        var y = container.frame.height - 32
+
+        // App name + version
+        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
+        let titleLabel = createLabel("TextPolish \(version)", fontSize: 18, weight: .bold)
+        titleLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 24)
+        titleLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(titleLabel)
+        y -= 24
+
+        let taglineLabel = createLabel(
+            "Small, fast menu bar text polish for grammar and tone.",
+            fontSize: 12, weight: .regular
+        )
+        taglineLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 18)
+        taglineLabel.textColor = .secondaryLabelColor
+        taglineLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(taglineLabel)
+        y -= 30
+
+        // Privacy section
+        let privacyTitle = createLabel("Privacy", fontSize: 14, weight: .semibold)
+        privacyTitle.frame = NSRect(x: padding, y: y, width: contentWidth, height: 20)
+        privacyTitle.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(privacyTitle)
+        y -= 20
+
+        let privacyItems = [
+            "Text stays on-device until you trigger an action",
+            "Sends only selected text to the provider over HTTPS",
+            "API keys stored in macOS Keychain",
+            "No analytics or telemetry",
+            "TextPolish does not store your text",
+        ]
+
+        for item in privacyItems {
+            let label = createLabel("\u{2022} \(item)", fontSize: 11, weight: .regular)
+            label.frame = NSRect(x: padding + 8, y: y, width: contentWidth - 8, height: 15)
+            label.textColor = .secondaryLabelColor
+            label.autoresizingMask = [.width, .minYMargin]
+            container.addSubview(label)
+            y -= 16
+        }
+        y -= 10
+
+        // Creator
+        let creatorTitle = createLabel("Creator", fontSize: 14, weight: .semibold)
+        creatorTitle.frame = NSRect(x: padding, y: y, width: contentWidth, height: 20)
+        creatorTitle.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(creatorTitle)
+        y -= 20
+
+        let creatorLabel = createLabel("Kurniadi Ilham", fontSize: 12, weight: .regular)
+        creatorLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 18)
+        creatorLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(creatorLabel)
+        y -= 20
+
+        let githubLabel = createLabel("github.com/kxxil01", fontSize: 11, weight: .regular)
+        githubLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 15)
+        githubLabel.textColor = .linkColor
+        githubLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(githubLabel)
+        y -= 20
+
+        // Info
+        let settingsPath = Settings.settingsFileURL().path
+        let infoLabel = createLabel("Settings: \(settingsPath)", fontSize: 10, weight: .regular)
+        infoLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 14)
+        infoLabel.textColor = .tertiaryLabelColor
+        infoLabel.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(infoLabel)
+
+        return container
     }
 
     // MARK: - Helpers
