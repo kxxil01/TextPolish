@@ -1,3220 +1,2869 @@
 import AppKit
-import ServiceManagement
 import Carbon
+import ServiceManagement
 import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-  private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-  private let hotKeyManager = HotKeyManager()
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let hotKeyManager = HotKeyManager()
 
-  private var baseImage: NSImage?
-  private var settings = Settings.loadOrCreateDefault()
-  private var correctionController: CorrectionController?
-  private var toneAnalysisController: ToneAnalysisController?
-  private var toneResultWindow: ToneAnalysisResultWindow?
-  private var diagnosticsWindow: DiagnosticsWindow?
-  private var feedback: StatusItemFeedback?
-  private var statusMenu: NSMenu?
-  private var lastTargetApplication: NSRunningApplication?
-  private var workspaceActivationObserver: Any?
-  private var midnightRefreshTimer: Timer?
-  private var hotKeyPressDebouncer = HotKeyPressDebouncer(cooldown: .milliseconds(350))
-  private var isMenuOpen = false
-  private var pendingAfterMenuAction: (@MainActor () async -> Void)?
-  private var settingsWindowController: SettingsWindowController?
-  private lazy var updaterController = SPUStandardUpdaterController(
-    startingUpdater: true,
-    updaterDelegate: self,
-    userDriverDelegate: nil
-  )
-
-  private var providerGeminiItem: NSMenuItem?
-  private var providerOpenRouterItem: NSMenuItem?
-  private var providerOpenAIItem: NSMenuItem?
-  private var providerAnthropicItem: NSMenuItem?
-  private var setGeminiKeyItem: NSMenuItem?
-  private var setGeminiModelItem: NSMenuItem?
-
-  private var setOpenRouterKeyItem: NSMenuItem?
-  private var setOpenRouterModelItem: NSMenuItem?
-
-  private var setOpenAIKeyItem: NSMenuItem?
-  private var setOpenAIModelItem: NSMenuItem?
-  private var setAnthropicKeyItem: NSMenuItem?
-  private var setAnthropicModelItem: NSMenuItem?
-  private var providerHealthItem: NSMenuItem?
-  private var launchAtLoginItem: NSMenuItem?
-  private var languageAutoItem: NSMenuItem?
-  private var languageEnglishItem: NSMenuItem?
-  private var languageIndonesianItem: NSMenuItem?
-  private var fallbackToOpenRouterItem: NSMenuItem?
-  private var selectionItem: NSMenuItem?
-  private var allItem: NSMenuItem?
-  private var analyzeToneItem: NSMenuItem?
-  private var cancelCorrectionItem: NSMenuItem?
-  private var checkForUpdatesItem: NSMenuItem?
-  private var updateStatusItem: NSMenuItem?
-  private var updateLastCheckedItem: NSMenuItem?
-  private var manualUpdateCheckInProgress = false
-  private var updateFoundInCycle = false
-  private var updateStatus: UpdateStatus = .unknown
-  private let lastUpdateCheckKey = "lastUpdateCheckDate"
-  private lazy var updateDateFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
-    return formatter
-  }()
-
-  private let keychainAccountGemini = "geminiApiKey"
-  private let keychainAccountOpenRouter = "openRouterApiKey"
-  private let keychainAccountOpenAI = "openAIApiKey"
-  private let keychainAccountAnthropic = "anthropicApiKey"
-  private var keychainService: String {
-    Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
-  }
-
-  private let didShowWelcomeKey = "didShowWelcome_0_1"
-  private let expectedAppName = "TextPolish"
-
-  private let correctionCountKey = "correctionCount"
-  private let correctionCountDateKey = "correctionCountDate"
-  private var todayCorrectionCount: Int = 0
-
-  private let toneAnalysisCountKey = "toneAnalysisCount"
-  private let toneAnalysisCountDateKey = "toneAnalysisCountDate"
-  private var todayToneAnalysisCount: Int = 0
-
-  private var appDisplayName: String {
-    let display =
-      (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
-      (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ??
-      expectedAppName
-    let trimmed = display.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? expectedAppName : trimmed
-  }
-
-  private var isUpdaterAvailable: Bool {
-    let feedURL = (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String) ?? ""
-    let publicKey = (Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String) ?? ""
-    return !feedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-      !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
-  func applicationDidFinishLaunching(_ notification: Notification) {
-    NSApp.setActivationPolicy(.accessory)
-
-    baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: appDisplayName)
-    loadTodayCorrectionCount()
-    loadTodayToneAnalysisCount()
-    let initialIcon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
-    statusItem.button?.image = initialIcon
-    statusItem.button?.title = StatusItemCountFormatter.title(for: todayCorrectionCount + todayToneAnalysisCount)
-    statusItem.button?.toolTip = appDisplayName
-    statusItem.button?.target = self
-    statusItem.button?.action = #selector(statusItemClicked(_:))
-    statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-
-    let feedback = StatusItemFeedback(statusItem: statusItem, baseImage: initialIcon)
-    self.feedback = feedback
-    correctionController = CorrectionController(
-      corrector: CorrectorFactory.make(settings: settings),
-      feedback: feedback,
-      settings: settings,
-      timings: .init(settings: settings),
-      operationTimeout: correctionOperationTimeoutDuration(),
-      recoverer: { [weak self] error in
-        guard let self else { return nil }
-        return await self.recoverFromError(error)
-      },
-      shouldAttemptFallback: { [weak self] error in
-        guard let self else { return false }
-        return self.shouldAttemptFallback(for: error)
-      },
-      onSuccess: { [weak self] in
-        self?.incrementCorrectionCount()
-      }
+    private var baseImage: NSImage?
+    private var settings = Settings.loadOrCreateDefault()
+    private var correctionController: CorrectionController?
+    private var toneAnalysisController: ToneAnalysisController?
+    private var toneResultWindow: ToneAnalysisResultWindow?
+    private var diagnosticsWindow: DiagnosticsWindow?
+    private var feedback: StatusItemFeedback?
+    private var statusMenu: NSMenu?
+    private var lastTargetApplication: NSRunningApplication?
+    private var workspaceActivationObserver: Any?
+    private var midnightRefreshTimer: Timer?
+    private var hotKeyPressDebouncer = HotKeyPressDebouncer(cooldown: .milliseconds(350))
+    private var isMenuOpen = false
+    private var pendingAfterMenuAction: (@MainActor () async -> Void)?
+    private var settingsWindowController: SettingsWindowController?
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: self,
+        userDriverDelegate: nil
     )
 
-    let toneResultWindow = ToneAnalysisResultWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
-      styleMask: [.titled, .closable],
-      backing: .buffered,
-      defer: false
-    )
-    self.toneResultWindow = toneResultWindow
-    toneAnalysisController = ToneAnalysisController(
-      analyzer: ToneAnalyzerFactory.make(settings: settings),
-      feedback: feedback,
-      resultPresenter: toneResultWindow,
-      timings: .init(settings: settings),
-      operationTimeout: toneOperationTimeoutDuration(),
-      onSuccess: { [weak self] in
-        self?.incrementToneAnalysisCount()
-      }
-    )
+    private var selectionItem: NSMenuItem?
+    private var allItem: NSMenuItem?
+    private var analyzeToneItem: NSMenuItem?
+    private var cancelCorrectionItem: NSMenuItem?
+    private var checkForUpdatesItem: NSMenuItem?
+    private var updateStatusItem: NSMenuItem?
+    private var updateLastCheckedItem: NSMenuItem?
+    private var manualUpdateCheckInProgress = false
+    private var updateFoundInCycle = false
+    private var updateStatus: UpdateStatus = .unknown
+    private let lastUpdateCheckKey = "lastUpdateCheckDate"
+    private lazy var updateDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
-    workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-      forName: NSWorkspace.didActivateApplicationNotification,
-      object: nil,
-      queue: .main
-    ) { [weak self] notification in
-      guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-      guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-      Task { @MainActor [weak self] in
-        self?.lastTargetApplication = app
-      }
+    private let keychainAccountGemini = "geminiApiKey"
+    private let keychainAccountOpenRouter = "openRouterApiKey"
+    private let keychainAccountOpenAI = "openAIApiKey"
+    private let keychainAccountAnthropic = "anthropicApiKey"
+    private var keychainService: String {
+        Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     }
 
-    // Listen for settings changes
-    NotificationCenter.default.addObserver(
-      forName: .settingsDidChange,
-      object: nil,
-      queue: .main
-    ) { [weak self] notification in
-      guard let newSettings = notification.object as? Settings else { return }
-      Task { @MainActor [weak self] in
-        guard let self, !self.suppressSettingsNotification else { return }
-        self.settings = newSettings
-        self.syncProviderMenuStates()
-        self.syncFallbackMenuState()
-        self.syncLanguageMenuState()
-        self.refreshCorrector()
-        self.setupHotKeys()
-      }
+    private let didShowWelcomeKey = "didShowWelcome_0_1"
+    private let expectedAppName = "TextPolish"
+
+    private let correctionCountKey = "correctionCount"
+    private let correctionCountDateKey = "correctionCountDate"
+    private var todayCorrectionCount: Int = 0
+
+    private let toneAnalysisCountKey = "toneAnalysisCount"
+    private let toneAnalysisCountDateKey = "toneAnalysisCountDate"
+    private var todayToneAnalysisCount: Int = 0
+
+    private var appDisplayName: String {
+        let display =
+            (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
+            (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ??
+            expectedAppName
+        let trimmed = display.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? expectedAppName : trimmed
     }
 
-    setupMenu()
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(diagnosticsDidUpdate),
-      name: .diagnosticsUpdated,
-      object: nil
-    )
-    setupHotKeys()
-    _ = updaterController
-    if isUpdaterAvailable {
-      updaterController.updater.automaticallyChecksForUpdates = true
-      TPLogger.log("Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
-    } else {
-      updaterController.updater.automaticallyChecksForUpdates = false
-      TPLogger.log("Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
+    private var isUpdaterAvailable: Bool {
+        let feedURL = (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String) ?? ""
+        let publicKey = (Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String) ?? ""
+        return !feedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    scheduleNextDailyReset()
-    maybeShowWelcome()
-  }
 
-  @objc private func statusItemClicked(_ sender: Any?) {
-    captureFrontmostApplication()
-    refreshCorrectionCountIfNewDay()
-    refreshToneAnalysisCountIfNewDay()
-    updateStatusItemIcon()
-    syncLaunchAtLoginMenuState()
-    syncUpdateMenuItems()
-    guard let statusMenu, let button = statusItem.button else { return }
-    button.highlight(true)
-    statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
-    button.highlight(false)
-  }
-
-  @objc private func diagnosticsDidUpdate() {
-    syncProviderHealthItem()
-    diagnosticsWindow?.update(with: DiagnosticsStore.shared.lastSnapshot)
-  }
-
-  @objc private func checkForUpdates(_ sender: Any?) {
-    guard isUpdaterAvailable else {
-      feedback?.showError("Updates are not configured for this build.")
-      return
-    }
-    if manualUpdateCheckInProgress {
-      feedback?.showInfo("Update check already running.")
-      return
-    }
-    manualUpdateCheckInProgress = true
-    updateFoundInCycle = false
-    updateStatus = .checking
-    syncUpdateMenuItems()
-    feedback?.showInfo("Checking for updates...")
-    updaterController.checkForUpdates(sender)
-  }
-
-  private func resetManualUpdateCheckState() {
-    manualUpdateCheckInProgress = false
-    updateFoundInCycle = false
-  }
-
-  private func finishManualUpdateCheck(with feedback: UpdateCheckFeedback?) {
-    resetManualUpdateCheckState()
-    syncUpdateMenuItems()
-    guard let feedback else { return }
-    switch feedback.kind {
-    case .info:
-      self.feedback?.showInfo(feedback.message)
-    case .error:
-      self.feedback?.showError(feedback.message)
-    }
-  }
-
-  private func captureFrontmostApplication() {
-    guard let frontmost = NSWorkspace.shared.frontmostApplication else { return }
-    guard frontmost.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-    lastTargetApplication = frontmost
-  }
-
-  private func setupMenu() {
-    let menu = NSMenu()
-    menu.delegate = self
-
-    let selectionItem = NSMenuItem(
-      title: "Correct Selection",
-      action: #selector(correctSelection),
-      keyEquivalent: ""
-    )
-    selectionItem.target = self
-
-    let allItem = NSMenuItem(
-      title: "Correct All",
-      action: #selector(correctAll),
-      keyEquivalent: ""
-    )
-    allItem.target = self
-
-    let analyzeToneItem = NSMenuItem(
-      title: "Analyze Tone",
-      action: #selector(analyzeTone),
-      keyEquivalent: ""
-    )
-    analyzeToneItem.target = self
-
-    self.selectionItem = selectionItem
-    self.allItem = allItem
-    self.analyzeToneItem = analyzeToneItem
-
-    menu.addItem(selectionItem)
-    menu.addItem(allItem)
-    menu.addItem(analyzeToneItem)
-
-    let cancelItem = NSMenuItem(
-      title: "Cancel Active Operation",
-      action: #selector(cancelActiveOperation),
-      keyEquivalent: ""
-    )
-    cancelItem.target = self
-    self.cancelCorrectionItem = cancelItem
-    menu.addItem(cancelItem)
-    menu.addItem(.separator())
-
-    let hotKeysItem = NSMenuItem(title: "Hotkeys", action: nil, keyEquivalent: "")
-    let hotKeysMenu = NSMenu()
-
-    let setSelectionHotKeyItem = NSMenuItem(
-      title: "Set Correct Selection Hotkey…",
-      action: #selector(setCorrectSelectionHotKey),
-      keyEquivalent: ""
-    )
-    setSelectionHotKeyItem.target = self
-
-    let setAllHotKeyItem = NSMenuItem(
-      title: "Set Correct All Hotkey…",
-      action: #selector(setCorrectAllHotKey),
-      keyEquivalent: ""
-    )
-    setAllHotKeyItem.target = self
-
-    let setAnalyzeToneHotKeyItem = NSMenuItem(
-      title: "Set Analyze Tone Hotkey…",
-      action: #selector(setAnalyzeToneHotKey),
-      keyEquivalent: ""
-    )
-    setAnalyzeToneHotKeyItem.target = self
-
-    let resetHotKeysItem = NSMenuItem(
-      title: "Reset to Defaults",
-      action: #selector(resetHotKeys),
-      keyEquivalent: ""
-    )
-    resetHotKeysItem.target = self
-
-    hotKeysMenu.addItem(setSelectionHotKeyItem)
-    hotKeysMenu.addItem(setAllHotKeyItem)
-    hotKeysMenu.addItem(setAnalyzeToneHotKeyItem)
-    hotKeysMenu.addItem(.separator())
-    hotKeysMenu.addItem(resetHotKeysItem)
-
-    hotKeysItem.submenu = hotKeysMenu
-    menu.addItem(hotKeysItem)
-    menu.addItem(.separator())
-
-    let providerItem = NSMenuItem(title: "Provider", action: nil, keyEquivalent: "")
-    let providerMenu = NSMenu()
-
-    let geminiItem = NSMenuItem(
-      title: "Gemini",
-      action: #selector(selectGeminiProvider),
-      keyEquivalent: ""
-    )
-    geminiItem.target = self
-
-    let openRouterItem = NSMenuItem(
-      title: "OpenRouter",
-      action: #selector(selectOpenRouterProvider),
-      keyEquivalent: ""
-    )
-    openRouterItem.target = self
-
-    let openAIItem = NSMenuItem(
-      title: "OpenAI",
-      action: #selector(selectOpenAIProvider),
-      keyEquivalent: ""
-    )
-    openAIItem.target = self
-
-    let anthropicItem = NSMenuItem(
-      title: "Anthropic",
-      action: #selector(selectAnthropicProvider),
-      keyEquivalent: ""
-    )
-    anthropicItem.target = self
-
-    providerGeminiItem = geminiItem
-    providerOpenRouterItem = openRouterItem
-    providerOpenAIItem = openAIItem
-    providerAnthropicItem = anthropicItem
-    syncProviderMenuStates()
-
-    providerMenu.addItem(geminiItem)
-    providerMenu.addItem(openRouterItem)
-    providerMenu.addItem(openAIItem)
-    providerMenu.addItem(anthropicItem)
-    providerMenu.addItem(.separator())
-
-    let providerHealthItem = NSMenuItem(
-      title: "Health: Unknown",
-      action: nil,
-      keyEquivalent: ""
-    )
-    providerHealthItem.isEnabled = false
-    self.providerHealthItem = providerHealthItem
-    providerMenu.addItem(providerHealthItem)
-    providerMenu.addItem(.separator())
-
-    let setGeminiKeyItem = NSMenuItem(
-      title: "Set Gemini API Key…",
-      action: #selector(setGeminiApiKey),
-      keyEquivalent: ""
-    )
-    setGeminiKeyItem.target = self
-
-    let setGeminiModelItem = NSMenuItem(
-      title: "Set Gemini Model…",
-      action: #selector(setGeminiModel),
-      keyEquivalent: ""
-    )
-    setGeminiModelItem.target = self
-
-    let setOpenRouterKeyItem = NSMenuItem(
-      title: "Set OpenRouter API Key…",
-      action: #selector(setOpenRouterApiKey),
-      keyEquivalent: ""
-    )
-    setOpenRouterKeyItem.target = self
-
-    let setOpenRouterModelItem = NSMenuItem(
-      title: "Set OpenRouter Model…",
-      action: #selector(setOpenRouterModel),
-      keyEquivalent: ""
-    )
-    setOpenRouterModelItem.target = self
-
-    let setOpenAIKeyItem = NSMenuItem(
-      title: "Set OpenAI API Key…",
-      action: #selector(setOpenAIApiKey),
-      keyEquivalent: ""
-    )
-    setOpenAIKeyItem.target = self
-
-    let setOpenAIModelItem = NSMenuItem(
-      title: "Set OpenAI Model…",
-      action: #selector(setOpenAIModel),
-      keyEquivalent: ""
-    )
-    setOpenAIModelItem.target = self
-
-    let setAnthropicKeyItem = NSMenuItem(
-      title: "Set Anthropic API Key…",
-      action: #selector(setAnthropicApiKey),
-      keyEquivalent: ""
-    )
-    setAnthropicKeyItem.target = self
-
-    let setAnthropicModelItem = NSMenuItem(
-      title: "Set Anthropic Model…",
-      action: #selector(setAnthropicModel),
-      keyEquivalent: ""
-    )
-    setAnthropicModelItem.target = self
-
-    self.setGeminiKeyItem = setGeminiKeyItem
-    self.setGeminiModelItem = setGeminiModelItem
-    self.setOpenRouterKeyItem = setOpenRouterKeyItem
-    self.setOpenRouterModelItem = setOpenRouterModelItem
-    self.setOpenAIKeyItem = setOpenAIKeyItem
-    self.setOpenAIModelItem = setOpenAIModelItem
-    self.setAnthropicKeyItem = setAnthropicKeyItem
-    self.setAnthropicModelItem = setAnthropicModelItem
-
-    providerMenu.addItem(setGeminiKeyItem)
-    providerMenu.addItem(setGeminiModelItem)
-    providerMenu.addItem(setOpenRouterKeyItem)
-    providerMenu.addItem(setOpenRouterModelItem)
-    providerMenu.addItem(setOpenAIKeyItem)
-    providerMenu.addItem(setOpenAIModelItem)
-    providerMenu.addItem(setAnthropicKeyItem)
-    providerMenu.addItem(setAnthropicModelItem)
-
-    providerItem.submenu = providerMenu
-    menu.addItem(providerItem)
-
-    let preferencesItem = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
-    let preferencesMenu = NSMenu()
-
-    let launchAtLoginItem = NSMenuItem(
-      title: "Start at Login",
-      action: #selector(toggleLaunchAtLogin),
-      keyEquivalent: ""
-    )
-    launchAtLoginItem.target = self
-    self.launchAtLoginItem = launchAtLoginItem
-    preferencesMenu.addItem(launchAtLoginItem)
-
-    let languageItem = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
-    let languageMenu = NSMenu()
-
-    let languageAutoItem = NSMenuItem(
-      title: Settings.CorrectionLanguage.auto.displayName,
-      action: #selector(selectLanguageAuto),
-      keyEquivalent: ""
-    )
-    languageAutoItem.target = self
-
-    let languageEnglishItem = NSMenuItem(
-      title: Settings.CorrectionLanguage.englishUS.displayName,
-      action: #selector(selectLanguageEnglish),
-      keyEquivalent: ""
-    )
-    languageEnglishItem.target = self
-
-    let languageIndonesianItem = NSMenuItem(
-      title: Settings.CorrectionLanguage.indonesian.displayName,
-      action: #selector(selectLanguageIndonesian),
-      keyEquivalent: ""
-    )
-    languageIndonesianItem.target = self
-
-    self.languageAutoItem = languageAutoItem
-    self.languageEnglishItem = languageEnglishItem
-    self.languageIndonesianItem = languageIndonesianItem
-
-    languageMenu.addItem(languageAutoItem)
-    languageMenu.addItem(languageEnglishItem)
-    languageMenu.addItem(languageIndonesianItem)
-
-    languageItem.submenu = languageMenu
-    preferencesMenu.addItem(languageItem)
-
-    let fallbackToOpenRouterItem = NSMenuItem(
-      title: "Fallback to alternate provider on errors",
-      action: #selector(toggleFallbackToOpenRouter),
-      keyEquivalent: ""
-    )
-    fallbackToOpenRouterItem.target = self
-    self.fallbackToOpenRouterItem = fallbackToOpenRouterItem
-    preferencesMenu.addItem(fallbackToOpenRouterItem)
-
-    let accessibilityItem = NSMenuItem(
-      title: "Open Accessibility Settings…",
-      action: #selector(openAccessibilitySettings),
-      keyEquivalent: ""
-    )
-    accessibilityItem.target = self
-    preferencesMenu.addItem(accessibilityItem)
-
-    let openSettingsItem = NSMenuItem(
-      title: "Open Settings Window…",
-      action: #selector(openSettingsWindow),
-      keyEquivalent: ""
-    )
-    openSettingsItem.target = self
-    preferencesMenu.addItem(openSettingsItem)
-
-    preferencesItem.submenu = preferencesMenu
-    menu.addItem(preferencesItem)
-
-    let diagnosticsItem = NSMenuItem(
-      title: "Diagnostics…",
-      action: #selector(openDiagnostics),
-      keyEquivalent: ""
-    )
-    diagnosticsItem.target = self
-    menu.addItem(diagnosticsItem)
-
-    let aboutItem = NSMenuItem(
-      title: "About & Privacy",
-      action: #selector(showAboutAndPrivacy),
-      keyEquivalent: ""
-    )
-    aboutItem.target = self
-    menu.addItem(aboutItem)
-
-    let updatesItem = NSMenuItem(title: "Check for Updates", action: nil, keyEquivalent: "")
-    let updatesMenu = NSMenu()
-
-    let checkForUpdatesItem = NSMenuItem(
-      title: "Check",
-      action: #selector(checkForUpdates),
-      keyEquivalent: ""
-    )
-    checkForUpdatesItem.target = self
-    self.checkForUpdatesItem = checkForUpdatesItem
-    updatesMenu.addItem(checkForUpdatesItem)
-
-    let updateStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    updateStatusItem.isEnabled = false
-    self.updateStatusItem = updateStatusItem
-    updatesMenu.addItem(updateStatusItem)
-
-    let updateLastCheckedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    updateLastCheckedItem.isEnabled = false
-    self.updateLastCheckedItem = updateLastCheckedItem
-    updatesMenu.addItem(updateLastCheckedItem)
-
-    updatesItem.submenu = updatesMenu
-    menu.addItem(updatesItem)
-
-    menu.addItem(.separator())
-
-    let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
-    quitItem.target = self
-    quitItem.keyEquivalentModifierMask = [.command]
-    menu.addItem(quitItem)
-
-    statusMenu = menu
-    syncLaunchAtLoginMenuState()
-    syncFallbackMenuState()
-    syncProviderMenuStates()
-    syncProviderHealthItem()
-    syncLanguageMenuState()
-    syncHotKeyMenuItems()
-    syncCancelMenuState()
-    syncUpdateMenuItems()
-  }
-
-  func menuWillOpen(_ menu: NSMenu) {
-    isMenuOpen = true
-    syncCancelMenuState()
-    syncProviderHealthItem()
-  }
-
-  func menuDidClose(_ menu: NSMenu) {
-    isMenuOpen = false
-    guard let action = pendingAfterMenuAction else { return }
-    pendingAfterMenuAction = nil
-    Task { @MainActor in
-      await action()
-    }
-  }
-
-  private func syncProviderMenuStates() {
-    providerGeminiItem?.state = settings.provider == .gemini ? .on : .off
-    providerOpenRouterItem?.state = settings.provider == .openRouter ? .on : .off
-    providerOpenAIItem?.state = settings.provider == .openAI ? .on : .off
-    providerAnthropicItem?.state = settings.provider == .anthropic ? .on : .off
-    setGeminiKeyItem?.isEnabled = settings.provider == .gemini
-    setGeminiModelItem?.isEnabled = settings.provider == .gemini
-    setOpenRouterKeyItem?.isEnabled = settings.provider == .openRouter
-    setOpenRouterModelItem?.isEnabled = settings.provider == .openRouter
-    setOpenAIKeyItem?.isEnabled = settings.provider == .openAI
-    setOpenAIModelItem?.isEnabled = settings.provider == .openAI
-    setAnthropicKeyItem?.isEnabled = settings.provider == .anthropic
-    setAnthropicModelItem?.isEnabled = settings.provider == .anthropic
-    if settings.provider == .gemini {
-      statusItem.button?.toolTip = "\(appDisplayName) (Gemini: \(settings.geminiModel))"
-    } else if settings.provider == .openRouter {
-      statusItem.button?.toolTip = "\(appDisplayName) (OpenRouter: \(settings.openRouterModel))"
-    } else if settings.provider == .openAI {
-      statusItem.button?.toolTip = "\(appDisplayName) (OpenAI: \(settings.openAIModel))"
-    } else if settings.provider == .anthropic {
-      statusItem.button?.toolTip = "\(appDisplayName) (Anthropic: \(settings.anthropicModel))"
-    } else {
-      statusItem.button?.toolTip = appDisplayName
-    }
-    feedback?.updateBaseToolTip(statusItem.button?.toolTip)
-  }
-
-  private func syncProviderHealthItem() {
-    guard let providerHealthItem else { return }
-    providerHealthItem.title = DiagnosticsStore.shared.healthMenuTitle()
-    providerHealthItem.toolTip = DiagnosticsStore.shared.healthToolTip()
-  }
-
-  private func syncLaunchAtLoginMenuState() {
-    guard let launchAtLoginItem else { return }
-
-    switch SMAppService.mainApp.status {
-    case .enabled:
-      launchAtLoginItem.state = .on
-      launchAtLoginItem.toolTip = nil
-    case .requiresApproval:
-      launchAtLoginItem.state = .mixed
-      launchAtLoginItem.toolTip = "Requires approval in System Settings → General → Login Items"
-    default:
-      launchAtLoginItem.state = .off
-      launchAtLoginItem.toolTip = isRunningFromApplicationsFolder() ? nil : "Move the app to /Applications to enable Start at Login reliably"
-    }
-  }
-
-  private func syncFallbackMenuState() {
-    fallbackToOpenRouterItem?.state = settings.enableGeminiOpenRouterFallback ? .on : .off
-  }
-
-  private func syncLanguageMenuState() {
-    languageAutoItem?.state = settings.correctionLanguage == .auto ? .on : .off
-    languageEnglishItem?.state = settings.correctionLanguage == .englishUS ? .on : .off
-    languageIndonesianItem?.state = settings.correctionLanguage == .indonesian ? .on : .off
-  }
-
-  private func syncUpdateMenuItems() {
-    let effectiveStatus: UpdateStatus = isUpdaterAvailable ? updateStatus : .message("Updates not configured")
-    updateStatusItem?.title = effectiveStatus.menuTitle
-    updateLastCheckedItem?.title = updateLastCheckedTitle()
-    if !isUpdaterAvailable {
-      checkForUpdatesItem?.isEnabled = false
-      checkForUpdatesItem?.toolTip = "Updates are not configured for this build."
-    } else if manualUpdateCheckInProgress {
-      checkForUpdatesItem?.isEnabled = false
-      checkForUpdatesItem?.toolTip = "Update check in progress."
-    } else {
-      checkForUpdatesItem?.isEnabled = true
-      checkForUpdatesItem?.toolTip = nil
-    }
-  }
-
-  private func updateLastCheckedTitle() -> String {
-    guard isUpdaterAvailable else { return "Last checked: Not available" }
-    guard let date = lastUpdateCheckDate() else { return "Last checked: Never" }
-    return "Last checked: \(updateDateFormatter.string(from: date))"
-  }
-
-  private func lastUpdateCheckDate() -> Date? {
-    UserDefaults.standard.object(forKey: lastUpdateCheckKey) as? Date
-  }
-
-  private func recordLastUpdateCheck(_ date: Date = Date()) {
-    UserDefaults.standard.set(date, forKey: lastUpdateCheckKey)
-  }
-
-  private var suppressSettingsNotification = false
-
-  private func applySettingsMutation(_ mutate: (inout Settings) -> Void) {
-    var latest = Settings.loadOrCreateDefault()
-    mutate(&latest)
-    latest.normalizeRuntimeValues()
-    do {
-      suppressSettingsNotification = true
-      try Settings.saveAndNotify(latest)
-      settings = latest
-      suppressSettingsNotification = false
-    } catch {
-      suppressSettingsNotification = false
-      TPLogger.log("Failed to save settings: \(error)")
-    }
-  }
-
-  // MARK: - Correction Counter & Badge
-
-  private func loadTodayCorrectionCount() {
-    refreshCorrectionCountIfNewDay()
-  }
-
-  private func refreshCorrectionCountIfNewDay() {
-    let defaults = UserDefaults.standard
-    let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
-    let today = formattedToday()
-
-    if storedDate == today {
-      todayCorrectionCount = defaults.integer(forKey: correctionCountKey)
-    } else {
-      todayCorrectionCount = 0
-      defaults.set(0, forKey: correctionCountKey)
-      defaults.set(today, forKey: correctionCountDateKey)
-    }
-  }
-
-  private func incrementCorrectionCount() {
-    refreshCorrectionCountIfNewDay()
-    todayCorrectionCount += 1
-    UserDefaults.standard.set(todayCorrectionCount, forKey: correctionCountKey)
-    updateStatusItemIcon()
-    scheduleNextDailyReset()
-  }
-
-  private func loadTodayToneAnalysisCount() {
-    refreshToneAnalysisCountIfNewDay()
-  }
-
-  private func refreshToneAnalysisCountIfNewDay() {
-    let defaults = UserDefaults.standard
-    let storedDate = defaults.string(forKey: toneAnalysisCountDateKey) ?? ""
-    let today = formattedToday()
-
-    if storedDate == today {
-      todayToneAnalysisCount = defaults.integer(forKey: toneAnalysisCountKey)
-    } else {
-      todayToneAnalysisCount = 0
-      defaults.set(0, forKey: toneAnalysisCountKey)
-      defaults.set(today, forKey: toneAnalysisCountDateKey)
-    }
-  }
-
-  private func incrementToneAnalysisCount() {
-    refreshToneAnalysisCountIfNewDay()
-    todayToneAnalysisCount += 1
-    UserDefaults.standard.set(todayToneAnalysisCount, forKey: toneAnalysisCountKey)
-    updateStatusItemIcon()
-    scheduleNextDailyReset()
-  }
-
-  private func formattedToday() -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: Date())
-  }
-
-  private func updateStatusItemIcon() {
-    let count = todayCorrectionCount + todayToneAnalysisCount
-    let icon = makeIconWithBadge(count: count)
-    statusItem.button?.image = icon
-    let title = StatusItemCountFormatter.title(for: count)
-    statusItem.button?.title = title
-    feedback?.updateBaseImage(icon)
-    feedback?.updateBaseTitle(title)
-  }
-
-  private func makeIconWithBadge(count: Int) -> NSImage? {
-    guard let base = baseImage else { return nil }
-    let size = NSSize(width: 18, height: 18)
-    let image = NSImage(size: size, flipped: false) { rect in
-      base.draw(in: rect)
-      return true
-    }
-    image.isTemplate = true
-    return image
-  }
-
-  private func scheduleNextDailyReset(now: Date = Date(), calendar: Calendar = .current) {
-    midnightRefreshTimer?.invalidate()
-    let nextResetDate = DailyResetScheduler.nextResetDate(after: now, calendar: calendar)
-    midnightRefreshTimer = Timer(
-      fireAt: nextResetDate,
-      interval: 0,
-      target: self,
-      selector: #selector(handleDailyResetTimer),
-      userInfo: nil,
-      repeats: false
-    )
-    if let midnightRefreshTimer {
-      RunLoop.main.add(midnightRefreshTimer, forMode: .common)
-    }
-  }
-
-  @objc private func handleDailyResetTimer() {
-    refreshCorrectionCountIfNewDay()
-    refreshToneAnalysisCountIfNewDay()
-    updateStatusItemIcon()
-    scheduleNextDailyReset()
-  }
-
-  private func keychainLabel(for account: String) -> String? {
-    switch account {
-    case keychainAccountGemini:
-      return "\(expectedAppName) — Gemini API Key"
-    case keychainAccountOpenRouter:
-      return "\(expectedAppName) — OpenRouter API Key"
-    case keychainAccountOpenAI:
-      return "\(expectedAppName) — OpenAI API Key"
-    case keychainAccountAnthropic:
-      return "\(expectedAppName) — Anthropic API Key"
-    default:
-      return "\(expectedAppName) — Secret"
-    }
-  }
-
-  private func setKeychainPassword(_ password: String, service: String, account: String) async throws {
-    TPLogger.log("Keychain set start account=\(account)")
-    NSApp.activate(ignoringOtherApps: true)
-    let label = keychainLabel(for: account)
-    try await withCheckedThrowingContinuation { continuation in
-      DispatchQueue.global(qos: .userInitiated).async {
-        do {
-          try Keychain.setConfiguredPassword(
-            password,
-            primaryService: service,
-            account: account,
-            label: label
-          )
-          TPLogger.log("Keychain set success account=\(account)")
-          continuation.resume()
-        } catch {
-          TPLogger.log("Keychain set failed account=\(account) error=\(error)")
-          continuation.resume(throwing: error)
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+
+        baseImage = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: appDisplayName)
+        loadTodayCorrectionCount()
+        loadTodayToneAnalysisCount()
+        let initialIcon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
+        statusItem.button?.image = initialIcon
+        statusItem.button?.title = StatusItemCountFormatter.title(for: todayCorrectionCount + todayToneAnalysisCount)
+        statusItem.button?.toolTip = appDisplayName
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusItemClicked(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        let feedback = StatusItemFeedback(statusItem: statusItem, baseImage: initialIcon)
+        self.feedback = feedback
+        correctionController = CorrectionController(
+            corrector: CorrectorFactory.make(settings: settings),
+            feedback: feedback,
+            settings: settings,
+            timings: .init(settings: settings),
+            operationTimeout: correctionOperationTimeoutDuration(),
+            recoverer: { [weak self] error in
+                guard let self else { return nil }
+                return await self.recoverFromError(error)
+            },
+            shouldAttemptFallback: { [weak self] error in
+                guard let self else { return false }
+                return self.shouldAttemptFallback(for: error)
+            },
+            onSuccess: { [weak self] in
+                self?.incrementCorrectionCount()
+            }
+        )
+
+        let toneResultWindow = ToneAnalysisResultWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        self.toneResultWindow = toneResultWindow
+        toneAnalysisController = ToneAnalysisController(
+            analyzer: ToneAnalyzerFactory.make(settings: settings),
+            feedback: feedback,
+            resultPresenter: toneResultWindow,
+            timings: .init(settings: settings),
+            operationTimeout: toneOperationTimeoutDuration(),
+            onSuccess: { [weak self] in
+                self?.incrementToneAnalysisCount()
+            }
+        )
+
+        workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            Task { @MainActor [weak self] in
+                self?.lastTargetApplication = app
+            }
         }
-      }
-    }
-  }
 
-  private func deleteKeychainPassword(service: String, account: String) async throws {
-    TPLogger.log("Keychain delete start account=\(account)")
-    NSApp.activate(ignoringOtherApps: true)
-    try await withCheckedThrowingContinuation { continuation in
-      DispatchQueue.global(qos: .userInitiated).async {
-        do {
-          try Keychain.deleteConfiguredPassword(primaryService: service, account: account)
-          TPLogger.log("Keychain delete success account=\(account)")
-          continuation.resume()
-        } catch {
-          TPLogger.log("Keychain delete failed account=\(account) error=\(error)")
-          continuation.resume(throwing: error)
+        // Listen for settings changes
+        NotificationCenter.default.addObserver(
+            forName: .settingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let newSettings = notification.object as? Settings else { return }
+            Task { @MainActor [weak self] in
+                guard let self, !self.suppressSettingsNotification else { return }
+                self.settings = newSettings
+                self.refreshCorrector()
+                self.setupHotKeys()
+            }
         }
-      }
-    }
-  }
 
-  private func refreshCorrector() {
-    correctionController?.updateSettings(settings)
-    correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
-    correctionController?.updateTimings(.init(settings: settings))
-    correctionController?.updateOperationTimeout(correctionOperationTimeoutDuration())
-    toneAnalysisController?.updateAnalyzer(ToneAnalyzerFactory.make(settings: settings))
-    toneAnalysisController?.updateTimings(.init(settings: settings))
-    toneAnalysisController?.updateOperationTimeout(toneOperationTimeoutDuration())
-  }
-
-  private func correctionOperationTimeoutDuration() -> Duration {
-    let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
-    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
-    let timeoutSeconds = min(180, max(12, requestSeconds * multiplier + 4))
-    return .seconds(timeoutSeconds)
-  }
-
-  private func toneOperationTimeoutDuration() -> Duration {
-    let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
-    let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
-    let timeoutSeconds = min(120, max(8, requestSeconds * multiplier + 2))
-    return .seconds(timeoutSeconds)
-  }
-
-  private func timingsOverride(for app: NSRunningApplication?) -> CorrectionController.Timings? {
-    guard let profile = settings.timingProfile(
-      bundleIdentifier: app?.bundleIdentifier,
-      appName: app?.localizedName
-    ) else {
-      return nil
-    }
-    let baseTimings = CorrectionController.Timings(settings: settings)
-    return baseTimings.applying(profile)
-  }
-
-  private func toneTimingsOverride(for app: NSRunningApplication?) -> ToneAnalysisController.Timings? {
-    guard let correctionTimings = timingsOverride(for: app) else { return nil }
-    return ToneAnalysisController.Timings(
-      activationDelay: correctionTimings.activationDelay,
-      copySettleDelay: correctionTimings.copySettleDelay,
-      copyTimeout: correctionTimings.copyTimeout
-    )
-  }
-
-  private func runAfterMenuDismissed(_ action: @escaping @MainActor () async -> Void) {
-    if isMenuOpen {
-      pendingAfterMenuAction = action
-      return
-    }
-    Task { @MainActor in
-      await action()
-    }
-  }
-
-  private func normalizeGeminiModel(_ model: String) -> String {
-    let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.hasPrefix("models/") {
-      return String(trimmed.dropFirst("models/".count))
-    }
-    return trimmed
-  }
-
-  private func recoverFromError(_ error: Error) async -> CorrectionController.RecoveryAction? {
-    switch settings.provider {
-    case .gemini:
-      guard let geminiError = error as? GeminiCorrector.GeminiError else { return nil }
-      if case .requestFailed(let status, _) = geminiError, status == 404 {
-        guard let apiKey = currentGeminiApiKey() else { return nil }
-        do {
-          let models = try await fetchGeminiModels(apiKey: apiKey)
-          guard let chosenRaw = chooseGeminiModel(from: models) else { return nil }
-          let chosen = normalizeGeminiModel(chosenRaw)
-          let current = normalizeGeminiModel(settings.geminiModel)
-          guard !chosen.isEmpty, chosen != current else { return nil }
-
-          applySettingsMutation { $0.geminiModel = chosen }
-          syncProviderMenuStates()
-          refreshCorrector()
-          return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
-        } catch {
-          TPLogger.log("Auto-detect Gemini model failed: \(error)")
-        }
-      }
-
-      return nil
-    case .openRouter:
-      guard let openRouterError = error as? OpenRouterCorrector.OpenRouterError else { return nil }
-
-      guard case .requestFailed(let status, _) = openRouterError else { return nil }
-      guard status == 404 || status == 402 else { return nil }
-      guard let apiKey = currentOpenRouterApiKey() else { return nil }
-
-      do {
-        let current = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let chosen = try await detectWorkingOpenRouterModel(
-          apiKey: apiKey,
-          preferFree: true,
-          preferredFirst: nil,
-          excluding: current.isEmpty ? nil : current
-        ) else { return nil }
-
-        applySettingsMutation { $0.openRouterModel = chosen }
-        syncProviderMenuStates()
-        refreshCorrector()
-        let message = "OpenRouter switched to a working free model: \(chosen)"
-        return CorrectionController.RecoveryAction(message: message, corrector: nil)
-      } catch {
-        TPLogger.log("Auto-detect OpenRouter model failed: \(error)")
-        return nil
-      }
-    case .openAI:
-      return nil
-    case .anthropic:
-      return nil
-    }
-  }
-
-  private func shouldAttemptFallback(for error: Error) -> Bool {
-    guard settings.enableGeminiOpenRouterFallback else { return false }
-    guard shouldFallbackFromError(error) else { return false }
-
-    switch settings.provider {
-    case .gemini:
-      return currentOpenRouterApiKey() != nil
-    case .openRouter:
-      return currentGeminiApiKey() != nil
-    case .openAI:
-      return currentAnthropicApiKey() != nil
-    case .anthropic:
-      return currentOpenAIApiKey() != nil
-    }
-  }
-
-  private func shouldFallbackFromError(_ error: Error) -> Bool {
-    if let geminiError = error as? GeminiCorrector.GeminiError {
-      return shouldFallbackFromGeminiError(geminiError)
-    }
-    if let openRouterError = error as? OpenRouterCorrector.OpenRouterError {
-      return shouldFallbackFromOpenRouterError(openRouterError)
-    }
-    if let openAIError = error as? OpenAICorrector.OpenAIError {
-      return shouldFallbackFromOpenAIError(openAIError)
-    }
-    if let anthropicError = error as? AnthropicCorrector.AnthropicError {
-      return shouldFallbackFromAnthropicError(anthropicError)
-    }
-    if let urlError = error as? URLError {
-      return shouldFallbackFromURLError(urlError)
-    }
-    return false
-  }
-
-  private func shouldFallbackFromGeminiError(_ error: GeminiCorrector.GeminiError) -> Bool {
-    switch error {
-    case .missingApiKey, .invalidBaseURL:
-      return false
-    case .blocked, .emptyResponse, .overRewrite:
-      // Provider returned an unusable response; fallback can still salvage the user flow.
-      return true
-    case .requestFailed(let status, _):
-      if status == 401 || status == 403 {
-        return false
-      }
-      if status == 429 {
-        return true
-      }
-      if status <= 0 {
-        return true
-      }
-      return (500...599).contains(status)
-    }
-  }
-
-  private func shouldFallbackFromOpenRouterError(_ error: OpenRouterCorrector.OpenRouterError) -> Bool {
-    switch error {
-    case .missingApiKey, .invalidBaseURL:
-      return false
-    case .emptyResponse, .overRewrite:
-      return true
-    case .requestFailed(let status, _):
-      if status == 401 || status == 403 || status == 402 {
-        return false
-      }
-      if status == 429 {
-        return true
-      }
-      if status <= 0 {
-        return true
-      }
-      return (500...599).contains(status)
-    }
-  }
-
-  private func shouldFallbackFromOpenAIError(_ error: OpenAICorrector.OpenAIError) -> Bool {
-    switch error {
-    case .missingApiKey, .invalidBaseURL, .invalidModel:
-      return false
-    case .emptyResponse, .overRewrite:
-      return true
-    case .requestFailed(let status, _):
-      if status == 401 || status == 403 || status == 402 {
-        return false
-      }
-      if status == 429 {
-        return true
-      }
-      if status <= 0 {
-        return true
-      }
-      return (500...599).contains(status)
-    }
-  }
-
-  private func shouldFallbackFromAnthropicError(_ error: AnthropicCorrector.AnthropicError) -> Bool {
-    switch error {
-    case .missingApiKey, .invalidBaseURL, .invalidModel:
-      return false
-    case .emptyResponse, .overRewrite:
-      return true
-    case .requestFailed(let status, _):
-      if status == 401 || status == 403 {
-        return false
-      }
-      if status == 429 || status == 529 {
-        return true
-      }
-      if status <= 0 {
-        return true
-      }
-      return (500...599).contains(status)
-    }
-  }
-
-  private func shouldFallbackFromURLError(_ error: URLError) -> Bool {
-    switch error.code {
-    case .timedOut,
-         .cannotFindHost,
-         .cannotConnectToHost,
-         .networkConnectionLost,
-         .dnsLookupFailed,
-         .notConnectedToInternet:
-      return true
-    default:
-      return false
-    }
-  }
-
-  private func setupHotKeys() {
-    hotKeyManager.onHotKey = { [weak self] id in
-      guard let self else { return }
-      _ = self.handleRegisteredHotKey(id)
-    }
-
-    do {
-      try hotKeyManager.registerHotKeys(
-        correctSelection: settings.hotKeyCorrectSelection,
-        correctAll: settings.hotKeyCorrectAll,
-        analyzeTone: settings.hotKeyAnalyzeTone
-      )
-    } catch {
-      TPLogger.log("Failed to register hotkeys: \(error)")
-      let configured = [
-        "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
-        "Correct All \(settings.hotKeyCorrectAll.displayString)",
-        "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
-      ].joined(separator: " • ")
-      let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-      feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
-    }
-  }
-
-  @discardableResult
-  private func handleRegisteredHotKey(
-    _ id: Int,
-    now: ContinuousClock.Instant = ContinuousClock.now
-  ) -> Bool {
-    guard hotKeyPressDebouncer.shouldAccept(id: id, now: now) else {
-      return false
-    }
-
-    captureFrontmostApplication()
-    let target = lastTargetApplication
-    let correctionTimings = timingsOverride(for: target)
-    let toneTimings = toneTimingsOverride(for: target)
-
-    switch id {
-    case HotKeyManager.HotKeyID.correctSelection.rawValue:
-      correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
-    case HotKeyManager.HotKeyID.correctAll.rawValue:
-      correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
-    case HotKeyManager.HotKeyID.analyzeTone.rawValue:
-      toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
-    default:
-      return false
-    }
-
-    return true
-  }
-
-  @objc private func correctSelection() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let target = self.lastTargetApplication
-      let timings = self.timingsOverride(for: target)
-      self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
-    }
-  }
-
-  @objc private func correctAll() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let target = self.lastTargetApplication
-      let timings = self.timingsOverride(for: target)
-      self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
-    }
-  }
-
-  @objc private func cancelActiveOperation() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let didCancelCorrection = self.correctionController?.cancelCurrentCorrection() == true
-      let didCancelTone = self.toneAnalysisController?.cancelCurrentAnalysis() == true
-      if didCancelCorrection || didCancelTone {
-        self.feedback?.showInfo("Canceling...")
-      } else {
-        self.feedback?.showInfo("No operation in progress")
-      }
-    }
-  }
-
-  @objc private func analyzeTone() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let target = self.lastTargetApplication
-      let toneTimings = self.toneTimingsOverride(for: target)
-      self.toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
-    }
-  }
-
-  @objc private func selectGeminiProvider() {
-    applySettingsMutation { $0.provider = .gemini }
-    syncProviderMenuStates()
-    refreshCorrector()
-
-    let hasKey = Keychain.hasConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountGemini
-    )
-    if !hasKey,
-       settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-    {
-      setGeminiApiKey()
-    }
-  }
-
-  @objc private func selectOpenRouterProvider() {
-    applySettingsMutation { $0.provider = .openRouter }
-    syncProviderMenuStates()
-    refreshCorrector()
-
-    let hasKey = Keychain.hasConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountOpenRouter
-    )
-    if !hasKey,
-       settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-    {
-      setOpenRouterApiKey()
-    }
-  }
-
-  @objc private func selectOpenAIProvider() {
-    applySettingsMutation { $0.provider = .openAI }
-    syncProviderMenuStates()
-    refreshCorrector()
-
-    let hasKey = Keychain.hasConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountOpenAI
-    )
-    if !hasKey,
-       settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-    {
-      setOpenAIApiKey()
-    }
-  }
-
-  @objc private func selectAnthropicProvider() {
-    applySettingsMutation { $0.provider = .anthropic }
-    syncProviderMenuStates()
-    refreshCorrector()
-
-    let hasKey = Keychain.hasConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountAnthropic
-    )
-    if !hasKey,
-       settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-    {
-      setAnthropicApiKey()
-    }
-  }
-
-  @objc private func setGeminiApiKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let result = self.promptForApiKey(
-        title: "Gemini API Key",
-        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
-      )
-      TPLogger.log("Gemini key prompt result=\(self.apiKeyPromptResultKind(result))")
-
-      switch result {
-      case .canceled:
-        return
-      case .clear:
-        self.feedback?.showInfo("Clearing Gemini key…")
-        do {
-          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountGemini)
-          self.applySettingsMutation { $0.geminiApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("Gemini key cleared")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to clear key: \(error)")
-          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
-        }
-      case .save(let value):
-        self.feedback?.showInfo("Saving Gemini key… (check for a Keychain prompt)")
-        do {
-          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountGemini)
-          self.applySettingsMutation { $0.geminiApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("Gemini key saved")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to save key: \(error)")
-          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setOpenRouterApiKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let result = self.promptForApiKey(
-        title: "OpenRouter API Key",
-        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
-      )
-      TPLogger.log("OpenRouter key prompt result=\(self.apiKeyPromptResultKind(result))")
-
-      switch result {
-      case .canceled:
-        return
-      case .clear:
-        self.feedback?.showInfo("Clearing OpenRouter key…")
-        do {
-          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenRouter)
-          self.applySettingsMutation { $0.openRouterApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("OpenRouter key cleared")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to clear key: \(error)")
-          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
-        }
-      case .save(let value):
-        self.feedback?.showInfo("Saving OpenRouter key… (check for a Keychain prompt)")
-        do {
-          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenRouter)
-          self.applySettingsMutation { $0.openRouterApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("OpenRouter key saved")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to save key: \(error)")
-          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setOpenAIApiKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let result = self.promptForApiKey(
-        title: "OpenAI API Key",
-        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
-      )
-      TPLogger.log("OpenAI key prompt completed")
-
-      switch result {
-      case .canceled:
-        return
-      case .clear:
-        self.feedback?.showInfo("Clearing OpenAI key…")
-        do {
-          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenAI)
-          self.applySettingsMutation { $0.openAIApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("OpenAI key cleared")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to clear key: \(error)")
-          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
-        }
-      case .save(let value):
-        self.feedback?.showInfo("Saving OpenAI key… (check for a Keychain prompt)")
-        do {
-          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenAI)
-          self.applySettingsMutation { $0.openAIApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("OpenAI key saved")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to save key: \(error)")
-          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setAnthropicApiKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let result = self.promptForApiKey(
-        title: "Anthropic API Key",
-        message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
-      )
-      TPLogger.log("Anthropic key prompt completed")
-
-      switch result {
-      case .canceled:
-        return
-      case .clear:
-        self.feedback?.showInfo("Clearing Anthropic key…")
-        do {
-          try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountAnthropic)
-          self.applySettingsMutation { $0.anthropicApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("Anthropic key cleared")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to clear key: \(error)")
-          self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
-        }
-      case .save(let value):
-        self.feedback?.showInfo("Saving Anthropic key… (check for a Keychain prompt)")
-        do {
-          try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountAnthropic)
-          self.applySettingsMutation { $0.anthropicApiKey = nil }
-          self.syncProviderMenuStates()
-          self.feedback?.showInfo("Anthropic key saved")
-          self.refreshCorrector()
-        } catch {
-          TPLogger.log("Failed to save key: \(error)")
-          self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setGeminiModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let value = self.promptForText(
-        title: "Gemini Model",
-        message: "Examples: gemini-2.5-flash, gemini-2.5-flash-lite (depends on your API key).",
-        placeholder: "Model name",
-        initialValue: self.settings.geminiModel
-      )
-      guard let value, !value.isEmpty else { return }
-      let normalized = self.normalizeGeminiModel(value)
-      guard !normalized.isEmpty else { return }
-      self.applySettingsMutation { $0.geminiModel = normalized }
-      self.syncProviderMenuStates()
-      self.refreshCorrector()
-    }
-  }
-
-  @objc private func setOpenRouterModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let value = self.promptForText(
-        title: "OpenRouter Model",
-        message: "Examples (free): google/gemma-3n-e4b-it:free, qwen/qwen3-4b:free",
-        placeholder: "Model id",
-        initialValue: self.settings.openRouterModel
-      )
-      guard let value, !value.isEmpty else { return }
-      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { return }
-      self.applySettingsMutation { $0.openRouterModel = trimmed }
-      self.syncProviderMenuStates()
-      self.refreshCorrector()
-    }
-  }
-
-  @objc private func setOpenAIModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let value = self.promptForText(
-        title: "OpenAI Model",
-        message: "Recommended fast/light model: gpt-5-nano (availability depends on your OpenAI account).",
-        placeholder: "Model name",
-        initialValue: self.settings.openAIModel
-      )
-      guard let value, !value.isEmpty else { return }
-      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { return }
-      self.applySettingsMutation { $0.openAIModel = trimmed }
-      self.syncProviderMenuStates()
-      self.refreshCorrector()
-    }
-  }
-
-  @objc private func setAnthropicModel() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let value = self.promptForText(
-        title: "Anthropic Model",
-        message: "Examples: claude-haiku-4-5, claude-sonnet-4-5 (depends on your Anthropic account).",
-        placeholder: "Model name",
-        initialValue: self.settings.anthropicModel
-      )
-      guard let value, !value.isEmpty else { return }
-      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { return }
-      self.applySettingsMutation { $0.anthropicModel = trimmed }
-      self.syncProviderMenuStates()
-      self.refreshCorrector()
-    }
-  }
-
-  @objc private func toggleLaunchAtLogin() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      do {
-        let service = SMAppService.mainApp
-        if service.status == .enabled {
-          try service.unregister()
+        setupMenu()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(diagnosticsDidUpdate),
+            name: .diagnosticsUpdated,
+            object: nil
+        )
+        setupHotKeys()
+        _ = updaterController
+        if isUpdaterAvailable {
+            updaterController.updater.automaticallyChecksForUpdates = true
+            TPLogger.log("Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
         } else {
-          guard self.isRunningFromApplicationsFolder() else {
-            self.showStartAtLoginRequiresApplications()
-            self.syncLaunchAtLoginMenuState()
+            updaterController.updater.automaticallyChecksForUpdates = false
+            TPLogger.log("Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
+        }
+        scheduleNextDailyReset()
+        maybeShowWelcome()
+    }
+
+    @objc private func statusItemClicked(_: Any?) {
+        captureFrontmostApplication()
+        refreshCorrectionCountIfNewDay()
+        refreshToneAnalysisCountIfNewDay()
+        updateStatusItemIcon()
+        syncUpdateMenuItems()
+        guard let statusMenu, let button = statusItem.button else { return }
+        button.highlight(true)
+        statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+        button.highlight(false)
+    }
+
+    @objc private func diagnosticsDidUpdate() {
+        diagnosticsWindow?.update(with: DiagnosticsStore.shared.lastSnapshot)
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        guard isUpdaterAvailable else {
+            feedback?.showError("Updates are not configured for this build.")
             return
-          }
-          try service.register()
         }
-
-        self.syncLaunchAtLoginMenuState()
-
-        if service.status == .requiresApproval {
-          self.showSimpleAlert(
-            title: "Approval Required",
-            message: "Enable \(self.appDisplayName) in System Settings → General → Login Items."
-          )
+        if manualUpdateCheckInProgress {
+            feedback?.showInfo("Update check already running.")
+            return
         }
-      } catch {
-        let message =
-          (error as? LocalizedError)?.errorDescription ??
-          (error as NSError).localizedDescription
-        self.showSimpleAlert(title: "Start at Login Failed", message: message)
-        self.syncLaunchAtLoginMenuState()
-      }
+        manualUpdateCheckInProgress = true
+        updateFoundInCycle = false
+        updateStatus = .checking
+        syncUpdateMenuItems()
+        feedback?.showInfo("Checking for updates...")
+        updaterController.checkForUpdates(sender)
     }
-  }
 
-  @objc private func toggleFallbackToOpenRouter() {
-    runAfterMenuDismissed { [weak self] in
-      self?.applyFallbackSettingToggle()
+    private func resetManualUpdateCheckState() {
+        manualUpdateCheckInProgress = false
+        updateFoundInCycle = false
     }
-  }
 
-  func applyFallbackSettingToggle() {
-    applySettingsMutation { $0.enableGeminiOpenRouterFallback.toggle() }
-    syncFallbackMenuState()
-    refreshCorrector()
-  }
-
-  @objc private func selectLanguageAuto() {
-    runAfterMenuDismissed { [weak self] in
-      self?.setCorrectionLanguage(.auto)
+    private func finishManualUpdateCheck(with feedback: UpdateCheckFeedback?) {
+        resetManualUpdateCheckState()
+        syncUpdateMenuItems()
+        guard let feedback else { return }
+        switch feedback.kind {
+        case .info:
+            self.feedback?.showInfo(feedback.message)
+        case .error:
+            self.feedback?.showError(feedback.message)
+        }
     }
-  }
 
-  @objc private func selectLanguageEnglish() {
-    runAfterMenuDismissed { [weak self] in
-      self?.setCorrectionLanguage(.englishUS)
+    private func captureFrontmostApplication() {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication else { return }
+        guard frontmost.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        lastTargetApplication = frontmost
     }
-  }
 
-  @objc private func selectLanguageIndonesian() {
-    runAfterMenuDismissed { [weak self] in
-      self?.setCorrectionLanguage(.indonesian)
+    private func setupMenu() {
+        let menu = NSMenu()
+        menu.delegate = self
+
+        // Actions
+        let selectionItem = NSMenuItem(
+            title: "Correct Selection",
+            action: #selector(correctSelection),
+            keyEquivalent: ""
+        )
+        selectionItem.target = self
+
+        let allItem = NSMenuItem(
+            title: "Correct All",
+            action: #selector(correctAll),
+            keyEquivalent: ""
+        )
+        allItem.target = self
+
+        let analyzeToneItem = NSMenuItem(
+            title: "Analyze Tone",
+            action: #selector(analyzeTone),
+            keyEquivalent: ""
+        )
+        analyzeToneItem.target = self
+
+        self.selectionItem = selectionItem
+        self.allItem = allItem
+        self.analyzeToneItem = analyzeToneItem
+
+        menu.addItem(selectionItem)
+        menu.addItem(allItem)
+        menu.addItem(analyzeToneItem)
+
+        let cancelItem = NSMenuItem(
+            title: "Cancel Active Operation",
+            action: #selector(cancelActiveOperation),
+            keyEquivalent: ""
+        )
+        cancelItem.target = self
+        cancelCorrectionItem = cancelItem
+        menu.addItem(cancelItem)
+        menu.addItem(.separator())
+
+        // Info & tools
+        let diagnosticsItem = NSMenuItem(
+            title: "Diagnostics\u{2026}",
+            action: #selector(openDiagnostics),
+            keyEquivalent: ""
+        )
+        diagnosticsItem.target = self
+        menu.addItem(diagnosticsItem)
+
+        let updatesItem = NSMenuItem(title: "Check for Updates", action: nil, keyEquivalent: "")
+        let updatesMenu = NSMenu()
+
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = self
+        self.checkForUpdatesItem = checkForUpdatesItem
+        updatesMenu.addItem(checkForUpdatesItem)
+
+        let updateStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        updateStatusItem.isEnabled = false
+        self.updateStatusItem = updateStatusItem
+        updatesMenu.addItem(updateStatusItem)
+
+        let updateLastCheckedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        updateLastCheckedItem.isEnabled = false
+        self.updateLastCheckedItem = updateLastCheckedItem
+        updatesMenu.addItem(updateLastCheckedItem)
+
+        updatesItem.submenu = updatesMenu
+        menu.addItem(updatesItem)
+        menu.addItem(.separator())
+
+        // Settings
+        let settingsItem = NSMenuItem(
+            title: "Settings\u{2026}",
+            action: #selector(openSettingsWindow),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(settingsItem)
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        quitItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(quitItem)
+
+        statusMenu = menu
+        syncHotKeyMenuItems()
+        syncCancelMenuState()
+        syncUpdateMenuItems()
     }
-  }
 
-  @objc private func openSettingsWindow(_ sender: Any?) {
-    if let existing = settingsWindowController, existing.window?.isVisible == true {
-      // Window already open — bring it to front and reload to show latest state
-      existing.viewController?.loadSettings()
-      existing.window?.makeKeyAndOrderFront(nil)
-    } else {
-      settingsWindowController = SettingsWindowController()
-      settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    func menuWillOpen(_: NSMenu) {
+        isMenuOpen = true
+        syncCancelMenuState()
     }
-    NSApp.activate(ignoringOtherApps: true)
-  }
 
-  @objc private func openDiagnostics() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      if self.diagnosticsWindow == nil {
-        self.diagnosticsWindow = DiagnosticsWindow()
-      }
-      self.diagnosticsWindow?.onRunDiagnostic = { [weak self] in
-        guard let self else { return }
+    func menuDidClose(_: NSMenu) {
+        isMenuOpen = false
+        guard let action = pendingAfterMenuAction else { return }
+        pendingAfterMenuAction = nil
         Task { @MainActor in
-          await self.runActiveDiagnostic()
+            await action()
         }
-      }
-      self.diagnosticsWindow?.show()
-      NSApp.activate(ignoringOtherApps: true)
-    }
-  }
-
-  private func runActiveDiagnostic() async {
-    diagnosticsWindow?.showRunning()
-    let provider = settings.provider
-    var lines: [String] = []
-    lines.append("Provider: \(providerDisplayName(provider))")
-    lines.append("─────────────────────────────────")
-
-    switch provider {
-    case .gemini:
-      lines.append(contentsOf: await diagnoseGemini())
-    case .openRouter:
-      lines.append(contentsOf: await diagnoseOpenRouter())
-    case .openAI:
-      lines.append(contentsOf: await diagnoseOpenAI())
-    case .anthropic:
-      lines.append(contentsOf: await diagnoseAnthropic())
     }
 
-    let result = lines.joined(separator: "\n")
-    let normalized = result.trimmingCharacters(in: .whitespacesAndNewlines)
-    diagnosticsWindow?.showResult(
-      normalized.isEmpty ? "Diagnostic completed, but no output was generated." : result
-    )
-  }
-
-  private func providerDisplayName(_ provider: Settings.Provider) -> String {
-    switch provider {
-    case .gemini: return "Gemini"
-    case .openRouter: return "OpenRouter"
-    case .openAI: return "OpenAI"
-    case .anthropic: return "Anthropic"
-    }
-  }
-
-  private func diagnoseGemini() async -> [String] {
-    var lines: [String] = []
-    var hasFailure = false
-    guard let apiKey = currentGeminiApiKey(), !apiKey.isEmpty else {
-      lines.append("API Key: ✗ Not configured")
-      lines.append("")
-      lines.append("Set your Gemini API key in Settings or Keychain.")
-      lines.append("")
-      lines.append("Status: ✗ Not configured")
-      return lines
-    }
-    lines.append("API Key: ✓ Found")
-    lines.append("Model: \(settings.geminiModel)")
-    lines.append("")
-
-    // Fetch model list
-    do {
-      let models = try await fetchGeminiModels(apiKey: apiKey)
-      lines.append("Available models (\(models.count)):")
-      let displayModels = models.prefix(20)
-      for model in displayModels {
-        let marker = model == settings.geminiModel ? " ← current" : ""
-        lines.append("  • \(model)\(marker)")
-      }
-      if models.count > 20 {
-        lines.append("  … and \(models.count - 20) more")
-      }
-
-      if !models.contains(settings.geminiModel) {
-        lines.append("")
-        lines.append("⚠ Current model \"\(settings.geminiModel)\" not found in model list.")
-        if let suggested = chooseGeminiModel(from: models) {
-          lines.append("  Suggested: \(suggested)")
-        }
-      }
-    } catch {
-      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
-      hasFailure = true
-    }
-
-    // Verify key works with a simple generation call
-    lines.append("")
-    lines.append("API Key Test:")
-    do {
-      let testResult = try await testGeminiApiKey(apiKey: apiKey, model: settings.geminiModel)
-      if testResult {
-        lines.append("  ✓ API key is valid and model responds")
-      } else {
-        lines.append("  ✗ API key or model issue — no response")
-        hasFailure = true
-      }
-    } catch {
-      lines.append("  ✗ \(error.localizedDescription)")
-      hasFailure = true
-    }
-
-    lines.append("")
-    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
-
-    return lines
-  }
-
-  private func diagnoseOpenRouter() async -> [String] {
-    var lines: [String] = []
-    var hasFailure = false
-    guard let apiKey = currentOpenRouterApiKey(), !apiKey.isEmpty else {
-      lines.append("API Key: ✗ Not configured")
-      lines.append("")
-      lines.append("Set your OpenRouter API key in Settings or Keychain.")
-      lines.append("")
-      lines.append("Status: ✗ Not configured")
-      return lines
-    }
-
-    lines.append("API Key: ✓ Found")
-    lines.append("Current Model: \(settings.openRouterModel)")
-    lines.append("")
-
-    // Fetch free models
-    lines.append("Scanning free models…")
-    do {
-      let allModels = try await fetchOpenRouterModels(apiKey: apiKey)
-      let freeModels = allModels.filter { $0.hasSuffix(":free") }
-      lines.removeLast() // remove "Scanning…"
-
-      lines.append("Free models available (\(freeModels.count)):")
-      let ranked = rankedOpenRouterModels(from: freeModels, preferFree: true, preferredFirst: nil, excluding: nil)
-      let displayModels = ranked.prefix(15)
-      for model in displayModels {
-        let marker = model == settings.openRouterModel ? " ← current" : ""
-        lines.append("  • \(model)\(marker)")
-      }
-      if ranked.count > 15 {
-        lines.append("  … and \(ranked.count - 15) more")
-      }
-
-      // Auto-detect a working free model
-      lines.append("")
-      lines.append("Probing for a working free model…")
-      if let working = try await detectWorkingOpenRouterModel(
-        apiKey: apiKey,
-        preferFree: true,
-        preferredFirst: settings.openRouterModel,
-        excluding: nil,
-        prefetchedModels: allModels
-      ) {
-        if working == settings.openRouterModel {
-          lines.append("  ✓ Current model \"\(working)\" is working")
+    private func syncUpdateMenuItems() {
+        let effectiveStatus: UpdateStatus = isUpdaterAvailable ? updateStatus : .message("Updates not configured")
+        updateStatusItem?.title = effectiveStatus.menuTitle
+        updateLastCheckedItem?.title = updateLastCheckedTitle()
+        if !isUpdaterAvailable {
+            checkForUpdatesItem?.isEnabled = false
+            checkForUpdatesItem?.toolTip = "Updates are not configured for this build."
+        } else if manualUpdateCheckInProgress {
+            checkForUpdatesItem?.isEnabled = false
+            checkForUpdatesItem?.toolTip = "Update check in progress."
         } else {
-          applySettingsMutation { $0.openRouterModel = working }
-          lines.append("  ✓ Set model to \"\(working)\" (verified working)")
+            checkForUpdatesItem?.isEnabled = true
+            checkForUpdatesItem?.toolTip = nil
         }
-      } else {
-        lines.append("  ✗ No working free model found")
-        hasFailure = true
-      }
-    } catch {
-      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
-      hasFailure = true
     }
 
-    lines.append("")
-    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
-
-    return lines
-  }
-
-  private func diagnoseOpenAI() async -> [String] {
-    var lines: [String] = []
-    var hasFailure = false
-    guard let apiKey = currentOpenAIApiKey(), !apiKey.isEmpty else {
-      lines.append("API Key: ✗ Not configured")
-      lines.append("")
-      lines.append("Set your OpenAI API key in Settings or Keychain.")
-      lines.append("")
-      lines.append("Status: ✗ Not configured")
-      return lines
-    }
-    lines.append("API Key: ✓ Found")
-    lines.append("Model: \(settings.openAIModel)")
-    lines.append("")
-
-    // Fetch model list
-    do {
-      let models = try await fetchOpenAIModels(apiKey: apiKey)
-      let chatModels = models.filter {
-        $0.contains("gpt") || $0.hasPrefix("o1") || $0.hasPrefix("o3") || $0.hasPrefix("o4")
-      }.sorted()
-      lines.append("Chat models (\(chatModels.count)):")
-      let displayModels = chatModels.prefix(20)
-      for model in displayModels {
-        let marker = model == settings.openAIModel ? " ← current" : ""
-        lines.append("  • \(model)\(marker)")
-      }
-      if chatModels.count > 20 {
-        lines.append("  … and \(chatModels.count - 20) more")
-      }
-
-      if !chatModels.contains(settings.openAIModel) && !models.contains(settings.openAIModel) {
-        lines.append("")
-        lines.append("⚠ Current model \"\(settings.openAIModel)\" not found.")
-      }
-    } catch {
-      lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
-      hasFailure = true
+    private func updateLastCheckedTitle() -> String {
+        guard isUpdaterAvailable else { return "Last checked: Not available" }
+        guard let date = lastUpdateCheckDate() else { return "Last checked: Never" }
+        return "Last checked: \(updateDateFormatter.string(from: date))"
     }
 
-    // Verify key
-    lines.append("")
-    lines.append("API Key Test:")
-    do {
-      let testResult = try await testOpenAIApiKey(apiKey: apiKey, model: settings.openAIModel)
-      if testResult {
-        lines.append("  ✓ API key is valid and model responds")
-      } else {
-        lines.append("  ✗ API key or model issue — no response")
-        hasFailure = true
-      }
-    } catch {
-      lines.append("  ✗ \(error.localizedDescription)")
-      hasFailure = true
+    private func lastUpdateCheckDate() -> Date? {
+        UserDefaults.standard.object(forKey: lastUpdateCheckKey) as? Date
     }
 
-    lines.append("")
-    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
-
-    return lines
-  }
-
-  private func diagnoseAnthropic() async -> [String] {
-    var lines: [String] = []
-    var hasFailure = false
-    guard let apiKey = currentAnthropicApiKey(), !apiKey.isEmpty else {
-      lines.append("API Key: ✗ Not configured")
-      lines.append("")
-      lines.append("Set your Anthropic API key in Settings or Keychain.")
-      lines.append("")
-      lines.append("Status: ✗ Not configured")
-      return lines
-    }
-    lines.append("API Key: ✓ Found")
-    lines.append("Model: \(settings.anthropicModel)")
-    lines.append("")
-
-    // Anthropic doesn't have a public model list endpoint, so just verify the key
-    lines.append("API Key Test:")
-    do {
-      let testResult = try await testAnthropicApiKey(apiKey: apiKey, model: settings.anthropicModel)
-      if testResult {
-        lines.append("  ✓ API key is valid and model responds")
-      } else {
-        lines.append("  ✗ API key or model issue — no response")
-        hasFailure = true
-      }
-    } catch {
-      lines.append("  ✗ \(error.localizedDescription)")
-      hasFailure = true
+    private func recordLastUpdateCheck(_ date: Date = Date()) {
+        UserDefaults.standard.set(date, forKey: lastUpdateCheckKey)
     }
 
-    lines.append("")
-    lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
+    private var suppressSettingsNotification = false
 
-    return lines
-  }
+    private func applySettingsMutation(_ mutate: (inout Settings) -> Void) {
+        var latest = Settings.loadOrCreateDefault()
+        mutate(&latest)
+        latest.normalizeRuntimeValues()
+        do {
+            suppressSettingsNotification = true
+            try Settings.saveAndNotify(latest)
+            settings = latest
+            suppressSettingsNotification = false
+        } catch {
+            suppressSettingsNotification = false
+            TPLogger.log("Failed to save settings: \(error)")
+        }
+    }
 
-  // MARK: - Diagnostic API Helpers
+    // MARK: - Correction Counter & Badge
 
-  private func testGeminiApiKey(apiKey: String, model: String) async throws -> Bool {
-    guard let baseURL = URL(string: settings.geminiBaseURL) else { return false }
-    let normalizedModel = normalizeGeminiModel(model)
-    let versionsToTry = ["v1beta", "v1"]
+    private func loadTodayCorrectionCount() {
+        refreshCorrectionCountIfNewDay()
+    }
 
-    for (index, version) in versionsToTry.enumerated() {
-      guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
-      components.path = GeminiEndpointPath.generateContentPath(
-        basePath: components.path,
-        apiVersion: version,
-        model: normalizedModel
-      )
-      components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-      guard let url = components.url else { return false }
+    private func refreshCorrectionCountIfNewDay() {
+        let defaults = UserDefaults.standard
+        let storedDate = defaults.string(forKey: correctionCountDateKey) ?? ""
+        let today = formattedToday()
 
-      var request = URLRequest(url: url, timeoutInterval: 15)
-      request.httpMethod = "POST"
-      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      let body: [String: Any] = [
-        "contents": [["parts": [["text": "Reply OK"]]]],
-        "generationConfig": ["maxOutputTokens": 8],
-      ]
-      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if storedDate == today {
+            todayCorrectionCount = defaults.integer(forKey: correctionCountKey)
+        } else {
+            todayCorrectionCount = 0
+            defaults.set(0, forKey: correctionCountKey)
+            defaults.set(today, forKey: correctionCountDateKey)
+        }
+    }
 
-      let (_, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse else { return false }
-      if (200..<300).contains(http.statusCode) {
+    private func incrementCorrectionCount() {
+        refreshCorrectionCountIfNewDay()
+        todayCorrectionCount += 1
+        UserDefaults.standard.set(todayCorrectionCount, forKey: correctionCountKey)
+        updateStatusItemIcon()
+        scheduleNextDailyReset()
+    }
+
+    private func loadTodayToneAnalysisCount() {
+        refreshToneAnalysisCountIfNewDay()
+    }
+
+    private func refreshToneAnalysisCountIfNewDay() {
+        let defaults = UserDefaults.standard
+        let storedDate = defaults.string(forKey: toneAnalysisCountDateKey) ?? ""
+        let today = formattedToday()
+
+        if storedDate == today {
+            todayToneAnalysisCount = defaults.integer(forKey: toneAnalysisCountKey)
+        } else {
+            todayToneAnalysisCount = 0
+            defaults.set(0, forKey: toneAnalysisCountKey)
+            defaults.set(today, forKey: toneAnalysisCountDateKey)
+        }
+    }
+
+    private func incrementToneAnalysisCount() {
+        refreshToneAnalysisCountIfNewDay()
+        todayToneAnalysisCount += 1
+        UserDefaults.standard.set(todayToneAnalysisCount, forKey: toneAnalysisCountKey)
+        updateStatusItemIcon()
+        scheduleNextDailyReset()
+    }
+
+    private func formattedToday() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
+    }
+
+    private func updateStatusItemIcon() {
+        let count = todayCorrectionCount + todayToneAnalysisCount
+        let icon = makeIconWithBadge(count: count)
+        statusItem.button?.image = icon
+        let title = StatusItemCountFormatter.title(for: count)
+        statusItem.button?.title = title
+        feedback?.updateBaseImage(icon)
+        feedback?.updateBaseTitle(title)
+    }
+
+    private func makeIconWithBadge(count _: Int) -> NSImage? {
+        guard let base = baseImage else { return nil }
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    private func scheduleNextDailyReset(now: Date = Date(), calendar: Calendar = .current) {
+        midnightRefreshTimer?.invalidate()
+        let nextResetDate = DailyResetScheduler.nextResetDate(after: now, calendar: calendar)
+        midnightRefreshTimer = Timer(
+            fireAt: nextResetDate,
+            interval: 0,
+            target: self,
+            selector: #selector(handleDailyResetTimer),
+            userInfo: nil,
+            repeats: false
+        )
+        if let midnightRefreshTimer {
+            RunLoop.main.add(midnightRefreshTimer, forMode: .common)
+        }
+    }
+
+    @objc private func handleDailyResetTimer() {
+        refreshCorrectionCountIfNewDay()
+        refreshToneAnalysisCountIfNewDay()
+        updateStatusItemIcon()
+        scheduleNextDailyReset()
+    }
+
+    private func keychainLabel(for account: String) -> String? {
+        switch account {
+        case keychainAccountGemini:
+            return "\(expectedAppName) — Gemini API Key"
+        case keychainAccountOpenRouter:
+            return "\(expectedAppName) — OpenRouter API Key"
+        case keychainAccountOpenAI:
+            return "\(expectedAppName) — OpenAI API Key"
+        case keychainAccountAnthropic:
+            return "\(expectedAppName) — Anthropic API Key"
+        default:
+            return "\(expectedAppName) — Secret"
+        }
+    }
+
+    private func setKeychainPassword(_ password: String, service: String, account: String) async throws {
+        TPLogger.log("Keychain set start account=\(account)")
+        NSApp.activate(ignoringOtherApps: true)
+        let label = keychainLabel(for: account)
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try Keychain.setConfiguredPassword(
+                        password,
+                        primaryService: service,
+                        account: account,
+                        label: label
+                    )
+                    TPLogger.log("Keychain set success account=\(account)")
+                    continuation.resume()
+                } catch {
+                    TPLogger.log("Keychain set failed account=\(account) error=\(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func deleteKeychainPassword(service: String, account: String) async throws {
+        TPLogger.log("Keychain delete start account=\(account)")
+        NSApp.activate(ignoringOtherApps: true)
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try Keychain.deleteConfiguredPassword(primaryService: service, account: account)
+                    TPLogger.log("Keychain delete success account=\(account)")
+                    continuation.resume()
+                } catch {
+                    TPLogger.log("Keychain delete failed account=\(account) error=\(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func refreshCorrector() {
+        correctionController?.updateSettings(settings)
+        correctionController?.updateCorrector(CorrectorFactory.make(settings: settings))
+        correctionController?.updateTimings(.init(settings: settings))
+        correctionController?.updateOperationTimeout(correctionOperationTimeoutDuration())
+        toneAnalysisController?.updateAnalyzer(ToneAnalyzerFactory.make(settings: settings))
+        toneAnalysisController?.updateTimings(.init(settings: settings))
+        toneAnalysisController?.updateOperationTimeout(toneOperationTimeoutDuration())
+    }
+
+    private func correctionOperationTimeoutDuration() -> Duration {
+        let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
+        let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
+        let timeoutSeconds = min(180, max(12, requestSeconds * multiplier + 4))
+        return .seconds(timeoutSeconds)
+    }
+
+    private func toneOperationTimeoutDuration() -> Duration {
+        let requestSeconds = max(1, Int(ceil(settings.requestTimeoutSeconds)))
+        let multiplier = settings.enableGeminiOpenRouterFallback ? 2 : 1
+        let timeoutSeconds = min(120, max(8, requestSeconds * multiplier + 2))
+        return .seconds(timeoutSeconds)
+    }
+
+    private func timingsOverride(for app: NSRunningApplication?) -> CorrectionController.Timings? {
+        guard let profile = settings.timingProfile(
+            bundleIdentifier: app?.bundleIdentifier,
+            appName: app?.localizedName
+        ) else {
+            return nil
+        }
+        let baseTimings = CorrectionController.Timings(settings: settings)
+        return baseTimings.applying(profile)
+    }
+
+    private func toneTimingsOverride(for app: NSRunningApplication?) -> ToneAnalysisController.Timings? {
+        guard let correctionTimings = timingsOverride(for: app) else { return nil }
+        return ToneAnalysisController.Timings(
+            activationDelay: correctionTimings.activationDelay,
+            copySettleDelay: correctionTimings.copySettleDelay,
+            copyTimeout: correctionTimings.copyTimeout
+        )
+    }
+
+    private func runAfterMenuDismissed(_ action: @escaping @MainActor () async -> Void) {
+        if isMenuOpen {
+            pendingAfterMenuAction = action
+            return
+        }
+        Task { @MainActor in
+            await action()
+        }
+    }
+
+    private func normalizeGeminiModel(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("models/") {
+            return String(trimmed.dropFirst("models/".count))
+        }
+        return trimmed
+    }
+
+    private func recoverFromError(_ error: Error) async -> CorrectionController.RecoveryAction? {
+        switch settings.provider {
+        case .gemini:
+            guard let geminiError = error as? GeminiCorrector.GeminiError else { return nil }
+            if case let .requestFailed(status, _) = geminiError, status == 404 {
+                guard let apiKey = currentGeminiApiKey() else { return nil }
+                do {
+                    let models = try await fetchGeminiModels(apiKey: apiKey)
+                    guard let chosenRaw = chooseGeminiModel(from: models) else { return nil }
+                    let chosen = normalizeGeminiModel(chosenRaw)
+                    let current = normalizeGeminiModel(settings.geminiModel)
+                    guard !chosen.isEmpty, chosen != current else { return nil }
+
+                    applySettingsMutation { $0.geminiModel = chosen }
+                    refreshCorrector()
+                    return CorrectionController.RecoveryAction(message: "Gemini model auto-detected: \(chosen)", corrector: nil)
+                } catch {
+                    TPLogger.log("Auto-detect Gemini model failed: \(error)")
+                }
+            }
+
+            return nil
+        case .openRouter:
+            guard let openRouterError = error as? OpenRouterCorrector.OpenRouterError else { return nil }
+
+            guard case let .requestFailed(status, _) = openRouterError else { return nil }
+            guard status == 404 || status == 402 else { return nil }
+            guard let apiKey = currentOpenRouterApiKey() else { return nil }
+
+            do {
+                let current = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let chosen = try await detectWorkingOpenRouterModel(
+                    apiKey: apiKey,
+                    preferFree: true,
+                    preferredFirst: nil,
+                    excluding: current.isEmpty ? nil : current
+                ) else { return nil }
+
+                applySettingsMutation { $0.openRouterModel = chosen }
+                refreshCorrector()
+                let message = "OpenRouter switched to a working free model: \(chosen)"
+                return CorrectionController.RecoveryAction(message: message, corrector: nil)
+            } catch {
+                TPLogger.log("Auto-detect OpenRouter model failed: \(error)")
+                return nil
+            }
+        case .openAI:
+            return nil
+        case .anthropic:
+            return nil
+        }
+    }
+
+    private func shouldAttemptFallback(for error: Error) -> Bool {
+        guard settings.enableGeminiOpenRouterFallback else { return false }
+        guard shouldFallbackFromError(error) else { return false }
+
+        switch settings.provider {
+        case .gemini:
+            return currentOpenRouterApiKey() != nil
+        case .openRouter:
+            return currentGeminiApiKey() != nil
+        case .openAI:
+            return currentAnthropicApiKey() != nil
+        case .anthropic:
+            return currentOpenAIApiKey() != nil
+        }
+    }
+
+    private func shouldFallbackFromError(_ error: Error) -> Bool {
+        if let geminiError = error as? GeminiCorrector.GeminiError {
+            return shouldFallbackFromGeminiError(geminiError)
+        }
+        if let openRouterError = error as? OpenRouterCorrector.OpenRouterError {
+            return shouldFallbackFromOpenRouterError(openRouterError)
+        }
+        if let openAIError = error as? OpenAICorrector.OpenAIError {
+            return shouldFallbackFromOpenAIError(openAIError)
+        }
+        if let anthropicError = error as? AnthropicCorrector.AnthropicError {
+            return shouldFallbackFromAnthropicError(anthropicError)
+        }
+        if let urlError = error as? URLError {
+            return shouldFallbackFromURLError(urlError)
+        }
+        return false
+    }
+
+    private func shouldFallbackFromGeminiError(_ error: GeminiCorrector.GeminiError) -> Bool {
+        switch error {
+        case .missingApiKey, .invalidBaseURL:
+            return false
+        case .blocked, .emptyResponse, .overRewrite:
+            // Provider returned an unusable response; fallback can still salvage the user flow.
+            return true
+        case let .requestFailed(status, _):
+            if status == 401 || status == 403 {
+                return false
+            }
+            if status == 429 {
+                return true
+            }
+            if status <= 0 {
+                return true
+            }
+            return (500 ... 599).contains(status)
+        }
+    }
+
+    private func shouldFallbackFromOpenRouterError(_ error: OpenRouterCorrector.OpenRouterError) -> Bool {
+        switch error {
+        case .missingApiKey, .invalidBaseURL:
+            return false
+        case .emptyResponse, .overRewrite:
+            return true
+        case let .requestFailed(status, _):
+            if status == 401 || status == 403 || status == 402 {
+                return false
+            }
+            if status == 429 {
+                return true
+            }
+            if status <= 0 {
+                return true
+            }
+            return (500 ... 599).contains(status)
+        }
+    }
+
+    private func shouldFallbackFromOpenAIError(_ error: OpenAICorrector.OpenAIError) -> Bool {
+        switch error {
+        case .missingApiKey, .invalidBaseURL, .invalidModel:
+            return false
+        case .emptyResponse, .overRewrite:
+            return true
+        case let .requestFailed(status, _):
+            if status == 401 || status == 403 || status == 402 {
+                return false
+            }
+            if status == 429 {
+                return true
+            }
+            if status <= 0 {
+                return true
+            }
+            return (500 ... 599).contains(status)
+        }
+    }
+
+    private func shouldFallbackFromAnthropicError(_ error: AnthropicCorrector.AnthropicError) -> Bool {
+        switch error {
+        case .missingApiKey, .invalidBaseURL, .invalidModel:
+            return false
+        case .emptyResponse, .overRewrite:
+            return true
+        case let .requestFailed(status, _):
+            if status == 401 || status == 403 {
+                return false
+            }
+            if status == 429 || status == 529 {
+                return true
+            }
+            if status <= 0 {
+                return true
+            }
+            return (500 ... 599).contains(status)
+        }
+    }
+
+    private func shouldFallbackFromURLError(_ error: URLError) -> Bool {
+        switch error.code {
+        case .timedOut,
+             .cannotFindHost,
+             .cannotConnectToHost,
+             .networkConnectionLost,
+             .dnsLookupFailed,
+             .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func setupHotKeys() {
+        hotKeyManager.onHotKey = { [weak self] id in
+            guard let self else { return }
+            _ = self.handleRegisteredHotKey(id)
+        }
+
+        do {
+            try hotKeyManager.registerHotKeys(
+                correctSelection: settings.hotKeyCorrectSelection,
+                correctAll: settings.hotKeyCorrectAll,
+                analyzeTone: settings.hotKeyAnalyzeTone
+            )
+        } catch {
+            TPLogger.log("Failed to register hotkeys: \(error)")
+            let configured = [
+                "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
+                "Correct All \(settings.hotKeyCorrectAll.displayString)",
+                "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
+            ].joined(separator: " • ")
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
+        }
+    }
+
+    @discardableResult
+    private func handleRegisteredHotKey(
+        _ id: Int,
+        now: ContinuousClock.Instant = ContinuousClock.now
+    ) -> Bool {
+        guard hotKeyPressDebouncer.shouldAccept(id: id, now: now) else {
+            return false
+        }
+
+        captureFrontmostApplication()
+        let target = lastTargetApplication
+        let correctionTimings = timingsOverride(for: target)
+        let toneTimings = toneTimingsOverride(for: target)
+
+        switch id {
+        case HotKeyManager.HotKeyID.correctSelection.rawValue:
+            correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
+        case HotKeyManager.HotKeyID.correctAll.rawValue:
+            correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
+        case HotKeyManager.HotKeyID.analyzeTone.rawValue:
+            toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
+        default:
+            return false
+        }
+
         return true
-      }
-      if http.statusCode == 404, index < versionsToTry.count - 1 {
-        continue
-      }
-      return false
     }
 
-    return false
-  }
-
-  private func makeOpenAIModelsURL() throws -> URL {
-    guard let baseURL = URL(string: settings.openAIBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
-    }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    @objc private func correctSelection() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            let timings = self.timingsOverride(for: target)
+            self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
+        }
     }
 
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    if basePath.hasSuffix("/chat/completions") {
-      basePath.removeLast("/chat/completions".count)
-    } else if basePath.hasSuffix("/models") {
-      basePath.removeLast("/models".count)
+    @objc private func correctAll() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            let timings = self.timingsOverride(for: target)
+            self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
+        }
     }
 
-    components.path = basePath.isEmpty ? "/models" : basePath + "/models"
-    guard let url = components.url else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI models URL"])
-    }
-    return url
-  }
-
-  private func makeOpenAIChatCompletionsURLForDiagnostics() throws -> URL {
-    guard let baseURL = URL(string: settings.openAIBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
-    }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+    @objc private func cancelActiveOperation() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let didCancelCorrection = self.correctionController?.cancelCurrentCorrection() == true
+            let didCancelTone = self.toneAnalysisController?.cancelCurrentAnalysis() == true
+            if didCancelCorrection || didCancelTone {
+                self.feedback?.showInfo("Canceling...")
+            } else {
+                self.feedback?.showInfo("No operation in progress")
+            }
+        }
     }
 
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    if basePath.hasSuffix("/chat/completions") {
-      basePath.removeLast("/chat/completions".count)
+    @objc private func analyzeTone() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            let toneTimings = self.toneTimingsOverride(for: target)
+            self.toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
+        }
     }
 
-    components.path = basePath.isEmpty ? "/chat/completions" : basePath + "/chat/completions"
-    guard let url = components.url else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI chat completions URL"])
-    }
-    return url
-  }
+    @objc private func selectGeminiProvider() {
+        applySettingsMutation { $0.provider = .gemini }
+        refreshCorrector()
 
-  private func makeAnthropicMessagesURLForDiagnostics() throws -> URL {
-    guard let baseURL = URL(string: settings.anthropicBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
-    }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
-    }
-
-    var basePath = components.path
-    if basePath.hasSuffix("/") { basePath.removeLast() }
-    if basePath.hasSuffix("/v1/messages") {
-      basePath.removeLast("/v1/messages".count)
-    } else if basePath.hasSuffix("/v1") {
-      basePath.removeLast("/v1".count)
+        let hasKey = Keychain.hasConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountGemini
+        )
+        if !hasKey,
+           settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        {
+            setGeminiApiKey()
+        }
     }
 
-    components.path = basePath.isEmpty ? "/v1/messages" : basePath + "/v1/messages"
-    guard let url = components.url else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic messages URL"])
-    }
-    return url
-  }
+    @objc private func selectOpenRouterProvider() {
+        applySettingsMutation { $0.provider = .openRouter }
+        refreshCorrector()
 
-  private func fetchOpenAIModels(apiKey: String) async throws -> [String] {
-    let url = try makeOpenAIModelsURL()
-    var request = URLRequest(url: url, timeoutInterval: 15)
-    request.httpMethod = "GET"
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else {
-      throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
-    }
-    guard (200..<300).contains(http.statusCode) else {
-      throw NSError(domain: "TextPolish", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
+        let hasKey = Keychain.hasConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountOpenRouter
+        )
+        if !hasKey,
+           settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        {
+            setOpenRouterApiKey()
+        }
     }
 
-    struct ModelsResponse: Decodable {
-      struct Model: Decodable { let id: String }
-      let data: [Model]?
+    @objc private func selectOpenAIProvider() {
+        applySettingsMutation { $0.provider = .openAI }
+        refreshCorrector()
+
+        let hasKey = Keychain.hasConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountOpenAI
+        )
+        if !hasKey,
+           settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        {
+            setOpenAIApiKey()
+        }
     }
-    let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
-    return decoded.data?.map(\.id) ?? []
-  }
 
-  private func testOpenAIApiKey(apiKey: String, model: String) async throws -> Bool {
-    let url = try makeOpenAIChatCompletionsURLForDiagnostics()
-    let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
-    let tokenStrategies = preferredUsesMaxCompletionTokens ? [true, false] : [false, true]
-    var lastError: Error?
+    @objc private func selectAnthropicProvider() {
+        applySettingsMutation { $0.provider = .anthropic }
+        refreshCorrector()
 
-    for (index, useMaxCompletionTokens) in tokenStrategies.enumerated() {
-      var request = URLRequest(url: url, timeoutInterval: 15)
-      request.httpMethod = "POST"
-      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-      var body: [String: Any] = [
-        "model": model,
-        "messages": [["role": "user", "content": "Reply OK"]],
-      ]
-      if useMaxCompletionTokens {
-        body["max_completion_tokens"] = 8
-      } else {
-        body["max_tokens"] = 8
-      }
-      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let hasKey = Keychain.hasConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountAnthropic
+        )
+        if !hasKey,
+           settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        {
+            setAnthropicApiKey()
+        }
+    }
 
-      do {
+    @objc private func setGeminiApiKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let result = self.promptForApiKey(
+                title: "Gemini API Key",
+                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+            )
+            TPLogger.log("Gemini key prompt result=\(self.apiKeyPromptResultKind(result))")
+
+            switch result {
+            case .canceled:
+                return
+            case .clear:
+                self.feedback?.showInfo("Clearing Gemini key…")
+                do {
+                    try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountGemini)
+                    self.applySettingsMutation { $0.geminiApiKey = nil }
+                    self.feedback?.showInfo("Gemini key cleared")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to clear key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+                }
+            case let .save(value):
+                self.feedback?.showInfo("Saving Gemini key… (check for a Keychain prompt)")
+                do {
+                    try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountGemini)
+                    self.applySettingsMutation { $0.geminiApiKey = nil }
+                    self.feedback?.showInfo("Gemini key saved")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to save key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setOpenRouterApiKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let result = self.promptForApiKey(
+                title: "OpenRouter API Key",
+                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+            )
+            TPLogger.log("OpenRouter key prompt result=\(self.apiKeyPromptResultKind(result))")
+
+            switch result {
+            case .canceled:
+                return
+            case .clear:
+                self.feedback?.showInfo("Clearing OpenRouter key…")
+                do {
+                    try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenRouter)
+                    self.applySettingsMutation { $0.openRouterApiKey = nil }
+                    self.feedback?.showInfo("OpenRouter key cleared")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to clear key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+                }
+            case let .save(value):
+                self.feedback?.showInfo("Saving OpenRouter key… (check for a Keychain prompt)")
+                do {
+                    try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenRouter)
+                    self.applySettingsMutation { $0.openRouterApiKey = nil }
+                    self.feedback?.showInfo("OpenRouter key saved")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to save key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setOpenAIApiKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let result = self.promptForApiKey(
+                title: "OpenAI API Key",
+                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+            )
+            TPLogger.log("OpenAI key prompt completed")
+
+            switch result {
+            case .canceled:
+                return
+            case .clear:
+                self.feedback?.showInfo("Clearing OpenAI key…")
+                do {
+                    try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountOpenAI)
+                    self.applySettingsMutation { $0.openAIApiKey = nil }
+                    self.feedback?.showInfo("OpenAI key cleared")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to clear key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+                }
+            case let .save(value):
+                self.feedback?.showInfo("Saving OpenAI key… (check for a Keychain prompt)")
+                do {
+                    try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountOpenAI)
+                    self.applySettingsMutation { $0.openAIApiKey = nil }
+                    self.feedback?.showInfo("OpenAI key saved")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to save key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setAnthropicApiKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let result = self.promptForApiKey(
+                title: "Anthropic API Key",
+                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+            )
+            TPLogger.log("Anthropic key prompt completed")
+
+            switch result {
+            case .canceled:
+                return
+            case .clear:
+                self.feedback?.showInfo("Clearing Anthropic key…")
+                do {
+                    try await self.deleteKeychainPassword(service: self.keychainService, account: self.keychainAccountAnthropic)
+                    self.applySettingsMutation { $0.anthropicApiKey = nil }
+                    self.feedback?.showInfo("Anthropic key cleared")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to clear key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Clear", message: "Could not remove the API key from Keychain. \(error)")
+                }
+            case let .save(value):
+                self.feedback?.showInfo("Saving Anthropic key… (check for a Keychain prompt)")
+                do {
+                    try await self.setKeychainPassword(value, service: self.keychainService, account: self.keychainAccountAnthropic)
+                    self.applySettingsMutation { $0.anthropicApiKey = nil }
+                    self.feedback?.showInfo("Anthropic key saved")
+                    self.refreshCorrector()
+                } catch {
+                    TPLogger.log("Failed to save key: \(error)")
+                    self.showSimpleAlert(title: "Failed to Save", message: "Could not save the API key to Keychain. \(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setGeminiModel() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let value = self.promptForText(
+                title: "Gemini Model",
+                message: "Examples: gemini-2.5-flash, gemini-2.5-flash-lite (depends on your API key).",
+                placeholder: "Model name",
+                initialValue: self.settings.geminiModel
+            )
+            guard let value, !value.isEmpty else { return }
+            let normalized = self.normalizeGeminiModel(value)
+            guard !normalized.isEmpty else { return }
+            self.applySettingsMutation { $0.geminiModel = normalized }
+            self.refreshCorrector()
+        }
+    }
+
+    @objc private func setOpenRouterModel() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let value = self.promptForText(
+                title: "OpenRouter Model",
+                message: "Examples (free): google/gemma-3n-e4b-it:free, qwen/qwen3-4b:free",
+                placeholder: "Model id",
+                initialValue: self.settings.openRouterModel
+            )
+            guard let value, !value.isEmpty else { return }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            self.applySettingsMutation { $0.openRouterModel = trimmed }
+            self.refreshCorrector()
+        }
+    }
+
+    @objc private func setOpenAIModel() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let value = self.promptForText(
+                title: "OpenAI Model",
+                message: "Recommended fast/light model: gpt-5-nano (availability depends on your OpenAI account).",
+                placeholder: "Model name",
+                initialValue: self.settings.openAIModel
+            )
+            guard let value, !value.isEmpty else { return }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            self.applySettingsMutation { $0.openAIModel = trimmed }
+            self.refreshCorrector()
+        }
+    }
+
+    @objc private func setAnthropicModel() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let value = self.promptForText(
+                title: "Anthropic Model",
+                message: "Examples: claude-haiku-4-5, claude-sonnet-4-5 (depends on your Anthropic account).",
+                placeholder: "Model name",
+                initialValue: self.settings.anthropicModel
+            )
+            guard let value, !value.isEmpty else { return }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            self.applySettingsMutation { $0.anthropicModel = trimmed }
+            self.refreshCorrector()
+        }
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            do {
+                let service = SMAppService.mainApp
+                if service.status == .enabled {
+                    try service.unregister()
+                } else {
+                    guard self.isRunningFromApplicationsFolder() else {
+                        self.showStartAtLoginRequiresApplications()
+                        return
+                    }
+                    try service.register()
+                }
+
+                if service.status == .requiresApproval {
+                    self.showSimpleAlert(
+                        title: "Approval Required",
+                        message: "Enable \(self.appDisplayName) in System Settings → General → Login Items."
+                    )
+                }
+            } catch {
+                let message =
+                    (error as? LocalizedError)?.errorDescription ??
+                    (error as NSError).localizedDescription
+                self.showSimpleAlert(title: "Start at Login Failed", message: message)
+            }
+        }
+    }
+
+    @objc private func toggleFallbackToOpenRouter() {
+        runAfterMenuDismissed { [weak self] in
+            self?.applyFallbackSettingToggle()
+        }
+    }
+
+    func applyFallbackSettingToggle() {
+        applySettingsMutation { $0.enableGeminiOpenRouterFallback.toggle() }
+        refreshCorrector()
+    }
+
+    @objc private func selectLanguageAuto() {
+        runAfterMenuDismissed { [weak self] in
+            self?.setCorrectionLanguage(.auto)
+        }
+    }
+
+    @objc private func selectLanguageEnglish() {
+        runAfterMenuDismissed { [weak self] in
+            self?.setCorrectionLanguage(.englishUS)
+        }
+    }
+
+    @objc private func selectLanguageIndonesian() {
+        runAfterMenuDismissed { [weak self] in
+            self?.setCorrectionLanguage(.indonesian)
+        }
+    }
+
+    @objc private func openSettingsWindow(_: Any?) {
+        if let existing = settingsWindowController, existing.window?.isVisible == true {
+            // Window already open — bring it to front and reload to show latest state
+            existing.viewController?.loadSettings()
+            existing.window?.makeKeyAndOrderFront(nil)
+        } else {
+            settingsWindowController = SettingsWindowController()
+            settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openDiagnostics() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            if self.diagnosticsWindow == nil {
+                self.diagnosticsWindow = DiagnosticsWindow()
+            }
+            self.diagnosticsWindow?.onRunDiagnostic = { [weak self] in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.runActiveDiagnostic()
+                }
+            }
+            self.diagnosticsWindow?.show()
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func runActiveDiagnostic() async {
+        diagnosticsWindow?.showRunning()
+        let provider = settings.provider
+        var lines: [String] = []
+        lines.append("Provider: \(providerDisplayName(provider))")
+        lines.append("─────────────────────────────────")
+
+        switch provider {
+        case .gemini:
+            lines.append(contentsOf: await diagnoseGemini())
+        case .openRouter:
+            lines.append(contentsOf: await diagnoseOpenRouter())
+        case .openAI:
+            lines.append(contentsOf: await diagnoseOpenAI())
+        case .anthropic:
+            lines.append(contentsOf: await diagnoseAnthropic())
+        }
+
+        let result = lines.joined(separator: "\n")
+        let normalized = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        diagnosticsWindow?.showResult(
+            normalized.isEmpty ? "Diagnostic completed, but no output was generated." : result
+        )
+    }
+
+    private func providerDisplayName(_ provider: Settings.Provider) -> String {
+        switch provider {
+        case .gemini: return "Gemini"
+        case .openRouter: return "OpenRouter"
+        case .openAI: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        }
+    }
+
+    private func diagnoseGemini() async -> [String] {
+        var lines: [String] = []
+        var hasFailure = false
+        guard let apiKey = currentGeminiApiKey(), !apiKey.isEmpty else {
+            lines.append("API Key: ✗ Not configured")
+            lines.append("")
+            lines.append("Set your Gemini API key in Settings or Keychain.")
+            lines.append("")
+            lines.append("Status: ✗ Not configured")
+            return lines
+        }
+        lines.append("API Key: ✓ Found")
+        lines.append("Model: \(settings.geminiModel)")
+        lines.append("")
+
+        // Fetch model list
+        do {
+            let models = try await fetchGeminiModels(apiKey: apiKey)
+            lines.append("Available models (\(models.count)):")
+            let displayModels = models.prefix(20)
+            for model in displayModels {
+                let marker = model == settings.geminiModel ? " ← current" : ""
+                lines.append("  • \(model)\(marker)")
+            }
+            if models.count > 20 {
+                lines.append("  … and \(models.count - 20) more")
+            }
+
+            if !models.contains(settings.geminiModel) {
+                lines.append("")
+                lines.append("⚠ Current model \"\(settings.geminiModel)\" not found in model list.")
+                if let suggested = chooseGeminiModel(from: models) {
+                    lines.append("  Suggested: \(suggested)")
+                }
+            }
+        } catch {
+            lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        // Verify key works with a simple generation call
+        lines.append("")
+        lines.append("API Key Test:")
+        do {
+            let testResult = try await testGeminiApiKey(apiKey: apiKey, model: settings.geminiModel)
+            if testResult {
+                lines.append("  ✓ API key is valid and model responds")
+            } else {
+                lines.append("  ✗ API key or model issue — no response")
+                hasFailure = true
+            }
+        } catch {
+            lines.append("  ✗ \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        lines.append("")
+        lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
+
+        return lines
+    }
+
+    private func diagnoseOpenRouter() async -> [String] {
+        var lines: [String] = []
+        var hasFailure = false
+        guard let apiKey = currentOpenRouterApiKey(), !apiKey.isEmpty else {
+            lines.append("API Key: ✗ Not configured")
+            lines.append("")
+            lines.append("Set your OpenRouter API key in Settings or Keychain.")
+            lines.append("")
+            lines.append("Status: ✗ Not configured")
+            return lines
+        }
+
+        lines.append("API Key: ✓ Found")
+        lines.append("Current Model: \(settings.openRouterModel)")
+        lines.append("")
+
+        // Fetch free models
+        lines.append("Scanning free models…")
+        do {
+            let allModels = try await fetchOpenRouterModels(apiKey: apiKey)
+            let freeModels = allModels.filter { $0.hasSuffix(":free") }
+            lines.removeLast() // remove "Scanning…"
+
+            lines.append("Free models available (\(freeModels.count)):")
+            let ranked = rankedOpenRouterModels(from: freeModels, preferFree: true, preferredFirst: nil, excluding: nil)
+            let displayModels = ranked.prefix(15)
+            for model in displayModels {
+                let marker = model == settings.openRouterModel ? " ← current" : ""
+                lines.append("  • \(model)\(marker)")
+            }
+            if ranked.count > 15 {
+                lines.append("  … and \(ranked.count - 15) more")
+            }
+
+            // Auto-detect a working free model
+            lines.append("")
+            lines.append("Probing for a working free model…")
+            if let working = try await detectWorkingOpenRouterModel(
+                apiKey: apiKey,
+                preferFree: true,
+                preferredFirst: settings.openRouterModel,
+                excluding: nil,
+                prefetchedModels: allModels
+            ) {
+                if working == settings.openRouterModel {
+                    lines.append("  ✓ Current model \"\(working)\" is working")
+                } else {
+                    applySettingsMutation { $0.openRouterModel = working }
+                    lines.append("  ✓ Set model to \"\(working)\" (verified working)")
+                }
+            } else {
+                lines.append("  ✗ No working free model found")
+                hasFailure = true
+            }
+        } catch {
+            lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        lines.append("")
+        lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
+
+        return lines
+    }
+
+    private func diagnoseOpenAI() async -> [String] {
+        var lines: [String] = []
+        var hasFailure = false
+        guard let apiKey = currentOpenAIApiKey(), !apiKey.isEmpty else {
+            lines.append("API Key: ✗ Not configured")
+            lines.append("")
+            lines.append("Set your OpenAI API key in Settings or Keychain.")
+            lines.append("")
+            lines.append("Status: ✗ Not configured")
+            return lines
+        }
+        lines.append("API Key: ✓ Found")
+        lines.append("Model: \(settings.openAIModel)")
+        lines.append("")
+
+        // Fetch model list
+        do {
+            let models = try await fetchOpenAIModels(apiKey: apiKey)
+            let chatModels = models.filter {
+                $0.contains("gpt") || $0.hasPrefix("o1") || $0.hasPrefix("o3") || $0.hasPrefix("o4")
+            }.sorted()
+            lines.append("Chat models (\(chatModels.count)):")
+            let displayModels = chatModels.prefix(20)
+            for model in displayModels {
+                let marker = model == settings.openAIModel ? " ← current" : ""
+                lines.append("  • \(model)\(marker)")
+            }
+            if chatModels.count > 20 {
+                lines.append("  … and \(chatModels.count - 20) more")
+            }
+
+            if !chatModels.contains(settings.openAIModel), !models.contains(settings.openAIModel) {
+                lines.append("")
+                lines.append("⚠ Current model \"\(settings.openAIModel)\" not found.")
+            }
+        } catch {
+            lines.append("✗ Failed to fetch models: \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        // Verify key
+        lines.append("")
+        lines.append("API Key Test:")
+        do {
+            let testResult = try await testOpenAIApiKey(apiKey: apiKey, model: settings.openAIModel)
+            if testResult {
+                lines.append("  ✓ API key is valid and model responds")
+            } else {
+                lines.append("  ✗ API key or model issue — no response")
+                hasFailure = true
+            }
+        } catch {
+            lines.append("  ✗ \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        lines.append("")
+        lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
+
+        return lines
+    }
+
+    private func diagnoseAnthropic() async -> [String] {
+        var lines: [String] = []
+        var hasFailure = false
+        guard let apiKey = currentAnthropicApiKey(), !apiKey.isEmpty else {
+            lines.append("API Key: ✗ Not configured")
+            lines.append("")
+            lines.append("Set your Anthropic API key in Settings or Keychain.")
+            lines.append("")
+            lines.append("Status: ✗ Not configured")
+            return lines
+        }
+        lines.append("API Key: ✓ Found")
+        lines.append("Model: \(settings.anthropicModel)")
+        lines.append("")
+
+        // Anthropic doesn't have a public model list endpoint, so just verify the key
+        lines.append("API Key Test:")
+        do {
+            let testResult = try await testAnthropicApiKey(apiKey: apiKey, model: settings.anthropicModel)
+            if testResult {
+                lines.append("  ✓ API key is valid and model responds")
+            } else {
+                lines.append("  ✗ API key or model issue — no response")
+                hasFailure = true
+            }
+        } catch {
+            lines.append("  ✗ \(error.localizedDescription)")
+            hasFailure = true
+        }
+
+        lines.append("")
+        lines.append("Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")")
+
+        return lines
+    }
+
+    // MARK: - Diagnostic API Helpers
+
+    private func testGeminiApiKey(apiKey: String, model: String) async throws -> Bool {
+        guard let baseURL = URL(string: settings.geminiBaseURL) else { return false }
+        let normalizedModel = normalizeGeminiModel(model)
+        let versionsToTry = ["v1beta", "v1"]
+
+        for (index, version) in versionsToTry.enumerated() {
+            guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return false }
+            components.path = GeminiEndpointPath.generateContentPath(
+                basePath: components.path,
+                apiVersion: version,
+                model: normalizedModel
+            )
+            components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+            guard let url = components.url else { return false }
+
+            var request = URLRequest(url: url, timeoutInterval: 15)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body: [String: Any] = [
+                "contents": [["parts": [["text": "Reply OK"]]]],
+                "generationConfig": ["maxOutputTokens": 8],
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return false }
+            if (200 ..< 300).contains(http.statusCode) {
+                return true
+            }
+            if http.statusCode == 404, index < versionsToTry.count - 1 {
+                continue
+            }
+            return false
+        }
+
+        return false
+    }
+
+    private func makeOpenAIModelsURL() throws -> URL {
+        guard let baseURL = URL(string: settings.openAIBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+        }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+        }
+
+        var basePath = components.path
+        if basePath.hasSuffix("/") { basePath.removeLast() }
+        if basePath.hasSuffix("/chat/completions") {
+            basePath.removeLast("/chat/completions".count)
+        } else if basePath.hasSuffix("/models") {
+            basePath.removeLast("/models".count)
+        }
+
+        components.path = basePath.isEmpty ? "/models" : basePath + "/models"
+        guard let url = components.url else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI models URL"])
+        }
+        return url
+    }
+
+    private func makeOpenAIChatCompletionsURLForDiagnostics() throws -> URL {
+        guard let baseURL = URL(string: settings.openAIBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+        }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI base URL"])
+        }
+
+        var basePath = components.path
+        if basePath.hasSuffix("/") { basePath.removeLast() }
+        if basePath.hasSuffix("/chat/completions") {
+            basePath.removeLast("/chat/completions".count)
+        }
+
+        components.path = basePath.isEmpty ? "/chat/completions" : basePath + "/chat/completions"
+        guard let url = components.url else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenAI chat completions URL"])
+        }
+        return url
+    }
+
+    private func makeAnthropicMessagesURLForDiagnostics() throws -> URL {
+        guard let baseURL = URL(string: settings.anthropicBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
+        }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic base URL"])
+        }
+
+        var basePath = components.path
+        if basePath.hasSuffix("/") { basePath.removeLast() }
+        if basePath.hasSuffix("/v1/messages") {
+            basePath.removeLast("/v1/messages".count)
+        } else if basePath.hasSuffix("/v1") {
+            basePath.removeLast("/v1".count)
+        }
+
+        components.path = basePath.isEmpty ? "/v1/messages" : basePath + "/v1/messages"
+        guard let url = components.url else {
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Anthropic messages URL"])
+        }
+        return url
+    }
+
+    private func fetchOpenAIModels(apiKey: String) async throws -> [String] {
+        let url = try makeOpenAIModelsURL()
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-          let error = NSError(
+            throw NSError(domain: "TextPolish", code: 0, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw NSError(domain: "TextPolish", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
+        }
+
+        struct ModelsResponse: Decodable {
+            struct Model: Decodable { let id: String }
+            let data: [Model]?
+        }
+        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        return decoded.data?.map(\.id) ?? []
+    }
+
+    private func testOpenAIApiKey(apiKey: String, model: String) async throws -> Bool {
+        let url = try makeOpenAIChatCompletionsURLForDiagnostics()
+        let preferredUsesMaxCompletionTokens = OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+        let tokenStrategies = preferredUsesMaxCompletionTokens ? [true, false] : [false, true]
+        var lastError: Error?
+
+        for (index, useMaxCompletionTokens) in tokenStrategies.enumerated() {
+            var request = URLRequest(url: url, timeoutInterval: 15)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            var body: [String: Any] = [
+                "model": model,
+                "messages": [["role": "user", "content": "Reply OK"]],
+            ]
+            if useMaxCompletionTokens {
+                body["max_completion_tokens"] = 8
+            } else {
+                body["max_tokens"] = 8
+            }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    let error = NSError(
+                        domain: "TextPolish",
+                        code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
+                    )
+                    lastError = error
+                    continue
+                }
+
+                if (200 ..< 300).contains(http.statusCode) {
+                    return true
+                }
+
+                let message = parseOpenAIErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
+                let error = NSError(
+                    domain: "TextPolish",
+                    code: http.statusCode,
+                    userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
+                )
+                lastError = error
+
+                if index == 0, OpenAITokenPolicy.isTokenParameterError(message: message) {
+                    continue
+                }
+                throw error
+            } catch {
+                lastError = error
+                if index == 0, OpenAITokenPolicy.isTokenParameterError(message: error.localizedDescription) {
+                    continue
+                }
+                throw error
+            }
+        }
+
+        throw lastError ?? NSError(
             domain: "TextPolish",
             code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
-          )
-          lastError = error
-          continue
-        }
-
-        if (200..<300).contains(http.statusCode) {
-          return true
-        }
-
-        let message = parseOpenAIErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
-        let error = NSError(
-          domain: "TextPolish",
-          code: http.statusCode,
-          userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
+            userInfo: [NSLocalizedDescriptionKey: "OpenAI API key test failed"]
         )
-        lastError = error
-
-        if index == 0, OpenAITokenPolicy.isTokenParameterError(message: message) {
-          continue
-        }
-        throw error
-      } catch {
-        lastError = error
-        if index == 0, OpenAITokenPolicy.isTokenParameterError(message: error.localizedDescription) {
-          continue
-        }
-        throw error
-      }
     }
 
-    throw lastError ?? NSError(
-      domain: "TextPolish",
-      code: 0,
-      userInfo: [NSLocalizedDescriptionKey: "OpenAI API key test failed"]
-    )
-  }
+    private func testAnthropicApiKey(apiKey: String, model: String) async throws -> Bool {
+        let url = try makeAnthropicMessagesURLForDiagnostics()
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 8,
+            "messages": [["role": "user", "content": "Reply OK"]],
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-  private func testAnthropicApiKey(apiKey: String, model: String) async throws -> Bool {
-    let url = try makeAnthropicMessagesURLForDiagnostics()
-    var request = URLRequest(url: url, timeoutInterval: 15)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-    let body: [String: Any] = [
-      "model": model,
-      "max_tokens": 8,
-      "messages": [["role": "user", "content": "Reply OK"]],
-    ]
-    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else {
-      throw NSError(
-        domain: "TextPolish",
-        code: 0,
-        userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
-      )
-    }
-
-    if (200..<300).contains(http.statusCode) {
-      return true
-    }
-
-    let message = parseAnthropicErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
-    throw NSError(
-      domain: "TextPolish",
-      code: http.statusCode,
-      userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
-    )
-  }
-
-  private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
-    guard settings.correctionLanguage != language else { return }
-    applySettingsMutation { $0.correctionLanguage = language }
-    syncLanguageMenuState()
-  }
-
-  private func isRunningFromApplicationsFolder() -> Bool {
-    let path = Bundle.main.bundleURL.standardizedFileURL.path
-    return path.hasPrefix("/Applications/")
-  }
-
-  private func maybeShowWelcome() {
-    let defaults = UserDefaults.standard
-    guard defaults.bool(forKey: didShowWelcomeKey) == false else { return }
-    defaults.set(true, forKey: didShowWelcomeKey)
-
-    NSApp.activate(ignoringOtherApps: true)
-
-    let alert = NSAlert()
-    alert.messageText = "\(appDisplayName) is running"
-    alert.informativeText = [
-      "Look for the menu bar icon (top right).",
-      "If you quit, you can relaunch from Finder → Applications → \(expectedAppName).",
-      "",
-      "1) Grant Accessibility permission (required for ⌘C/⌘V/⌘A).",
-      "2) Set an API key: Provider → Set Gemini API Key… or Set OpenRouter API Key…",
-      "",
-      "Shortcuts:",
-      "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
-      "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
-    ].joined(separator: "\n")
-
-    alert.addButton(withTitle: "Open Accessibility Settings")
-    alert.addButton(withTitle: "Set API Key…")
-    alert.addButton(withTitle: "Later")
-
-    let response = alert.runModal()
-    switch response {
-    case .alertFirstButtonReturn:
-      openAccessibilitySettings()
-    case .alertSecondButtonReturn:
-      if settings.provider == .openRouter {
-        setOpenRouterApiKey()
-      } else if settings.provider == .openAI {
-        setOpenAIApiKey()
-      } else if settings.provider == .anthropic {
-        setAnthropicApiKey()
-      } else {
-        setGeminiApiKey()
-      }
-    default:
-      break
-    }
-  }
-
-  private func showStartAtLoginRequiresApplications() {
-    NSApp.activate(ignoringOtherApps: true)
-
-    let alert = NSAlert()
-    alert.messageText = "Move \(appDisplayName) to /Applications"
-    alert.informativeText = "Start at Login is most reliable when the app is in /Applications. Install the app there (for example via the .pkg), then enable Start at Login again."
-    alert.addButton(withTitle: "OK")
-    _ = alert.runModal()
-  }
-
-  private func currentGeminiApiKey() -> String? {
-    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountGemini
-    ), !keyFromKeychain.isEmpty {
-      return keyFromKeychain
-    }
-
-    let keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromSettings.isEmpty { return keyFromSettings }
-
-    let env =
-      ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
-      ProcessInfo.processInfo.environment["GOOGLE_API_KEY"] ??
-      ""
-    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
-    return keyFromEnv.isEmpty ? nil : keyFromEnv
-  }
-
-  private func currentOpenRouterApiKey() -> String? {
-    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountOpenRouter
-    ), !keyFromKeychain.isEmpty {
-      return keyFromKeychain
-    }
-
-    let keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromSettings.isEmpty { return keyFromSettings }
-
-    let env = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"] ?? ""
-    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
-    return keyFromEnv.isEmpty ? nil : keyFromEnv
-  }
-
-  private func currentOpenAIApiKey() -> String? {
-    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountOpenAI
-    ), !keyFromKeychain.isEmpty {
-      return keyFromKeychain
-    }
-
-    let keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromSettings.isEmpty { return keyFromSettings }
-
-    let env = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
-    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
-    return keyFromEnv.isEmpty ? nil : keyFromEnv
-  }
-
-  private func currentAnthropicApiKey() -> String? {
-    if let keyFromKeychain = try? Keychain.getConfiguredPassword(
-      primaryService: keychainService,
-      account: keychainAccountAnthropic
-    ), !keyFromKeychain.isEmpty {
-      return keyFromKeychain
-    }
-
-    let keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !keyFromSettings.isEmpty { return keyFromSettings }
-
-    let env = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
-    let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
-    return keyFromEnv.isEmpty ? nil : keyFromEnv
-  }
-
-  private struct GeminiModelsResponse: Decodable {
-    struct Model: Decodable {
-      let name: String
-      let supportedGenerationMethods: [String]?
-    }
-    let models: [Model]?
-  }
-
-  private struct OpenRouterModelsResponse: Decodable {
-    struct Model: Decodable {
-      let id: String
-    }
-    let data: [Model]?
-  }
-
-  private struct OpenRouterChatCompletionsResponse: Decodable {
-    struct Choice: Decodable {
-      struct Message: Decodable {
-        let content: String?
-      }
-      let message: Message?
-    }
-    let choices: [Choice]?
-  }
-
-  private struct OpenAIErrorEnvelope: Decodable {
-    struct ErrorBody: Decodable {
-      let message: String?
-      let code: String?
-      let type: String?
-    }
-    let error: ErrorBody?
-  }
-
-  private func parseOpenAIErrorMessage(data: Data) -> String? {
-    if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
-      if let message, !message.isEmpty { return message }
-    }
-
-    if let string = String(data: data, encoding: .utf8) {
-      return ErrorLogSanitizer.sanitize(string)
-    }
-
-    return nil
-  }
-
-  private func parseOpenRouterErrorMessage(data: Data) -> String? {
-    parseOpenAIErrorMessage(data: data)
-  }
-
-  private struct AnthropicDiagnosticsErrorEnvelope: Decodable {
-    struct ErrorBody: Decodable {
-      let message: String?
-      let type: String?
-    }
-    let error: ErrorBody?
-  }
-
-  private func parseAnthropicErrorMessage(data: Data) -> String? {
-    if let decoded = try? JSONDecoder().decode(AnthropicDiagnosticsErrorEnvelope.self, from: data) {
-      let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
-      if let message, !message.isEmpty { return message }
-    }
-
-    if let string = String(data: data, encoding: .utf8) {
-      return ErrorLogSanitizer.sanitize(string)
-    }
-
-    return nil
-  }
-
-  private func makeOpenRouterChatCompletionsURL() throws -> URL {
-    guard let baseURL = URL(string: settings.openRouterBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 20, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
-    }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw NSError(domain: "TextPolish", code: 20, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
-    }
-    components.path = OpenRouterEndpointPath.chatCompletionsPath(basePath: components.path)
-    guard let url = components.url else {
-      throw NSError(domain: "TextPolish", code: 21, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter URL"])
-    }
-    return url
-  }
-
-  private static func probeOpenRouterModel(
-    url: URL,
-    timeoutSeconds: Double,
-    apiKey: String,
-    model: String
-  ) async throws -> Bool {
-    var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
-    request.httpMethod = "POST"
-    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-    request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-    request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
-    request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
-
-    let body: [String: Any] = [
-      "model": model,
-      "messages": [
-        ["role": "user", "content": "Reply with ONLY the word OK."],
-      ],
-      "temperature": 0.0,
-      "max_tokens": 8,
-    ]
-    request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else { return false }
-
-    if (200..<300).contains(http.statusCode) {
-      let decoded = try JSONDecoder().decode(OpenRouterChatCompletionsResponse.self, from: data)
-      let content = decoded.choices?.first?.message?.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      return !content.isEmpty
-    }
-
-    let parsedMessage: String? = {
-      if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data),
-         let message = decoded.error?.message,
-         !message.isEmpty
-      {
-        return message
-      }
-      return String(data: data, encoding: .utf8)
-    }()
-    let message = ErrorLogSanitizer.sanitize(parsedMessage)
-    TPLogger.log("OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
-    if http.statusCode == 401 {
-      throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
-    }
-    return false
-  }
-
-  private func detectWorkingOpenRouterModel(
-    apiKey: String,
-    preferFree: Bool,
-    preferredFirst: String?,
-    excluding: String?,
-    prefetchedModels: [String]? = nil
-  ) async throws -> String? {
-    let models: [String]
-    if let prefetchedModels {
-      models = prefetchedModels
-    } else {
-      models = try await fetchOpenRouterModels(apiKey: apiKey)
-    }
-    let candidates = rankedOpenRouterModels(
-      from: models,
-      preferFree: preferFree,
-      preferredFirst: preferredFirst,
-      excluding: excluding
-    )
-    var deduplicated: [String] = []
-    var seen = Set<String>()
-    for rawModel in candidates {
-      let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { continue }
-      let normalized = trimmed.lowercased()
-      guard seen.insert(normalized).inserted else { continue }
-      deduplicated.append(trimmed)
-    }
-    let maxProbeCandidates = 9
-    if deduplicated.count > maxProbeCandidates {
-      deduplicated = Array(deduplicated.prefix(maxProbeCandidates))
-    }
-    guard !deduplicated.isEmpty else { return nil }
-
-    let probeURL = try makeOpenRouterChatCompletionsURL()
-    let probeTimeoutSeconds = max(1.0, min(settings.requestTimeoutSeconds, 4.0))
-
-    if let preferred = deduplicated.first,
-       try await Self.probeOpenRouterModel(
-         url: probeURL,
-         timeoutSeconds: probeTimeoutSeconds,
-         apiKey: apiKey,
-         model: preferred
-       )
-    {
-      return preferred
-    }
-
-    let remaining = Array(deduplicated.dropFirst())
-    let batchSize = 3
-    var batchStart = 0
-
-    while batchStart < remaining.count {
-      let batchEnd = min(batchStart + batchSize, remaining.count)
-      let batch = Array(remaining[batchStart..<batchEnd])
-
-      let firstSuccessIndex = try await withThrowingTaskGroup(of: (Int, Bool).self, returning: Int?.self) { group in
-        for (index, model) in batch.enumerated() {
-          group.addTask {
-            let success = try await Self.probeOpenRouterModel(
-              url: probeURL,
-              timeoutSeconds: probeTimeoutSeconds,
-              apiKey: apiKey,
-              model: model
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(
+                domain: "TextPolish",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
             )
-            return (index, success)
-          }
         }
 
-        var outcomesByIndex: [Int: Bool] = [:]
-        var nextResolvableIndex = 0
-        for try await (index, success) in group {
-          outcomesByIndex[index] = success
-          while let outcome = outcomesByIndex[nextResolvableIndex] {
-            if outcome {
-              group.cancelAll()
-              return nextResolvableIndex
-            }
-            nextResolvableIndex += 1
-          }
+        if (200 ..< 300).contains(http.statusCode) {
+            return true
         }
-        return nil
-      }
 
-      if let firstSuccessIndex {
-        return batch[firstSuccessIndex]
-      }
-
-      batchStart = batchEnd
-    }
-
-    return nil
-  }
-
-  private func fetchOpenRouterModels(apiKey: String) async throws -> [String] {
-    guard let baseURL = URL(string: settings.openRouterBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
-    }
-    guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
-    }
-
-    components.path = OpenRouterEndpointPath.modelsPath(basePath: components.path)
-
-    guard let url = components.url else {
-      throw NSError(domain: "TextPolish", code: 11, userInfo: [NSLocalizedDescriptionKey: "Invalid models URL"])
-    }
-
-    var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
-    request.httpMethod = "GET"
-    request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse else {
-      throw NSError(domain: "TextPolish", code: 12, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
-    }
-
-    if (200..<300).contains(http.statusCode) {
-      let decoded = try JSONDecoder().decode(OpenRouterModelsResponse.self, from: data)
-      let models = decoded.data ?? []
-      return models.map(\.id)
-    }
-
-    let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    throw NSError(
-      domain: "TextPolish",
-      code: http.statusCode,
-      userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : "HTTP \(http.statusCode): \(text.prefix(240))"]
-    )
-  }
-
-  private func fetchGeminiModels(apiKey: String) async throws -> [String] {
-    guard let baseURL = URL(string: settings.geminiBaseURL) else {
-      throw NSError(domain: "TextPolish", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini base URL"])
-    }
-
-    let versionsToTry = ["v1beta", "v1"]
-    var lastError: Error?
-
-    for (index, version) in versionsToTry.enumerated() {
-      guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-        throw NSError(domain: "TextPolish", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini base URL"])
-      }
-      components.path = GeminiEndpointPath.modelsPath(basePath: components.path, apiVersion: version)
-
-      var items = components.queryItems ?? []
-      items.removeAll { $0.name == "key" }
-      items.append(URLQueryItem(name: "key", value: apiKey))
-      components.queryItems = items
-      guard let url = components.url else {
-        throw NSError(domain: "TextPolish", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid models URL"])
-      }
-
-      var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
-      request.httpMethod = "GET"
-      request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse else {
-        lastError = NSError(domain: "TextPolish", code: 3, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
-        continue
-      }
-
-      if (200..<300).contains(http.statusCode) {
-        let decoded = try JSONDecoder().decode(GeminiModelsResponse.self, from: data)
-        let models = decoded.models ?? []
-        return models.compactMap { model in
-          let supports = model.supportedGenerationMethods ?? []
-          guard supports.isEmpty || supports.contains("generateContent") else { return nil }
-          return model.name.hasPrefix("models/") ? String(model.name.dropFirst("models/".count)) : model.name
-        }
-      }
-
-      let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      let error = NSError(
-        domain: "TextPolish",
-        code: http.statusCode,
-        userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : "HTTP \(http.statusCode): \(text.prefix(240))"]
-      )
-
-      if http.statusCode == 404, index < versionsToTry.count - 1 {
-        lastError = error
-        continue
-      }
-
-      throw error
-    }
-
-    throw lastError ?? NSError(domain: "TextPolish", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unknown error"])
-  }
-
-  private func chooseGeminiModel(from models: [String]) -> String? {
-    guard !models.isEmpty else { return nil }
-
-    func score(_ name: String) -> Int {
-      let lower = name.lowercased()
-      var value = 0
-      if lower == "gemini-2.5-flash-lite" { value += 200 }
-      if lower == "gemini-2.5-flash" { value += 180 }
-      if lower.contains("flash") { value += 100 }
-      if lower.contains("2.5") { value += 120 }
-      if lower.contains("2.0") { value -= 20 }
-      if lower.contains("1.5") { value += 10 }
-      if lower.contains("lite") { value += 10 }
-      if lower.contains("latest") { value += 5 }
-      if lower.contains("preview") { value -= 50 }
-      if lower.contains("exp") || lower.contains("experimental") { value -= 50 }
-      if lower.contains("pro") { value -= 5 }
-      return value
-    }
-
-    return models
-      .map { ($0, score($0)) }
-      .max(by: { $0.1 < $1.1 })?
-      .0
-  }
-
-  private func openRouterScore(_ id: String) -> Int {
-    let lower = id.lowercased()
-    var value = 0
-    if lower == "google/gemma-3n-e4b-it:free" { value += 980 }
-    if lower == "qwen/qwen3-4b:free" { value += 940 }
-    if lower == "meta-llama/llama-3.2-3b-instruct:free" { value += 900 }
-    if lower == "google/gemma-3-12b-it:free" { value += 860 }
-    if lower == "google/gemma-3-27b-it:free" { value += 820 }
-    if lower == "openai/gpt-5-nano" { value += 780 }
-    if lower.contains("gemini") { value += 220 }
-    if lower.contains("flash") { value += 220 }
-    if lower.contains("2.0") { value += 50 }
-    if lower.contains("lite") { value += 30 }
-    if lower.contains("gpt-5-nano") { value += 260 }
-    if lower.contains("gpt-4o-mini") { value += 180 }
-    if lower.contains("gemma-3n") { value += 200 }
-    if lower.contains("4b") { value += 120 }
-    if lower.contains("llama-3.2") { value += 90 }
-    if lower.contains("3b") { value += 30 }
-    if lower.contains("instruct") { value += 20 }
-    if lower.contains(":free") { value += 40 }
-    if lower.contains("preview") { value -= 40 }
-    if lower.contains("think") { value -= 90 }
-    if lower.contains("creative") { value -= 40 }
-    return value
-  }
-
-  private func rankedOpenRouterModels(
-    from models: [String],
-    preferFree: Bool,
-    preferredFirst: String?,
-    excluding: String?
-  ) -> [String] {
-    guard !models.isEmpty else { return [] }
-
-    let filtered = preferFree ? models.filter { $0.hasSuffix(":free") } : models
-    var pool = filtered
-    if let excluding, !excluding.isEmpty {
-      pool.removeAll { $0 == excluding }
-    }
-
-    pool.sort(by: { openRouterScore($0) > openRouterScore($1) })
-
-    guard let preferredFirst, !preferredFirst.isEmpty else { return pool }
-    if preferredFirst == excluding { return pool }
-    if preferFree, !preferredFirst.hasSuffix(":free") { return pool }
-
-    var result: [String] = [preferredFirst]
-    result.append(contentsOf: pool.filter { $0 != preferredFirst })
-    return result
-  }
-
-  private func showSimpleAlert(title: String, message: String) {
-    NSApp.activate(ignoringOtherApps: true)
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.addButton(withTitle: "OK")
-    alert.runModal()
-  }
-
-  private enum ApiKeyPromptResult {
-    case save(String)
-    case clear
-    case canceled
-  }
-
-  private func apiKeyPromptResultKind(_ result: ApiKeyPromptResult) -> String {
-    switch result {
-    case .save:
-      return "save"
-    case .clear:
-      return "clear"
-    case .canceled:
-      return "canceled"
-    }
-  }
-
-  private func promptForApiKey(title: String, message: String) -> ApiKeyPromptResult {
-    NSApp.activate(ignoringOtherApps: true)
-
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.alertStyle = .informational
-
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
-    field.placeholderString = "Paste API key (⌘V or ⌃V)"
-    field.isEditable = true
-    field.isSelectable = true
-    field.allowsEditingTextAttributes = false
-    field.usesSingleLineMode = true
-    field.lineBreakMode = .byTruncatingMiddle
-    field.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-    field.cell?.wraps = false
-    field.cell?.isScrollable = true
-    alert.accessoryView = field
-
-    alert.addButton(withTitle: "Save")
-    alert.addButton(withTitle: "Cancel")
-    alert.addButton(withTitle: "Clear")
-
-    let window = alert.window
-    window.level = .floating
-    DispatchQueue.main.async { [weak field] in
-      guard let field, let window = field.window, window.isVisible else { return }
-      window.makeFirstResponder(field)
-      field.selectText(nil)
-    }
-
-    let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-      let wantsPaste =
-        (event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control)) &&
-        event.charactersIgnoringModifiers?.lowercased() == "v"
-      if wantsPaste
-      {
-        NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
-        return nil
-      }
-      return event
-    }
-    defer {
-      if let monitor { NSEvent.removeMonitor(monitor) }
-    }
-
-    let response = alert.runModal()
-    window.orderOut(nil)
-    switch response {
-    case .alertFirstButtonReturn: // Save
-      let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !value.isEmpty else {
-        NSSound.beep()
-        return .canceled
-      }
-      return .save(value)
-    case .alertThirdButtonReturn: // Clear
-      return .clear
-    default:
-      return .canceled
-    }
-  }
-
-  private func promptForText(title: String, message: String, placeholder: String, initialValue: String) -> String? {
-    NSApp.activate(ignoringOtherApps: true)
-
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.alertStyle = .informational
-
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
-    field.placeholderString = placeholder
-    field.usesSingleLineMode = true
-    field.lineBreakMode = .byTruncatingMiddle
-    field.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-    field.cell?.wraps = false
-    field.cell?.isScrollable = true
-    field.stringValue = initialValue
-    alert.accessoryView = field
-
-    alert.addButton(withTitle: "Save")
-    alert.addButton(withTitle: "Cancel")
-
-    let window = alert.window
-    window.level = .floating
-    DispatchQueue.main.async { [weak field] in
-      guard let field, let window = field.window, window.isVisible else { return }
-      window.makeFirstResponder(field)
-      field.selectText(nil)
-    }
-
-    let response = alert.runModal()
-    window.orderOut(nil)
-    guard response == .alertFirstButtonReturn else { return nil }
-    return field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  @objc private func openSettingsFile() {
-    NSWorkspace.shared.open(Settings.settingsFileURL())
-  }
-
-  @objc private func openAccessibilitySettings() {
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-
-  @objc private func showAboutAndPrivacy() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
-      let header = "\(appDisplayName) \(version)"
-
-      let providerName: String
-      let providerModel: String
-      let providerURL: String
-      switch self.settings.provider {
-      case .gemini:
-        providerName = "Gemini (Google)"
-        providerModel = self.settings.geminiModel
-        providerURL = self.settings.geminiBaseURL
-      case .openRouter:
-        providerName = "OpenRouter"
-        providerModel = self.settings.openRouterModel
-        providerURL = self.settings.openRouterBaseURL
-      case .openAI:
-        providerName = "OpenAI"
-        providerModel = self.settings.openAIModel
-        providerURL = self.settings.openAIBaseURL
-      case .anthropic:
-        providerName = "Anthropic"
-        providerModel = self.settings.anthropicModel
-        providerURL = self.settings.anthropicBaseURL
-      }
-
-      let settingsPath = Settings.settingsFileURL().path
-
-      let message = [
-        "Small, fast menu bar text polish for grammar and tone. Minimal edits, keeps formatting.",
-        "",
-        "Shortcuts:",
-        "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
-        "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
-        "• Tone Analysis: \(settings.hotKeyAnalyzeTone.displayString)",
-        "",
-        "Provider:",
-        "• Provider: \(providerName)",
-        "• Model: \(providerModel)",
-        "• URL: \(providerURL)",
-        "",
-        "Usage:",
-        "• Badge shows total successful corrections + analyses today (resets daily)",
-        "• Optional automatic fallback to alternate provider on errors",
-        "",
-        "Updates:",
-        "• Delivered via GitHub Releases",
-        "• Check from the menu: Check for Updates > Check",
-        "",
-        "Security:",
-        "• API keys stored in macOS Keychain",
-        "• No analytics or telemetry",
-        "",
-        "Privacy:",
-        "• Text stays on-device until you trigger an action",
-        "• Copies selected text temporarily and restores your clipboard",
-        "• Sends only selected text to the provider over HTTPS",
-        "• Pastes corrected text back (tone analysis shows a window instead)",
-        "• TextPolish does not store your text",
-        "• Provider may log requests per their policy",
-        "• Settings stored at \(settingsPath)",
-        "• Keychain service: \(self.keychainService)",
-        "",
-        "Requires Accessibility permission to send ⌘C, ⌘V, and ⌘A.",
-        "",
-        "Creator: Kurniadi Ilham",
-        "GitHub: https://github.com/kxxil01",
-        "LinkedIn: https://linkedin.com/in/kurniadi-ilham",
-      ].joined(separator: "\n")
-
-      self.showSimpleAlert(title: header, message: message)
-    }
-  }
-
-  @objc private func quit() {
-    NSApp.terminate(nil)
-  }
-
-  @objc private func setCorrectSelectionHotKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let title = "Set Correct Selection Hotkey"
-      let message = "Current: \(self.settings.hotKeyCorrectSelection.displayString)\n\nPress a key combination to change it."
-      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctSelectionDefault) {
-        if newHotKey == self.settings.hotKeyCorrectSelection {
-          return
-        }
-        if newHotKey == self.settings.hotKeyCorrectAll {
-          let oldSelection = self.settings.hotKeyCorrectSelection
-          let oldAll = self.settings.hotKeyCorrectAll
-          self.applySettingsMutation {
-            $0.hotKeyCorrectSelection = oldAll
-            $0.hotKeyCorrectAll = oldSelection
-          }
-          do {
-            try self.hotKeyManager.registerHotKeys(
-              correctSelection: self.settings.hotKeyCorrectSelection,
-              correctAll: self.settings.hotKeyCorrectAll,
-              analyzeTone: self.settings.hotKeyAnalyzeTone
-            )
-            self.syncHotKeyMenuItems()
-          } catch {
-            self.applySettingsMutation {
-              $0.hotKeyCorrectSelection = oldSelection
-              $0.hotKeyCorrectAll = oldAll
-            }
-            self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
-          }
-          return
-        }
-        if HotKeyManager.isHotKeyInUse(
-          hotKey: newHotKey,
-          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
-        ) {
-          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
-          return
-        }
-        let oldHotKey = self.settings.hotKeyCorrectSelection
-        self.applySettingsMutation { $0.hotKeyCorrectSelection = newHotKey }
-        do {
-          try self.hotKeyManager.registerHotKeys(
-            correctSelection: self.settings.hotKeyCorrectSelection,
-            correctAll: self.settings.hotKeyCorrectAll,
-            analyzeTone: self.settings.hotKeyAnalyzeTone
-          )
-          self.syncHotKeyMenuItems()
-        } catch {
-          self.applySettingsMutation { $0.hotKeyCorrectSelection = oldHotKey }
-          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setCorrectAllHotKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let title = "Set Correct All Hotkey"
-      let message = "Current: \(self.settings.hotKeyCorrectAll.displayString)\n\nPress a key combination to change it."
-      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctAllDefault) {
-        if newHotKey == self.settings.hotKeyCorrectAll {
-          return
-        }
-        if newHotKey == self.settings.hotKeyCorrectSelection {
-          let oldSelection = self.settings.hotKeyCorrectSelection
-          let oldAll = self.settings.hotKeyCorrectAll
-          self.applySettingsMutation {
-            $0.hotKeyCorrectSelection = oldAll
-            $0.hotKeyCorrectAll = oldSelection
-          }
-          do {
-            try self.hotKeyManager.registerHotKeys(
-              correctSelection: self.settings.hotKeyCorrectSelection,
-              correctAll: self.settings.hotKeyCorrectAll,
-              analyzeTone: self.settings.hotKeyAnalyzeTone
-            )
-            self.syncHotKeyMenuItems()
-          } catch {
-            self.applySettingsMutation {
-              $0.hotKeyCorrectSelection = oldSelection
-              $0.hotKeyCorrectAll = oldAll
-            }
-            self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
-          }
-          return
-        }
-        if HotKeyManager.isHotKeyInUse(
-          hotKey: newHotKey,
-          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
-        ) {
-          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
-          return
-        }
-        let oldHotKey = self.settings.hotKeyCorrectAll
-        self.applySettingsMutation { $0.hotKeyCorrectAll = newHotKey }
-        do {
-          try self.hotKeyManager.registerHotKeys(
-            correctSelection: self.settings.hotKeyCorrectSelection,
-            correctAll: self.settings.hotKeyCorrectAll,
-            analyzeTone: self.settings.hotKeyAnalyzeTone
-          )
-          self.syncHotKeyMenuItems()
-        } catch {
-          self.applySettingsMutation { $0.hotKeyCorrectAll = oldHotKey }
-          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func setAnalyzeToneHotKey() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      let title = "Set Analyze Tone Hotkey"
-      let message = "Current: \(self.settings.hotKeyAnalyzeTone.displayString)\n\nPress a key combination to change it."
-      if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .analyzeToneDefault) {
-        if newHotKey == self.settings.hotKeyAnalyzeTone {
-          return
-        }
-        if HotKeyManager.isHotKeyInUse(
-          hotKey: newHotKey,
-          ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
-        ) {
-          self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
-          return
-        }
-        let oldHotKey = self.settings.hotKeyAnalyzeTone
-        self.applySettingsMutation { $0.hotKeyAnalyzeTone = newHotKey }
-        do {
-          try self.hotKeyManager.registerHotKeys(
-            correctSelection: self.settings.hotKeyCorrectSelection,
-            correctAll: self.settings.hotKeyCorrectAll,
-            analyzeTone: self.settings.hotKeyAnalyzeTone
-          )
-          self.syncHotKeyMenuItems()
-        } catch {
-          self.applySettingsMutation { $0.hotKeyAnalyzeTone = oldHotKey }
-          self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
-        }
-      }
-    }
-  }
-
-  @objc private func resetHotKeys() {
-    runAfterMenuDismissed { [weak self] in
-      guard let self else { return }
-      self.applySettingsMutation {
-        $0.hotKeyCorrectSelection = .correctSelectionDefault
-        $0.hotKeyCorrectAll = .correctAllDefault
-        $0.hotKeyAnalyzeTone = .analyzeToneDefault
-      }
-      do {
-        try self.hotKeyManager.registerHotKeys(
-          correctSelection: self.settings.hotKeyCorrectSelection,
-          correctAll: self.settings.hotKeyCorrectAll,
-          analyzeTone: self.settings.hotKeyAnalyzeTone
+        let message = parseAnthropicErrorMessage(data: data) ?? "HTTP \(http.statusCode)"
+        throw NSError(
+            domain: "TextPolish",
+            code: http.statusCode,
+            userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(message.prefix(240))"]
         )
-        self.syncHotKeyMenuItems()
-        self.showSimpleAlert(title: "Hotkeys Reset", message: "Hotkeys have been reset to defaults.")
-      } catch {
-        self.showSimpleAlert(title: "Failed to Reset Hotkeys", message: "\(error)")
-      }
-    }
-  }
-
-  private func syncHotKeyMenuItems() {
-    let selectionHotKey = settings.hotKeyCorrectSelection
-    let allHotKey = settings.hotKeyCorrectAll
-    let analyzeToneHotKey = settings.hotKeyAnalyzeTone
-
-    selectionItem?.title = "Correct Selection"
-    selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)
-    selectionItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: selectionHotKey.modifiers)
-
-    allItem?.title = "Correct All"
-    allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
-    allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
-
-    analyzeToneItem?.title = "Analyze Tone"
-    analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
-    analyzeToneItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: analyzeToneHotKey.modifiers)
-  }
-
-  private func syncCancelMenuState() {
-    cancelCorrectionItem?.isEnabled =
-      correctionController?.isBusy == true || toneAnalysisController?.isBusy == true
-  }
-
-  private func promptForHotKey(title: String, message: String, defaultHotKey: Settings.HotKey) -> Settings.HotKey? {
-    NSApp.activate(ignoringOtherApps: true)
-
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.alertStyle = .informational
-
-    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-    textField.isEditable = false
-    textField.isSelectable = false
-    textField.alignment = .center
-    textField.font = NSFont.systemFont(ofSize: 14)
-    textField.placeholderString = "Press a key combination"
-    alert.accessoryView = textField
-
-    alert.addButton(withTitle: "Cancel")
-    alert.addButton(withTitle: "Reset")
-    alert.addButton(withTitle: "Record")
-
-    let window = alert.window
-    window.level = .floating
-
-    DispatchQueue.main.async { [weak textField] in
-      guard let textField, let window = textField.window, window.isVisible else { return }
-      textField.stringValue = "Press keys..."
     }
 
-    var capturedHotKey: Settings.HotKey? = nil
-    let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak textField] event in
-      let decision = HotKeyPromptInterpreter.interpret(
-        eventType: event.type,
-        keyCode: event.keyCode,
-        modifiers: event.modifierFlags
-      )
-
-      switch decision {
-      case .passThrough:
-        return event
-      case .cancel:
-        NSApp.stopModal(withCode: .alertFirstButtonReturn)
-        return nil
-      case .reset:
-        NSApp.stopModal(withCode: .alertSecondButtonReturn)
-        return nil
-      case .missingModifier:
-        textField?.stringValue = "Add a modifier (Command/Option/Control/Shift)"
-        NSSound.beep()
-        return nil
-      case .capture(let hotKey):
-        capturedHotKey = hotKey
-        NSApp.stopModal(withCode: .alertThirdButtonReturn)
-        return nil
-      }
+    private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
+        guard settings.correctionLanguage != language else { return }
+        applySettingsMutation { $0.correctionLanguage = language }
     }
 
-    let response = alert.runModal()
-    window.orderOut(nil)
-    if let monitor { NSEvent.removeMonitor(monitor) }
-
-    switch response {
-    case .alertThirdButtonReturn:
-      return capturedHotKey
-    case .alertSecondButtonReturn:
-      return defaultHotKey
-    default:
-      return nil
+    private func isRunningFromApplicationsFolder() -> Bool {
+        let path = Bundle.main.bundleURL.standardizedFileURL.path
+        return path.hasPrefix("/Applications/")
     }
-  }
+
+    private func maybeShowWelcome() {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: didShowWelcomeKey) == false else { return }
+        defaults.set(true, forKey: didShowWelcomeKey)
+
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "\(appDisplayName) is running"
+        alert.informativeText = [
+            "Look for the menu bar icon (top right).",
+            "If you quit, you can relaunch from Finder → Applications → \(expectedAppName).",
+            "",
+            "1) Grant Accessibility permission (required for ⌘C/⌘V/⌘A).",
+            "2) Set an API key: Provider → Set Gemini API Key… or Set OpenRouter API Key…",
+            "",
+            "Shortcuts:",
+            "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
+            "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
+        ].joined(separator: "\n")
+
+        alert.addButton(withTitle: "Open Accessibility Settings")
+        alert.addButton(withTitle: "Set API Key…")
+        alert.addButton(withTitle: "Later")
+
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            openAccessibilitySettings()
+        case .alertSecondButtonReturn:
+            if settings.provider == .openRouter {
+                setOpenRouterApiKey()
+            } else if settings.provider == .openAI {
+                setOpenAIApiKey()
+            } else if settings.provider == .anthropic {
+                setAnthropicApiKey()
+            } else {
+                setGeminiApiKey()
+            }
+        default:
+            break
+        }
+    }
+
+    private func showStartAtLoginRequiresApplications() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Move \(appDisplayName) to /Applications"
+        alert.informativeText = "Start at Login is most reliable when the app is in /Applications. Install the app there (for example via the .pkg), then enable Start at Login again."
+        alert.addButton(withTitle: "OK")
+        _ = alert.runModal()
+    }
+
+    private func currentGeminiApiKey() -> String? {
+        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountGemini
+        ), !keyFromKeychain.isEmpty {
+            return keyFromKeychain
+        }
+
+        let keyFromSettings = settings.geminiApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !keyFromSettings.isEmpty { return keyFromSettings }
+
+        let env =
+            ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
+            ProcessInfo.processInfo.environment["GOOGLE_API_KEY"] ??
+            ""
+        let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+        return keyFromEnv.isEmpty ? nil : keyFromEnv
+    }
+
+    private func currentOpenRouterApiKey() -> String? {
+        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountOpenRouter
+        ), !keyFromKeychain.isEmpty {
+            return keyFromKeychain
+        }
+
+        let keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !keyFromSettings.isEmpty { return keyFromSettings }
+
+        let env = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"] ?? ""
+        let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+        return keyFromEnv.isEmpty ? nil : keyFromEnv
+    }
+
+    private func currentOpenAIApiKey() -> String? {
+        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountOpenAI
+        ), !keyFromKeychain.isEmpty {
+            return keyFromKeychain
+        }
+
+        let keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !keyFromSettings.isEmpty { return keyFromSettings }
+
+        let env = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+        let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+        return keyFromEnv.isEmpty ? nil : keyFromEnv
+    }
+
+    private func currentAnthropicApiKey() -> String? {
+        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+            primaryService: keychainService,
+            account: keychainAccountAnthropic
+        ), !keyFromKeychain.isEmpty {
+            return keyFromKeychain
+        }
+
+        let keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !keyFromSettings.isEmpty { return keyFromSettings }
+
+        let env = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
+        let keyFromEnv = env.trimmingCharacters(in: .whitespacesAndNewlines)
+        return keyFromEnv.isEmpty ? nil : keyFromEnv
+    }
+
+    private struct GeminiModelsResponse: Decodable {
+        struct Model: Decodable {
+            let name: String
+            let supportedGenerationMethods: [String]?
+        }
+
+        let models: [Model]?
+    }
+
+    private struct OpenRouterModelsResponse: Decodable {
+        struct Model: Decodable {
+            let id: String
+        }
+
+        let data: [Model]?
+    }
+
+    private struct OpenRouterChatCompletionsResponse: Decodable {
+        struct Choice: Decodable {
+            struct Message: Decodable {
+                let content: String?
+            }
+
+            let message: Message?
+        }
+
+        let choices: [Choice]?
+    }
+
+    private struct OpenAIErrorEnvelope: Decodable {
+        struct ErrorBody: Decodable {
+            let message: String?
+            let code: String?
+            let type: String?
+        }
+
+        let error: ErrorBody?
+    }
+
+    private func parseOpenAIErrorMessage(data: Data) -> String? {
+        if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
+            let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
+            if let message, !message.isEmpty { return message }
+        }
+
+        if let string = String(data: data, encoding: .utf8) {
+            return ErrorLogSanitizer.sanitize(string)
+        }
+
+        return nil
+    }
+
+    private func parseOpenRouterErrorMessage(data: Data) -> String? {
+        parseOpenAIErrorMessage(data: data)
+    }
+
+    private struct AnthropicDiagnosticsErrorEnvelope: Decodable {
+        struct ErrorBody: Decodable {
+            let message: String?
+            let type: String?
+        }
+
+        let error: ErrorBody?
+    }
+
+    private func parseAnthropicErrorMessage(data: Data) -> String? {
+        if let decoded = try? JSONDecoder().decode(AnthropicDiagnosticsErrorEnvelope.self, from: data) {
+            let message = ErrorLogSanitizer.sanitize(decoded.error?.message)
+            if let message, !message.isEmpty { return message }
+        }
+
+        if let string = String(data: data, encoding: .utf8) {
+            return ErrorLogSanitizer.sanitize(string)
+        }
+
+        return nil
+    }
+
+    private func makeOpenRouterChatCompletionsURL() throws -> URL {
+        guard let baseURL = URL(string: settings.openRouterBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 20, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
+        }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NSError(domain: "TextPolish", code: 20, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
+        }
+        components.path = OpenRouterEndpointPath.chatCompletionsPath(basePath: components.path)
+        guard let url = components.url else {
+            throw NSError(domain: "TextPolish", code: 21, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter URL"])
+        }
+        return url
+    }
+
+    private static func probeOpenRouterModel(
+        url: URL,
+        timeoutSeconds: Double,
+        apiKey: String,
+        model: String
+    ) async throws -> Bool {
+        var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("TextPolish", forHTTPHeaderField: "X-Title")
+        request.setValue("https://github.com/kxxil01", forHTTPHeaderField: "HTTP-Referer")
+
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "user", "content": "Reply with ONLY the word OK."],
+            ],
+            "temperature": 0.0,
+            "max_tokens": 8,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { return false }
+
+        if (200 ..< 300).contains(http.statusCode) {
+            let decoded = try JSONDecoder().decode(OpenRouterChatCompletionsResponse.self, from: data)
+            let content = decoded.choices?.first?.message?.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return !content.isEmpty
+        }
+
+        let parsedMessage: String? = {
+            if let decoded = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data),
+               let message = decoded.error?.message,
+               !message.isEmpty
+            {
+                return message
+            }
+            return String(data: data, encoding: .utf8)
+        }()
+        let message = ErrorLogSanitizer.sanitize(parsedMessage)
+        TPLogger.log("OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+        if http.statusCode == 401 {
+            throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
+        }
+        return false
+    }
+
+    private func detectWorkingOpenRouterModel(
+        apiKey: String,
+        preferFree: Bool,
+        preferredFirst: String?,
+        excluding: String?,
+        prefetchedModels: [String]? = nil
+    ) async throws -> String? {
+        let models: [String]
+        if let prefetchedModels {
+            models = prefetchedModels
+        } else {
+            models = try await fetchOpenRouterModels(apiKey: apiKey)
+        }
+        let candidates = rankedOpenRouterModels(
+            from: models,
+            preferFree: preferFree,
+            preferredFirst: preferredFirst,
+            excluding: excluding
+        )
+        var deduplicated: [String] = []
+        var seen = Set<String>()
+        for rawModel in candidates {
+            let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let normalized = trimmed.lowercased()
+            guard seen.insert(normalized).inserted else { continue }
+            deduplicated.append(trimmed)
+        }
+        let maxProbeCandidates = 9
+        if deduplicated.count > maxProbeCandidates {
+            deduplicated = Array(deduplicated.prefix(maxProbeCandidates))
+        }
+        guard !deduplicated.isEmpty else { return nil }
+
+        let probeURL = try makeOpenRouterChatCompletionsURL()
+        let probeTimeoutSeconds = max(1.0, min(settings.requestTimeoutSeconds, 4.0))
+
+        if let preferred = deduplicated.first,
+           try await Self.probeOpenRouterModel(
+               url: probeURL,
+               timeoutSeconds: probeTimeoutSeconds,
+               apiKey: apiKey,
+               model: preferred
+           )
+        {
+            return preferred
+        }
+
+        let remaining = Array(deduplicated.dropFirst())
+        let batchSize = 3
+        var batchStart = 0
+
+        while batchStart < remaining.count {
+            let batchEnd = min(batchStart + batchSize, remaining.count)
+            let batch = Array(remaining[batchStart ..< batchEnd])
+
+            let firstSuccessIndex = try await withThrowingTaskGroup(of: (Int, Bool).self, returning: Int?.self) { group in
+                for (index, model) in batch.enumerated() {
+                    group.addTask {
+                        let success = try await Self.probeOpenRouterModel(
+                            url: probeURL,
+                            timeoutSeconds: probeTimeoutSeconds,
+                            apiKey: apiKey,
+                            model: model
+                        )
+                        return (index, success)
+                    }
+                }
+
+                var outcomesByIndex: [Int: Bool] = [:]
+                var nextResolvableIndex = 0
+                for try await (index, success) in group {
+                    outcomesByIndex[index] = success
+                    while let outcome = outcomesByIndex[nextResolvableIndex] {
+                        if outcome {
+                            group.cancelAll()
+                            return nextResolvableIndex
+                        }
+                        nextResolvableIndex += 1
+                    }
+                }
+                return nil
+            }
+
+            if let firstSuccessIndex {
+                return batch[firstSuccessIndex]
+            }
+
+            batchStart = batchEnd
+        }
+
+        return nil
+    }
+
+    private func fetchOpenRouterModels(apiKey: String) async throws -> [String] {
+        guard let baseURL = URL(string: settings.openRouterBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
+        }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NSError(domain: "TextPolish", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid OpenRouter base URL"])
+        }
+
+        components.path = OpenRouterEndpointPath.modelsPath(basePath: components.path)
+
+        guard let url = components.url else {
+            throw NSError(domain: "TextPolish", code: 11, userInfo: [NSLocalizedDescriptionKey: "Invalid models URL"])
+        }
+
+        var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
+        request.httpMethod = "GET"
+        request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "TextPolish", code: 12, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
+        }
+
+        if (200 ..< 300).contains(http.statusCode) {
+            let decoded = try JSONDecoder().decode(OpenRouterModelsResponse.self, from: data)
+            let models = decoded.data ?? []
+            return models.map(\.id)
+        }
+
+        let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        throw NSError(
+            domain: "TextPolish",
+            code: http.statusCode,
+            userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : "HTTP \(http.statusCode): \(text.prefix(240))"]
+        )
+    }
+
+    private func fetchGeminiModels(apiKey: String) async throws -> [String] {
+        guard let baseURL = URL(string: settings.geminiBaseURL) else {
+            throw NSError(domain: "TextPolish", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini base URL"])
+        }
+
+        let versionsToTry = ["v1beta", "v1"]
+        var lastError: Error?
+
+        for (index, version) in versionsToTry.enumerated() {
+            guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+                throw NSError(domain: "TextPolish", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini base URL"])
+            }
+            components.path = GeminiEndpointPath.modelsPath(basePath: components.path, apiVersion: version)
+
+            var items = components.queryItems ?? []
+            items.removeAll { $0.name == "key" }
+            items.append(URLQueryItem(name: "key", value: apiKey))
+            components.queryItems = items
+            guard let url = components.url else {
+                throw NSError(domain: "TextPolish", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid models URL"])
+            }
+
+            var request = URLRequest(url: url, timeoutInterval: settings.requestTimeoutSeconds)
+            request.httpMethod = "GET"
+            request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                lastError = NSError(domain: "TextPolish", code: 3, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
+                continue
+            }
+
+            if (200 ..< 300).contains(http.statusCode) {
+                let decoded = try JSONDecoder().decode(GeminiModelsResponse.self, from: data)
+                let models = decoded.models ?? []
+                return models.compactMap { model in
+                    let supports = model.supportedGenerationMethods ?? []
+                    guard supports.isEmpty || supports.contains("generateContent") else { return nil }
+                    return model.name.hasPrefix("models/") ? String(model.name.dropFirst("models/".count)) : model.name
+                }
+            }
+
+            let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let error = NSError(
+                domain: "TextPolish",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : "HTTP \(http.statusCode): \(text.prefix(240))"]
+            )
+
+            if http.statusCode == 404, index < versionsToTry.count - 1 {
+                lastError = error
+                continue
+            }
+
+            throw error
+        }
+
+        throw lastError ?? NSError(domain: "TextPolish", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unknown error"])
+    }
+
+    private func chooseGeminiModel(from models: [String]) -> String? {
+        guard !models.isEmpty else { return nil }
+
+        func score(_ name: String) -> Int {
+            let lower = name.lowercased()
+            var value = 0
+            if lower == "gemini-2.5-flash-lite" { value += 200 }
+            if lower == "gemini-2.5-flash" { value += 180 }
+            if lower.contains("flash") { value += 100 }
+            if lower.contains("2.5") { value += 120 }
+            if lower.contains("2.0") { value -= 20 }
+            if lower.contains("1.5") { value += 10 }
+            if lower.contains("lite") { value += 10 }
+            if lower.contains("latest") { value += 5 }
+            if lower.contains("preview") { value -= 50 }
+            if lower.contains("exp") || lower.contains("experimental") { value -= 50 }
+            if lower.contains("pro") { value -= 5 }
+            return value
+        }
+
+        return models
+            .map { ($0, score($0)) }
+            .max(by: { $0.1 < $1.1 })?
+            .0
+    }
+
+    private func openRouterScore(_ id: String) -> Int {
+        let lower = id.lowercased()
+        var value = 0
+        if lower == "google/gemma-3n-e4b-it:free" { value += 980 }
+        if lower == "qwen/qwen3-4b:free" { value += 940 }
+        if lower == "meta-llama/llama-3.2-3b-instruct:free" { value += 900 }
+        if lower == "google/gemma-3-12b-it:free" { value += 860 }
+        if lower == "google/gemma-3-27b-it:free" { value += 820 }
+        if lower == "openai/gpt-5-nano" { value += 780 }
+        if lower.contains("gemini") { value += 220 }
+        if lower.contains("flash") { value += 220 }
+        if lower.contains("2.0") { value += 50 }
+        if lower.contains("lite") { value += 30 }
+        if lower.contains("gpt-5-nano") { value += 260 }
+        if lower.contains("gpt-4o-mini") { value += 180 }
+        if lower.contains("gemma-3n") { value += 200 }
+        if lower.contains("4b") { value += 120 }
+        if lower.contains("llama-3.2") { value += 90 }
+        if lower.contains("3b") { value += 30 }
+        if lower.contains("instruct") { value += 20 }
+        if lower.contains(":free") { value += 40 }
+        if lower.contains("preview") { value -= 40 }
+        if lower.contains("think") { value -= 90 }
+        if lower.contains("creative") { value -= 40 }
+        return value
+    }
+
+    private func rankedOpenRouterModels(
+        from models: [String],
+        preferFree: Bool,
+        preferredFirst: String?,
+        excluding: String?
+    ) -> [String] {
+        guard !models.isEmpty else { return [] }
+
+        let filtered = preferFree ? models.filter { $0.hasSuffix(":free") } : models
+        var pool = filtered
+        if let excluding, !excluding.isEmpty {
+            pool.removeAll { $0 == excluding }
+        }
+
+        pool.sort(by: { openRouterScore($0) > openRouterScore($1) })
+
+        guard let preferredFirst, !preferredFirst.isEmpty else { return pool }
+        if preferredFirst == excluding { return pool }
+        if preferFree, !preferredFirst.hasSuffix(":free") { return pool }
+
+        var result: [String] = [preferredFirst]
+        result.append(contentsOf: pool.filter { $0 != preferredFirst })
+        return result
+    }
+
+    private func showSimpleAlert(title: String, message: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private enum ApiKeyPromptResult {
+        case save(String)
+        case clear
+        case canceled
+    }
+
+    private func apiKeyPromptResultKind(_ result: ApiKeyPromptResult) -> String {
+        switch result {
+        case .save:
+            return "save"
+        case .clear:
+            return "clear"
+        case .canceled:
+            return "canceled"
+        }
+    }
+
+    private func promptForApiKey(title: String, message: String) -> ApiKeyPromptResult {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = "Paste API key (⌘V or ⌃V)"
+        field.isEditable = true
+        field.isSelectable = true
+        field.allowsEditingTextAttributes = false
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byTruncatingMiddle
+        field.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        alert.accessoryView = field
+
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Clear")
+
+        let window = alert.window
+        window.level = .floating
+        DispatchQueue.main.async { [weak field] in
+            guard let field, let window = field.window, window.isVisible else { return }
+            window.makeFirstResponder(field)
+            field.selectText(nil)
+        }
+
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let wantsPaste =
+                (event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control)) &&
+                event.charactersIgnoringModifiers?.lowercased() == "v"
+            if wantsPaste {
+                NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                return nil
+            }
+            return event
+        }
+        defer {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+
+        let response = alert.runModal()
+        window.orderOut(nil)
+        switch response {
+        case .alertFirstButtonReturn: // Save
+            let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else {
+                NSSound.beep()
+                return .canceled
+            }
+            return .save(value)
+        case .alertThirdButtonReturn: // Clear
+            return .clear
+        default:
+            return .canceled
+        }
+    }
+
+    private func promptForText(title: String, message: String, placeholder: String, initialValue: String) -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = placeholder
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byTruncatingMiddle
+        field.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        field.stringValue = initialValue
+        alert.accessoryView = field
+
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let window = alert.window
+        window.level = .floating
+        DispatchQueue.main.async { [weak field] in
+            guard let field, let window = field.window, window.isVisible else { return }
+            window.makeFirstResponder(field)
+            field.selectText(nil)
+        }
+
+        let response = alert.runModal()
+        window.orderOut(nil)
+        guard response == .alertFirstButtonReturn else { return nil }
+        return field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @objc private func openSettingsFile() {
+        NSWorkspace.shared.open(Settings.settingsFileURL())
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func showAboutAndPrivacy() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
+            let header = "\(appDisplayName) \(version)"
+
+            let providerName: String
+            let providerModel: String
+            let providerURL: String
+            switch self.settings.provider {
+            case .gemini:
+                providerName = "Gemini (Google)"
+                providerModel = self.settings.geminiModel
+                providerURL = self.settings.geminiBaseURL
+            case .openRouter:
+                providerName = "OpenRouter"
+                providerModel = self.settings.openRouterModel
+                providerURL = self.settings.openRouterBaseURL
+            case .openAI:
+                providerName = "OpenAI"
+                providerModel = self.settings.openAIModel
+                providerURL = self.settings.openAIBaseURL
+            case .anthropic:
+                providerName = "Anthropic"
+                providerModel = self.settings.anthropicModel
+                providerURL = self.settings.anthropicBaseURL
+            }
+
+            let settingsPath = Settings.settingsFileURL().path
+
+            let message = [
+                "Small, fast menu bar text polish for grammar and tone. Minimal edits, keeps formatting.",
+                "",
+                "Shortcuts:",
+                "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
+                "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
+                "• Tone Analysis: \(settings.hotKeyAnalyzeTone.displayString)",
+                "",
+                "Provider:",
+                "• Provider: \(providerName)",
+                "• Model: \(providerModel)",
+                "• URL: \(providerURL)",
+                "",
+                "Usage:",
+                "• Badge shows total successful corrections + analyses today (resets daily)",
+                "• Optional automatic fallback to alternate provider on errors",
+                "",
+                "Updates:",
+                "• Delivered via GitHub Releases",
+                "• Check from the menu: Check for Updates > Check",
+                "",
+                "Security:",
+                "• API keys stored in macOS Keychain",
+                "• No analytics or telemetry",
+                "",
+                "Privacy:",
+                "• Text stays on-device until you trigger an action",
+                "• Copies selected text temporarily and restores your clipboard",
+                "• Sends only selected text to the provider over HTTPS",
+                "• Pastes corrected text back (tone analysis shows a window instead)",
+                "• TextPolish does not store your text",
+                "• Provider may log requests per their policy",
+                "• Settings stored at \(settingsPath)",
+                "• Keychain service: \(self.keychainService)",
+                "",
+                "Requires Accessibility permission to send ⌘C, ⌘V, and ⌘A.",
+                "",
+                "Creator: Kurniadi Ilham",
+                "GitHub: https://github.com/kxxil01",
+                "LinkedIn: https://linkedin.com/in/kurniadi-ilham",
+            ].joined(separator: "\n")
+
+            self.showSimpleAlert(title: header, message: message)
+        }
+    }
+
+    @objc private func quit() {
+        NSApp.terminate(nil)
+    }
+
+    @objc private func setCorrectSelectionHotKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let title = "Set Correct Selection Hotkey"
+            let message = "Current: \(self.settings.hotKeyCorrectSelection.displayString)\n\nPress a key combination to change it."
+            if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctSelectionDefault) {
+                if newHotKey == self.settings.hotKeyCorrectSelection {
+                    return
+                }
+                if newHotKey == self.settings.hotKeyCorrectAll {
+                    let oldSelection = self.settings.hotKeyCorrectSelection
+                    let oldAll = self.settings.hotKeyCorrectAll
+                    self.applySettingsMutation {
+                        $0.hotKeyCorrectSelection = oldAll
+                        $0.hotKeyCorrectAll = oldSelection
+                    }
+                    do {
+                        try self.hotKeyManager.registerHotKeys(
+                            correctSelection: self.settings.hotKeyCorrectSelection,
+                            correctAll: self.settings.hotKeyCorrectAll,
+                            analyzeTone: self.settings.hotKeyAnalyzeTone
+                        )
+                        self.syncHotKeyMenuItems()
+                    } catch {
+                        self.applySettingsMutation {
+                            $0.hotKeyCorrectSelection = oldSelection
+                            $0.hotKeyCorrectAll = oldAll
+                        }
+                        self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+                    }
+                    return
+                }
+                if HotKeyManager.isHotKeyInUse(
+                    hotKey: newHotKey,
+                    ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
+                ) {
+                    self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+                    return
+                }
+                let oldHotKey = self.settings.hotKeyCorrectSelection
+                self.applySettingsMutation { $0.hotKeyCorrectSelection = newHotKey }
+                do {
+                    try self.hotKeyManager.registerHotKeys(
+                        correctSelection: self.settings.hotKeyCorrectSelection,
+                        correctAll: self.settings.hotKeyCorrectAll,
+                        analyzeTone: self.settings.hotKeyAnalyzeTone
+                    )
+                    self.syncHotKeyMenuItems()
+                } catch {
+                    self.applySettingsMutation { $0.hotKeyCorrectSelection = oldHotKey }
+                    self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setCorrectAllHotKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let title = "Set Correct All Hotkey"
+            let message = "Current: \(self.settings.hotKeyCorrectAll.displayString)\n\nPress a key combination to change it."
+            if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .correctAllDefault) {
+                if newHotKey == self.settings.hotKeyCorrectAll {
+                    return
+                }
+                if newHotKey == self.settings.hotKeyCorrectSelection {
+                    let oldSelection = self.settings.hotKeyCorrectSelection
+                    let oldAll = self.settings.hotKeyCorrectAll
+                    self.applySettingsMutation {
+                        $0.hotKeyCorrectSelection = oldAll
+                        $0.hotKeyCorrectAll = oldSelection
+                    }
+                    do {
+                        try self.hotKeyManager.registerHotKeys(
+                            correctSelection: self.settings.hotKeyCorrectSelection,
+                            correctAll: self.settings.hotKeyCorrectAll,
+                            analyzeTone: self.settings.hotKeyAnalyzeTone
+                        )
+                        self.syncHotKeyMenuItems()
+                    } catch {
+                        self.applySettingsMutation {
+                            $0.hotKeyCorrectSelection = oldSelection
+                            $0.hotKeyCorrectAll = oldAll
+                        }
+                        self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+                    }
+                    return
+                }
+                if HotKeyManager.isHotKeyInUse(
+                    hotKey: newHotKey,
+                    ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
+                ) {
+                    self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+                    return
+                }
+                let oldHotKey = self.settings.hotKeyCorrectAll
+                self.applySettingsMutation { $0.hotKeyCorrectAll = newHotKey }
+                do {
+                    try self.hotKeyManager.registerHotKeys(
+                        correctSelection: self.settings.hotKeyCorrectSelection,
+                        correctAll: self.settings.hotKeyCorrectAll,
+                        analyzeTone: self.settings.hotKeyAnalyzeTone
+                    )
+                    self.syncHotKeyMenuItems()
+                } catch {
+                    self.applySettingsMutation { $0.hotKeyCorrectAll = oldHotKey }
+                    self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func setAnalyzeToneHotKey() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let title = "Set Analyze Tone Hotkey"
+            let message = "Current: \(self.settings.hotKeyAnalyzeTone.displayString)\n\nPress a key combination to change it."
+            if let newHotKey = self.promptForHotKey(title: title, message: message, defaultHotKey: .analyzeToneDefault) {
+                if newHotKey == self.settings.hotKeyAnalyzeTone {
+                    return
+                }
+                if HotKeyManager.isHotKeyInUse(
+                    hotKey: newHotKey,
+                    ignoring: [self.settings.hotKeyCorrectSelection, self.settings.hotKeyCorrectAll, self.settings.hotKeyAnalyzeTone]
+                ) {
+                    self.showSimpleAlert(title: "Hotkey Already in Use", message: "This combination is already used by another application.")
+                    return
+                }
+                let oldHotKey = self.settings.hotKeyAnalyzeTone
+                self.applySettingsMutation { $0.hotKeyAnalyzeTone = newHotKey }
+                do {
+                    try self.hotKeyManager.registerHotKeys(
+                        correctSelection: self.settings.hotKeyCorrectSelection,
+                        correctAll: self.settings.hotKeyCorrectAll,
+                        analyzeTone: self.settings.hotKeyAnalyzeTone
+                    )
+                    self.syncHotKeyMenuItems()
+                } catch {
+                    self.applySettingsMutation { $0.hotKeyAnalyzeTone = oldHotKey }
+                    self.showSimpleAlert(title: "Failed to Register Hotkey", message: "\(error)")
+                }
+            }
+        }
+    }
+
+    @objc private func resetHotKeys() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            self.applySettingsMutation {
+                $0.hotKeyCorrectSelection = .correctSelectionDefault
+                $0.hotKeyCorrectAll = .correctAllDefault
+                $0.hotKeyAnalyzeTone = .analyzeToneDefault
+            }
+            do {
+                try self.hotKeyManager.registerHotKeys(
+                    correctSelection: self.settings.hotKeyCorrectSelection,
+                    correctAll: self.settings.hotKeyCorrectAll,
+                    analyzeTone: self.settings.hotKeyAnalyzeTone
+                )
+                self.syncHotKeyMenuItems()
+                self.showSimpleAlert(title: "Hotkeys Reset", message: "Hotkeys have been reset to defaults.")
+            } catch {
+                self.showSimpleAlert(title: "Failed to Reset Hotkeys", message: "\(error)")
+            }
+        }
+    }
+
+    private func syncHotKeyMenuItems() {
+        let selectionHotKey = settings.hotKeyCorrectSelection
+        let allHotKey = settings.hotKeyCorrectAll
+        let analyzeToneHotKey = settings.hotKeyAnalyzeTone
+
+        selectionItem?.title = "Correct Selection"
+        selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)
+        selectionItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: selectionHotKey.modifiers)
+
+        allItem?.title = "Correct All"
+        allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
+        allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
+
+        analyzeToneItem?.title = "Analyze Tone"
+        analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
+        analyzeToneItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: analyzeToneHotKey.modifiers)
+    }
+
+    private func syncCancelMenuState() {
+        cancelCorrectionItem?.isEnabled =
+            correctionController?.isBusy == true || toneAnalysisController?.isBusy == true
+    }
+
+    private func promptForHotKey(title: String, message: String, defaultHotKey: Settings.HotKey) -> Settings.HotKey? {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        textField.isEditable = false
+        textField.isSelectable = false
+        textField.alignment = .center
+        textField.font = NSFont.systemFont(ofSize: 14)
+        textField.placeholderString = "Press a key combination"
+        alert.accessoryView = textField
+
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Reset")
+        alert.addButton(withTitle: "Record")
+
+        let window = alert.window
+        window.level = .floating
+
+        DispatchQueue.main.async { [weak textField] in
+            guard let textField, let window = textField.window, window.isVisible else { return }
+            textField.stringValue = "Press keys..."
+        }
+
+        var capturedHotKey: Settings.HotKey? = nil
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak textField] event in
+            let decision = HotKeyPromptInterpreter.interpret(
+                eventType: event.type,
+                keyCode: event.keyCode,
+                modifiers: event.modifierFlags
+            )
+
+            switch decision {
+            case .passThrough:
+                return event
+            case .cancel:
+                NSApp.stopModal(withCode: .alertFirstButtonReturn)
+                return nil
+            case .reset:
+                NSApp.stopModal(withCode: .alertSecondButtonReturn)
+                return nil
+            case .missingModifier:
+                textField?.stringValue = "Add a modifier (Command/Option/Control/Shift)"
+                NSSound.beep()
+                return nil
+            case let .capture(hotKey):
+                capturedHotKey = hotKey
+                NSApp.stopModal(withCode: .alertThirdButtonReturn)
+                return nil
+            }
+        }
+
+        let response = alert.runModal()
+        window.orderOut(nil)
+        if let monitor { NSEvent.removeMonitor(monitor) }
+
+        switch response {
+        case .alertThirdButtonReturn:
+            return capturedHotKey
+        case .alertSecondButtonReturn:
+            return defaultHotKey
+        default:
+            return nil
+        }
+    }
 }
 
 #if DEBUG
-extension AppDelegate {
-  func debugFinishLaunching() {
-    applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-  }
+    extension AppDelegate {
+        func debugFinishLaunching() {
+            applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        }
 
-  var debugCorrectionOperationTimeout: Duration? {
-    correctionController?.debugOperationTimeout
-  }
+        var debugCorrectionOperationTimeout: Duration? {
+            correctionController?.debugOperationTimeout
+        }
 
-  var debugToneOperationTimeout: Duration? {
-    toneAnalysisController?.debugOperationTimeout
-  }
+        var debugToneOperationTimeout: Duration? {
+            toneAnalysisController?.debugOperationTimeout
+        }
 
-  var debugHasMidnightRefreshTimer: Bool {
-    midnightRefreshTimer != nil
-  }
+        var debugHasMidnightRefreshTimer: Bool {
+            midnightRefreshTimer != nil
+        }
 
-  var debugStatusItemTitle: String? {
-    statusItem.button?.title
-  }
+        var debugStatusItemTitle: String? {
+            statusItem.button?.title
+        }
 
-  @discardableResult
-  func debugHandleRegisteredHotKey(_ id: Int, now: ContinuousClock.Instant) -> Bool {
-    handleRegisteredHotKey(id, now: now)
-  }
-}
+        @discardableResult
+        func debugHandleRegisteredHotKey(_ id: Int, now: ContinuousClock.Instant) -> Bool {
+            handleRegisteredHotKey(id, now: now)
+        }
+    }
 #endif
 
 extension AppDelegate: SPUUpdaterDelegate {
-  nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      self.updateFoundInCycle = true
-      self.updateStatus = .available
-      self.recordLastUpdateCheck()
-      self.syncUpdateMenuItems()
-      if self.manualUpdateCheckInProgress {
-        self.feedback?.showInfo("Update available.")
-      }
-    }
-  }
-
-  nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
-    let nsError = error as NSError
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
-      self.updateFoundInCycle = false
-      self.updateStatus = .message(feedback.message)
-      self.recordLastUpdateCheck()
-      self.syncUpdateMenuItems()
-      if self.manualUpdateCheckInProgress {
-        self.finishManualUpdateCheck(with: feedback)
-      }
-    }
-  }
-
-  nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-    let nsError = error as NSError?
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      guard updateCheck == .updates else { return }
-
-      let foundUpdate = self.updateFoundInCycle
-      self.updateFoundInCycle = false
-      if foundUpdate {
-        self.updateStatus = .available
-        self.recordLastUpdateCheck()
-        self.syncUpdateMenuItems()
-        if self.manualUpdateCheckInProgress {
-          self.finishManualUpdateCheck(with: nil)
+    nonisolated func updater(_: SPUUpdater, didFindValidUpdate _: SUAppcastItem) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.updateFoundInCycle = true
+            self.updateStatus = .available
+            self.recordLastUpdateCheck()
+            self.syncUpdateMenuItems()
+            if self.manualUpdateCheckInProgress {
+                self.feedback?.showInfo("Update available.")
+            }
         }
-        return
-      }
-
-      if let nsError {
-        let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
-        self.updateStatus = .message(feedback.message)
-        self.recordLastUpdateCheck()
-        self.syncUpdateMenuItems()
-        if self.manualUpdateCheckInProgress {
-          self.finishManualUpdateCheck(with: feedback)
-        }
-        return
-      }
-
-      self.updateStatus = .upToDate
-      self.recordLastUpdateCheck()
-      self.syncUpdateMenuItems()
-      if self.manualUpdateCheckInProgress {
-        self.finishManualUpdateCheck(with: UpdateCheckFeedback(kind: .info, message: "You're up to date."))
-      }
     }
-  }
+
+    nonisolated func updater(_: SPUUpdater, didAbortWithError error: Error) {
+        let nsError = error as NSError
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
+            self.updateFoundInCycle = false
+            self.updateStatus = .message(feedback.message)
+            self.recordLastUpdateCheck()
+            self.syncUpdateMenuItems()
+            if self.manualUpdateCheckInProgress {
+                self.finishManualUpdateCheck(with: feedback)
+            }
+        }
+    }
+
+    nonisolated func updater(_: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        let nsError = error as NSError?
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard updateCheck == .updates else { return }
+
+            let foundUpdate = self.updateFoundInCycle
+            self.updateFoundInCycle = false
+            if foundUpdate {
+                self.updateStatus = .available
+                self.recordLastUpdateCheck()
+                self.syncUpdateMenuItems()
+                if self.manualUpdateCheckInProgress {
+                    self.finishManualUpdateCheck(with: nil)
+                }
+                return
+            }
+
+            if let nsError {
+                let feedback = UpdateCheckFeedback.fromSparkleError(nsError)
+                self.updateStatus = .message(feedback.message)
+                self.recordLastUpdateCheck()
+                self.syncUpdateMenuItems()
+                if self.manualUpdateCheckInProgress {
+                    self.finishManualUpdateCheck(with: feedback)
+                }
+                return
+            }
+
+            self.updateStatus = .upToDate
+            self.recordLastUpdateCheck()
+            self.syncUpdateMenuItems()
+            if self.manualUpdateCheckInProgress {
+                self.finishManualUpdateCheck(with: UpdateCheckFeedback(kind: .info, message: "You're up to date."))
+            }
+        }
+    }
 }
