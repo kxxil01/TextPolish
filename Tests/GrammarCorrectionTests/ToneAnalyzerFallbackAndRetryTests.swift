@@ -440,6 +440,9 @@ private struct CountingSuccessToneAnalyzer: ToneAnalyzer, @unchecked Sendable {
       tone: .neutral,
       plainMeaning: "ok",
       likelyIntent: "ok",
+      sentiment: .neutral,
+      formality: .neutral,
+      keyPhrases: [],
       misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
       ambiguities: [],
       suggestedReplies: []

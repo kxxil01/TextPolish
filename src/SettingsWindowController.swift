@@ -3,14 +3,14 @@ import AppKit
 class SettingsWindowController: NSWindowController {
     var viewController: SettingsWindowViewController?
 
-    convenience init() {
+    convenience init(keychainServiceOverride: String? = nil) {
         let window = Self.createWindow()
         self.init(window: window)
         self.window?.title = "TextPolish Settings"
         self.window?.isReleasedWhenClosed = false
         self.window?.delegate = self
 
-        setupViewController()
+        setupViewController(keychainServiceOverride: keychainServiceOverride)
     }
 
     private static func createWindow() -> NSWindow {
@@ -31,8 +31,10 @@ class SettingsWindowController: NSWindowController {
         return window
     }
 
-    private func setupViewController() {
+    func setupViewController(keychainServiceOverride: String? = nil) {
+        guard viewController == nil else { return }
         let vc = SettingsWindowViewController()
+        vc.keychainServiceOverride = keychainServiceOverride
         viewController = vc
         vc.settingsWindowController = self
 
