@@ -77,6 +77,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - State
 
     var settings: Settings!
+    var keychainServiceOverride: String?
     weak var delegate: SettingsWindowViewControllerDelegate?
     weak var settingsWindowController: SettingsWindowController?
     private var settingsObserver: Any?
@@ -84,9 +85,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - Lifecycle
 
     override func loadView() {
-        let rootView = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 480))
-        rootView.autoresizingMask = [.width, .height]
-        view = rootView
+        let vibrancy = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 480))
+        vibrancy.material = .sidebar
+        vibrancy.blendingMode = .behindWindow
+        vibrancy.state = .active
+        vibrancy.autoresizingMask = [.width, .height]
+        view = vibrancy
     }
 
     override func viewDidLoad() {
@@ -221,28 +225,32 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         button.target = self
         button.action = #selector(providerTileClicked(_:))
         button.wantsLayer = true
-        button.layer?.cornerRadius = 8
+        button.layer?.cornerRadius = 10
 
-        let symbols: [String] = ["\u{2726}", "\u{21C4}", "\u{25C9}", "\u{2662}"]
-        let symbol = symbols[min(tag, symbols.count - 1)]
-
-        let symbolLabel = NSTextField(labelWithString: symbol)
-        symbolLabel.font = NSFont.systemFont(ofSize: 18)
-        symbolLabel.alignment = .center
-        symbolLabel.tag = 100
-        button.addSubview(symbolLabel)
+        let sfNames = ["sparkle", "arrow.left.arrow.right", "circle.dotted", "diamond"]
+        let sfName = sfNames[min(tag, sfNames.count - 1)]
+        let symbolImage = NSImageView()
+        if let img = NSImage(systemSymbolName: sfName, accessibilityDescription: title) {
+            let config = NSImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+            symbolImage.image = img.withSymbolConfiguration(config)
+            symbolImage.contentTintColor = .secondaryLabelColor
+        }
+        symbolImage.imageAlignment = .alignCenter
+        symbolImage.tag = 100
+        button.addSubview(symbolImage)
 
         let nameLabel = NSTextField(labelWithString: title)
-        nameLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        nameLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         nameLabel.alignment = .center
+        nameLabel.textColor = .labelColor
         nameLabel.tag = 101
         button.addSubview(nameLabel)
 
         let badge = NSTextField(labelWithString: "")
-        badge.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        badge.font = NSFont.systemFont(ofSize: 8, weight: .bold)
         badge.alignment = .center
         badge.wantsLayer = true
-        badge.layer?.cornerRadius = 4
+        badge.layer?.cornerRadius = 5
         badge.tag = 102
         button.addSubview(badge)
 
@@ -251,14 +259,15 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     private func layoutTileSubviews(_ button: NSButton) {
         let w = button.bounds.width
+        let h = button.bounds.height
         for sub in button.subviews {
             switch sub.tag {
-            case 100: sub.frame = NSRect(x: 0, y: 28, width: w, height: 22)
-            case 101: sub.frame = NSRect(x: 0, y: 14, width: w, height: 16)
+            case 100: sub.frame = NSRect(x: (w - 24) / 2, y: h - 34, width: 24, height: 24)
+            case 101: sub.frame = NSRect(x: 0, y: h - 52, width: w, height: 16)
             case 102:
                 let badge = sub as! NSTextField
-                let badgeWidth = max(badge.attributedStringValue.size().width + 12, 50)
-                badge.frame = NSRect(x: (w - badgeWidth) / 2, y: 1, width: badgeWidth, height: 14)
+                let badgeWidth = max(badge.attributedStringValue.size().width + 10, 12)
+                badge.frame = NSRect(x: w - badgeWidth - 6, y: h - 16, width: badgeWidth, height: 14)
             default: break
             }
         }
@@ -268,24 +277,30 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         button.layer?.borderWidth = isActive ? 2 : 1
         button.layer?.borderColor = isActive
             ? NSColor.controlAccentColor.cgColor
-            : NSColor.separatorColor.cgColor
+            : NSColor.separatorColor.withAlphaComponent(0.5).cgColor
         button.layer?.backgroundColor = isActive
-            ? NSColor.controlAccentColor.withAlphaComponent(0.06).cgColor
-            : NSColor.controlBackgroundColor.cgColor
+            ? NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+            : NSColor.windowBackgroundColor.withAlphaComponent(0.5).cgColor
+
+        if let symbolView = button.subviews.first(where: { $0.tag == 100 }) as? NSImageView {
+            symbolView.contentTintColor = isActive ? .controlAccentColor : .secondaryLabelColor
+        }
+        if let nameLabel = button.subviews.first(where: { $0.tag == 101 }) as? NSTextField {
+            nameLabel.textColor = isActive ? .controlAccentColor : .labelColor
+        }
 
         guard let badge = button.subviews.first(where: { $0.tag == 102 }) as? NSTextField else { return }
         if isActive {
-            badge.stringValue = "Active"
+            badge.stringValue = "\u{2713}"
             badge.textColor = .white
             badge.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         } else if hasKey {
-            badge.stringValue = "Configured"
-            badge.textColor = .systemGreen
-            badge.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.12).cgColor
+            badge.stringValue = "\u{2713}"
+            badge.textColor = .white
+            badge.layer?.backgroundColor = NSColor.systemGreen.cgColor
         } else {
-            badge.stringValue = "No key"
-            badge.textColor = .tertiaryLabelColor
-            badge.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+            badge.stringValue = ""
+            badge.layer?.backgroundColor = NSColor.clear.cgColor
         }
         layoutTileSubviews(button)
     }
@@ -294,6 +309,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     private func setupUI() {
         let padding: CGFloat = 20
+        let titleBarInset: CGFloat = 38
 
         segmentedControl = NSSegmentedControl(
             labels: ["Provider", "Hotkeys", "Advanced", "About"],
@@ -302,17 +318,18 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             action: #selector(segmentChanged(_:))
         )
         segmentedControl.selectedSegment = 0
+        segmentedControl.segmentStyle = .automatic
         segmentedControl.frame = NSRect(
             x: padding,
-            y: view.frame.height - 44,
+            y: view.frame.height - titleBarInset - 32,
             width: view.frame.width - padding * 2,
             height: 28
         )
         segmentedControl.autoresizingMask = [.width, .minYMargin]
         view.addSubview(segmentedControl)
 
-        let contentHeight = view.frame.height - 56
-        contentContainer = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: contentHeight))
+        let contentTop = view.frame.height - titleBarInset - 44
+        contentContainer = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: contentTop))
         contentContainer.autoresizingMask = [.width, .height]
         view.addSubview(contentContainer)
 
@@ -342,29 +359,30 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
-        let tileWidth = (contentWidth - 12) / 4
-        let tileHeight: CGFloat = 56
-        let tileY = container.frame.height - tileHeight - 8
+        let tileGap: CGFloat = 8
+        let tileWidth = (contentWidth - tileGap * 3) / 4
+        let tileHeight: CGFloat = 64
+        let tileY = container.frame.height - tileHeight - 4
 
-        // Provider tiles
         let tiles = [geminiProviderButton!, openRouterProviderButton!, openAIProviderButton!, anthropicProviderButton!]
         for (i, tile) in tiles.enumerated() {
-            tile.frame = NSRect(x: padding + (tileWidth + 4) * CGFloat(i), y: tileY, width: tileWidth, height: tileHeight)
+            tile.frame = NSRect(x: padding + (tileWidth + tileGap) * CGFloat(i), y: tileY, width: tileWidth, height: tileHeight)
             tile.autoresizingMask = [.width, .minYMargin]
             container.addSubview(tile)
             layoutTileSubviews(tile)
         }
 
-        // Detail box
-        let detailBox = NSBox(frame: NSRect(x: padding, y: 20, width: contentWidth, height: tileY - 30))
+        let detailHeight: CGFloat = 192
+        let detailY = tileY - detailHeight - 12
+        let detailBox = NSBox(frame: NSRect(x: padding, y: detailY, width: contentWidth, height: detailHeight))
         detailBox.boxType = .custom
-        detailBox.cornerRadius = 8
-        detailBox.borderColor = NSColor.separatorColor
+        detailBox.cornerRadius = 10
+        detailBox.borderColor = NSColor.separatorColor.withAlphaComponent(0.4)
         detailBox.borderWidth = 1
-        detailBox.fillColor = NSColor.controlBackgroundColor
+        detailBox.fillColor = NSColor.windowBackgroundColor.withAlphaComponent(0.4)
         detailBox.titlePosition = .noTitle
-        detailBox.contentViewMargins = NSSize(width: 16, height: 12)
-        detailBox.autoresizingMask = [.width, .height]
+        detailBox.contentViewMargins = NSSize(width: 16, height: 14)
+        detailBox.autoresizingMask = [.width]
         container.addSubview(detailBox)
 
         let dc = detailBox.contentView!
@@ -375,8 +393,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         var y = dc.frame.height - 32
 
-        // API Key
         let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
+        apiKeyLabel.textColor = .secondaryLabelColor
         apiKeyLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
         dc.addSubview(apiKeyLabel)
 
@@ -385,23 +403,24 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         dc.addSubview(providerApiKeyField)
         y -= 36
 
-        // Model
         let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
+        modelLabel.textColor = .secondaryLabelColor
         modelLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
         dc.addSubview(modelLabel)
 
-        let detectWidth: CGFloat = 90
-        providerModelField.frame = NSRect(x: fieldX, y: y, width: fieldWidth - detectWidth - 6, height: 26)
+        let detectWidth: CGFloat = 72
+        providerModelField.frame = NSRect(x: fieldX, y: y, width: fieldWidth - detectWidth - 8, height: 26)
         providerModelField.autoresizingMask = [.width]
         dc.addSubview(providerModelField)
 
+        detectModelButton.bezelStyle = .rounded
         detectModelButton.frame = NSRect(x: fieldX + fieldWidth - detectWidth, y: y, width: detectWidth, height: 26)
         detectModelButton.autoresizingMask = [.minXMargin]
         dc.addSubview(detectModelButton)
         y -= 36
 
-        // Base URL
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
+        baseURLLabel.textColor = .secondaryLabelColor
         baseURLLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
         dc.addSubview(baseURLLabel)
 
@@ -410,8 +429,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         dc.addSubview(providerBaseURLField)
         y -= 36
 
-        // Fallback checkbox
-        fallbackCheckbox.frame = NSRect(x: 0, y: y, width: dw, height: 20)
+        fallbackCheckbox.frame = NSRect(x: 0, y: y + 4, width: dw, height: 20)
         fallbackCheckbox.autoresizingMask = [.width]
         dc.addSubview(fallbackCheckbox)
 
@@ -484,28 +502,28 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
-        var y = container.frame.height - 32
+        var y = container.frame.height - 8
 
-        let titleLabel = createLabel("Hotkey Configuration", fontSize: 16, weight: .bold)
-        titleLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 24)
+        let titleLabel = createLabel("Hotkeys", fontSize: 15, weight: .semibold)
+        titleLabel.frame = NSRect(x: padding, y: y - 20, width: contentWidth, height: 20)
         titleLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(titleLabel)
-        y -= 22
+        y -= 24
 
-        let instructionLabel = createLabel("Click a field and press desired key combination", fontSize: 11, weight: .regular)
-        instructionLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 17)
-        instructionLabel.textColor = NSColor.secondaryLabelColor
+        let instructionLabel = createLabel("Click a field, then press your desired shortcut", fontSize: 11, weight: .regular)
+        instructionLabel.frame = NSRect(x: padding, y: y - 16, width: contentWidth, height: 16)
+        instructionLabel.textColor = .tertiaryLabelColor
         instructionLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(instructionLabel)
-        y -= 32
+        y -= 28
 
-        let cardHeight: CGFloat = 3 * 48 + 24
+        let cardHeight: CGFloat = 3 * 44 + 24
         let card = NSBox(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
         card.boxType = .custom
-        card.cornerRadius = 8
-        card.borderColor = NSColor.separatorColor
+        card.cornerRadius = 10
+        card.borderColor = NSColor.separatorColor.withAlphaComponent(0.4)
         card.borderWidth = 1
-        card.fillColor = NSColor.controlBackgroundColor
+        card.fillColor = NSColor.windowBackgroundColor.withAlphaComponent(0.4)
         card.titlePosition = .noTitle
         card.contentViewMargins = NSSize(width: 16, height: 12)
         card.autoresizingMask = [.width, .minYMargin]
@@ -513,11 +531,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let dc = card.contentView!
         let dw = dc.frame.width
-        let labelWidth: CGFloat = 160
+        let labelWidth: CGFloat = 140
         let fieldX = labelWidth + 8
         let fieldWidth = dw - fieldX - 8
 
-        var rowY = dc.frame.height - 40
+        var rowY = dc.frame.height - 36
 
         let rows: [(String, KeyComboField)] = [
             ("Correct Selection", correctSelectionField),
@@ -527,19 +545,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         for (i, (name, field)) in rows.enumerated() {
             let label = createLabel(name, fontSize: 12, weight: .medium)
-            label.frame = NSRect(x: 0, y: rowY + 5, width: labelWidth, height: 20)
+            label.textColor = .secondaryLabelColor
+            label.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
             dc.addSubview(label)
 
-            field.frame = NSRect(x: fieldX, y: rowY, width: fieldWidth, height: 30)
+            field.frame = NSRect(x: fieldX, y: rowY, width: fieldWidth, height: 26)
+            field.wantsLayer = true
             field.layer?.borderWidth = 1
-            field.layer?.borderColor = NSColor.separatorColor.cgColor
+            field.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
             field.layer?.cornerRadius = 6
             field.autoresizingMask = [.width]
             dc.addSubview(field)
-            rowY -= 48
+            rowY -= 44
 
             if i < rows.count - 1 {
-                let sep = NSBox(frame: NSRect(x: 0, y: rowY + 42, width: dw, height: 1))
+                let sep = NSBox(frame: NSRect(x: 0, y: rowY + 38, width: dw, height: 1))
                 sep.boxType = .separator
                 sep.autoresizingMask = [.width]
                 dc.addSubview(sep)
@@ -563,32 +583,31 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
-        var y = container.frame.height - 32
+        var y = container.frame.height - 8
 
-        let titleLabel = createLabel("Advanced Settings", fontSize: 16, weight: .bold)
-        titleLabel.frame = NSRect(x: padding, y: y, width: contentWidth, height: 24)
+        let titleLabel = createLabel("Advanced", fontSize: 15, weight: .semibold)
+        titleLabel.frame = NSRect(x: padding, y: y - 20, width: contentWidth / 2, height: 20)
         titleLabel.autoresizingMask = [.width, .minYMargin]
         container.addSubview(titleLabel)
-        y -= 28
 
         let providerHint = createLabel(
-            settings != nil ? "Per-provider values for \(settings.provider.rawValue)" : "",
-            fontSize: 11, weight: .regular
+            settings != nil ? "\(settings.provider.rawValue)" : "",
+            fontSize: 11, weight: .medium
         )
-        providerHint.textColor = .secondaryLabelColor
-        providerHint.frame = NSRect(x: padding, y: y, width: contentWidth, height: 17)
+        providerHint.textColor = .tertiaryLabelColor
+        providerHint.alignment = .right
+        providerHint.frame = NSRect(x: contentWidth / 2 + padding, y: y - 20, width: contentWidth / 2, height: 20)
         providerHint.autoresizingMask = [.width, .minYMargin]
         container.addSubview(providerHint)
-        y -= 24
+        y -= 32
 
-        let cardBottom: CGFloat = 12
-        let cardHeight = y - cardBottom
-        let card = NSBox(frame: NSRect(x: padding, y: cardBottom, width: contentWidth, height: cardHeight))
+        let cardHeight: CGFloat = 5 * 36 + 70 + 24
+        let card = NSBox(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
         card.boxType = .custom
-        card.cornerRadius = 8
-        card.borderColor = NSColor.separatorColor
+        card.cornerRadius = 10
+        card.borderColor = NSColor.separatorColor.withAlphaComponent(0.4)
         card.borderWidth = 1
-        card.fillColor = NSColor.controlBackgroundColor
+        card.fillColor = NSColor.windowBackgroundColor.withAlphaComponent(0.4)
         card.titlePosition = .noTitle
         card.contentViewMargins = NSSize(width: 16, height: 12)
         card.autoresizingMask = [.width, .minYMargin]
@@ -601,58 +620,58 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         var rowY = dc.frame.height - 32
 
-        // Request Timeout
         let timeoutLabel = createLabel("Request Timeout (s)", fontSize: 12, weight: .medium)
+        timeoutLabel.textColor = .secondaryLabelColor
         timeoutLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
         dc.addSubview(timeoutLabel)
 
         requestTimeoutField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
         dc.addSubview(requestTimeoutField)
-        rowY -= 38
+        rowY -= 36
 
-        let sep1 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        let sep1 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
         sep1.boxType = .separator; sep1.autoresizingMask = [.width]; dc.addSubview(sep1)
 
-        // Correction Language
         let langLabel = createLabel("Correction Language", fontSize: 12, weight: .medium)
+        langLabel.textColor = .secondaryLabelColor
         langLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
         dc.addSubview(langLabel)
 
         languagePopup.frame = NSRect(x: fieldX, y: rowY, width: dw - fieldX - 8, height: 26)
         languagePopup.autoresizingMask = [.width]
         dc.addSubview(languagePopup)
-        rowY -= 38
+        rowY -= 36
 
-        let sep2 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        let sep2 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
         sep2.boxType = .separator; sep2.autoresizingMask = [.width]; dc.addSubview(sep2)
 
-        // Extra Instruction
         let extraLabel = createLabel("Extra Instruction", fontSize: 12, weight: .medium)
+        extraLabel.textColor = .secondaryLabelColor
         extraLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
         dc.addSubview(extraLabel)
 
         extraInstructionField.frame = NSRect(x: fieldX, y: rowY - 44, width: dw - fieldX - 8, height: 70)
         extraInstructionField.autoresizingMask = [.width]
         dc.addSubview(extraInstructionField)
-        rowY -= 86
+        rowY -= 82
 
-        let sep3 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        let sep3 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
         sep3.boxType = .separator; sep3.autoresizingMask = [.width]; dc.addSubview(sep3)
 
-        // Min Similarity
         let simLabel = createLabel("Min Similarity", fontSize: 12, weight: .medium)
+        simLabel.textColor = .secondaryLabelColor
         simLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
         dc.addSubview(simLabel)
 
         activeSimField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
         dc.addSubview(activeSimField)
-        rowY -= 38
+        rowY -= 36
 
-        let sep4 = NSBox(frame: NSRect(x: 0, y: rowY + 32, width: dw, height: 1))
+        let sep4 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
         sep4.boxType = .separator; sep4.autoresizingMask = [.width]; dc.addSubview(sep4)
 
-        // Max Attempts
         let attLabel = createLabel("Max Attempts", fontSize: 12, weight: .medium)
+        attLabel.textColor = .secondaryLabelColor
         attLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
         dc.addSubview(attLabel)
 
@@ -1232,7 +1251,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - Keychain Helpers
 
     private var keychainService: String {
-        Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
+        keychainServiceOverride ?? Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     }
 
     private func hasKeychainKey(account: String) -> Bool {

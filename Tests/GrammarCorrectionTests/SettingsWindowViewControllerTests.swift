@@ -4,20 +4,25 @@ import Carbon
 @testable import GrammarCorrection
 
 final class SettingsWindowViewControllerTests: XCTestCase {
+    static let testKeychainService = "com.kxxil01.TextPolish.Tests"
     var viewController: SettingsWindowViewController!
     var mockDelegate: MockSettingsDelegate!
 
     override func setUp() {
         super.setUp()
         viewController = SettingsWindowViewController()
+        viewController.keychainServiceOverride = Self.testKeychainService
         mockDelegate = MockSettingsDelegate()
         viewController.delegate = mockDelegate
 
-        // Load the view
         let _ = viewController.view
     }
 
     override func tearDown() {
+        let accounts = ["geminiApiKey", "openRouterApiKey", "openAIApiKey", "anthropicApiKey"]
+        for account in accounts {
+            try? Keychain.deletePassword(service: Self.testKeychainService, account: account)
+        }
         viewController = nil
         mockDelegate = nil
         super.tearDown()

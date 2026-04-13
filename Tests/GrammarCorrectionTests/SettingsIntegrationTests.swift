@@ -4,6 +4,7 @@ import Carbon
 @testable import GrammarCorrection
 
 final class SettingsIntegrationTests: XCTestCase {
+    static let testKeychainService = "com.kxxil01.TextPolish.Tests"
     var settingsWindowController: SettingsWindowController!
     var settingsWindowViewController: SettingsWindowViewController!
 
@@ -11,7 +12,7 @@ final class SettingsIntegrationTests: XCTestCase {
         super.setUp()
         settingsWindowController = SettingsWindowController()
         settingsWindowViewController = settingsWindowController.viewController
-        // Force the view to load and viewDidLoad to be called
+        settingsWindowViewController?.keychainServiceOverride = Self.testKeychainService
         let _ = settingsWindowViewController?.view
         settingsWindowViewController?.viewDidLoad()
     }
@@ -39,6 +40,10 @@ final class SettingsIntegrationTests: XCTestCase {
     }
 
     override func tearDown() {
+        let accounts = ["geminiApiKey", "openRouterApiKey", "openAIApiKey", "anthropicApiKey"]
+        for account in accounts {
+            try? Keychain.deletePassword(service: Self.testKeychainService, account: account)
+        }
         settingsWindowController = nil
         settingsWindowViewController = nil
         super.tearDown()

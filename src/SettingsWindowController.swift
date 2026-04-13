@@ -17,10 +17,12 @@ class SettingsWindowController: NSWindowController {
         let size = NSSize(width: 560, height: 480)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .visible
         window.center()
         window.level = .floating
         window.minSize = size
