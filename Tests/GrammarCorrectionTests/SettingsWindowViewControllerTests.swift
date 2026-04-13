@@ -210,7 +210,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
     func testApplyButtonClicked() {
         // Given
-        let mockWindowController = MockSettingsWindowController()
+        let mockWindowController = MockSettingsWindowController(skipSetup: true)
         viewController.settingsWindowController = mockWindowController
         viewController.loadSettings()
 
@@ -223,7 +223,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
     func testCancelButtonClicked() {
         // Given
-        let mockWindowController = MockSettingsWindowController()
+        let mockWindowController = MockSettingsWindowController(skipSetup: true)
         viewController.settingsWindowController = mockWindowController
 
         // When
@@ -305,6 +305,10 @@ class MockSettingsDelegate: SettingsWindowViewControllerDelegate {
 
 class MockSettingsWindowController: SettingsWindowController {
     var closeCalled = false
+
+    convenience init(skipSetup: Bool) {
+        self.init(window: nil)
+    }
 
     override func close() {
         closeCalled = true

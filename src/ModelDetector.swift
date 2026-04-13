@@ -145,6 +145,107 @@ enum ModelDetector {
         }
     }
 
+    static func detectOpenAIModel(
+        apiKey: String,
+        baseURL: String = "https://api.openai.com/v1"
+    ) async throws -> String {
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DetectorError.noApiKey
+        }
+
+        let requestURL = try makeOpenAIModelsURL(baseURL: baseURL)
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("TextPolish/1.0", forHTTPHeaderField: "User-Agent")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw DetectorError.requestFailed("Invalid response")
+            }
+
+            if http.statusCode != 200 {
+                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+                throw DetectorError.requestFailed("HTTP \(http.statusCode): \(message)")
+            }
+
+            let decoded = try JSONDecoder().decode(OpenAIModelsResponse.self, from: data)
+            let gptModels = decoded.data?.filter { $0.id.lowercased().hasPrefix("gpt") } ?? []
+
+            if let preferred = gptModels.first(where: {
+                let id = $0.id.lowercased()
+                return id.contains("nano") || id.contains("mini")
+            }) {
+                return preferred.id
+            }
+            if let gpt = gptModels.first {
+                return gpt.id
+            }
+            if let first = decoded.data?.first {
+                return first.id
+            }
+
+            throw DetectorError.requestFailed("No models found")
+        } catch let error as DetectorError {
+            throw error
+        } catch {
+            throw DetectorError.requestFailed(error.localizedDescription)
+        }
+    }
+
+    static func detectAnthropicModel(
+        apiKey: String,
+        baseURL: String = "https://api.anthropic.com"
+    ) async throws -> String {
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DetectorError.noApiKey
+        }
+
+        let requestURL = try makeAnthropicModelsURL(baseURL: baseURL)
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("TextPolish/1.0", forHTTPHeaderField: "User-Agent")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw DetectorError.requestFailed("Invalid response")
+            }
+
+            if http.statusCode != 200 {
+                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+                throw DetectorError.requestFailed("HTTP \(http.statusCode): \(message)")
+            }
+
+            let decoded = try JSONDecoder().decode(AnthropicModelsResponse.self, from: data)
+            let models = decoded.data ?? []
+
+            if let preferred = models.first(where: {
+                let id = $0.id.lowercased()
+                return id.contains("haiku")
+            }) {
+                return preferred.id
+            }
+            if let sonnet = models.first(where: {
+                $0.id.lowercased().contains("sonnet")
+            }) {
+                return sonnet.id
+            }
+            if let first = models.first {
+                return first.id
+            }
+
+            throw DetectorError.requestFailed("No models found")
+        } catch let error as DetectorError {
+            throw error
+        } catch {
+            throw DetectorError.requestFailed(error.localizedDescription)
+        }
+    }
+
     struct GeminiModelsResponse: Decodable {
         struct Model: Decodable {
             let name: String
@@ -162,6 +263,52 @@ enum ModelDetector {
             let completion: String?
         }
         let data: [Model]?
+    }
+
+    struct OpenAIModelsResponse: Decodable {
+        struct Model: Decodable {
+            let id: String
+        }
+        let data: [Model]?
+    }
+
+    struct AnthropicModelsResponse: Decodable {
+        struct Model: Decodable {
+            let id: String
+        }
+        let data: [Model]?
+    }
+
+    static func makeOpenAIModelsURL(baseURL: String) throws -> URL {
+        guard let url = URL(string: baseURL) else {
+            throw DetectorError.requestFailed("Invalid OpenAI base URL")
+        }
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw DetectorError.requestFailed("Invalid OpenAI base URL")
+        }
+        components.path = OpenAIEndpointPath.modelsPath(basePath: components.path)
+
+        guard let requestURL = components.url else {
+            throw DetectorError.requestFailed("Invalid OpenAI models URL")
+        }
+        return requestURL
+    }
+
+    static func makeAnthropicModelsURL(baseURL: String) throws -> URL {
+        guard let url = URL(string: baseURL) else {
+            throw DetectorError.requestFailed("Invalid Anthropic base URL")
+        }
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw DetectorError.requestFailed("Invalid Anthropic base URL")
+        }
+        components.path = AnthropicEndpointPath.modelsPath(basePath: components.path)
+
+        guard let requestURL = components.url else {
+            throw DetectorError.requestFailed("Invalid Anthropic models URL")
+        }
+        return requestURL
     }
 
     private static func isFreePrice(_ value: String?) -> Bool {

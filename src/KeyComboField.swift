@@ -119,7 +119,10 @@ class KeyComboField: NSView {
     }
 
     func loadFromHotKey(_ hotKey: Settings.HotKey) {
+        let savedCallback = onChange
+        onChange = nil
         self.hotKey = hotKey
+        onChange = savedCallback
     }
 
     deinit {
