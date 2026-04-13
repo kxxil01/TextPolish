@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  TextPolish App Icon — Quill + Sparkle
+  Canonical 1024x1024 source. IconGenerator.swift re-draws this in AppKit.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="quill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8d8d8"/>
+    </linearGradient>
+    <filter id="quillShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="4" result="offsetBlur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.35"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Squircle background (macOS Big Sur+ shape, ~22% corner radius with 6% inset) -->
+  <path d="M 266,64 L 758,64 Q 960,64 960,266 L 960,758 Q 960,960 758,960 L 266,960 Q 64,960 64,758 L 64,266 Q 64,64 266,64 Z" fill="url(#bg)"/>
+
+  <!-- Top highlight -->
+  <path d="M 266,64 L 758,64 Q 960,64 960,266 L 960,758 Q 960,960 758,960 L 266,960 Q 64,960 64,758 L 64,266 Q 64,64 266,64 Z" fill="url(#highlight)"/>
+
+  <!-- Quill group (scaled + positioned in the icon frame) -->
+  <g filter="url(#quillShadow)">
+    <!-- Quill body (feather) -->
+    <path d="M 256,768 Q 352,512 544,352 Q 704,224 800,192 Q 832,320 736,480 Q 608,672 352,800 Z"
+          fill="url(#quill)" stroke="#bdbdbd" stroke-width="6"/>
+
+    <!-- Quill spine -->
+    <line x1="288" y1="768" x2="768" y2="256" stroke="#6a6a6a" stroke-width="9" stroke-linecap="round"/>
+
+    <!-- Feather barb lines (subtle texture) -->
+    <g stroke="#9e9e9e" stroke-width="3" stroke-linecap="round" opacity="0.55">
+      <line x1="360" y1="720" x2="420" y2="690"/>
+      <line x1="400" y1="670" x2="460" y2="640"/>
+      <line x1="450" y1="610" x2="510" y2="580"/>
+      <line x1="500" y1="550" x2="560" y2="520"/>
+      <line x1="550" y1="490" x2="610" y2="460"/>
+      <line x1="600" y1="430" x2="660" y2="400"/>
+      <line x1="650" y1="370" x2="710" y2="340"/>
+      <line x1="700" y1="310" x2="740" y2="285"/>
+    </g>
+
+    <!-- Nib (dark triangle at quill tip) -->
+    <path d="M 256,768 L 224,832 L 320,800 Z" fill="#2c3e50"/>
+    <!-- Nib highlight -->
+    <path d="M 256,768 L 244,800 L 280,790 Z" fill="#34495e"/>
+  </g>
+
+  <!-- AI Sparkles (gold, around the quill) -->
+  <g fill="#ffd93d">
+    <!-- Big 4-point star top-right -->
+    <path d="M 832,320 L 840,352 L 872,360 L 840,368 L 832,400 L 824,368 L 792,360 L 824,352 Z"/>
+    <!-- Medium star mid-right -->
+    <path d="M 896,512 L 902,532 L 922,538 L 902,544 L 896,564 L 890,544 L 870,538 L 890,532 Z"/>
+    <!-- Small star top-center -->
+    <circle cx="640" cy="192" r="14"/>
+    <!-- Tiny star bottom-left -->
+    <path d="M 192,640 L 196,652 L 208,656 L 196,660 L 192,672 L 188,660 L 176,656 L 188,652 Z"/>
+    <!-- Subtle star near nib -->
+    <circle cx="352" cy="832" r="8"/>
+  </g>
+
+  <!-- Sparkle inner highlights -->
+  <g fill="#ffffff">
+    <circle cx="832" cy="360" r="4"/>
+    <circle cx="896" cy="538" r="2.5"/>
+    <circle cx="640" cy="192" r="4"/>
+    <circle cx="352" cy="832" r="2.5"/>
+  </g>
+</svg>
