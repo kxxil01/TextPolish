@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let initialIcon = makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
         statusItem.button?.image = initialIcon
         statusItem.button?.title = StatusItemCountFormatter.title(for: todayCorrectionCount + todayToneAnalysisCount)
-        statusItem.button?.toolTip = appDisplayName
+        statusItem.button?.toolTip = buildStatusBarToolTip()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -159,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.settings = newSettings
                 self.refreshCorrector()
                 self.setupHotKeys()
+                self.updateStatusBarToolTip()
             }
         }
 
@@ -1571,11 +1572,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
     }
 
-    private func setCorrectionLanguage(_ language: Settings.CorrectionLanguage) {
-        guard settings.correctionLanguage != language else { return }
-        applySettingsMutation { $0.correctionLanguage = language }
-    }
-
     private func isRunningFromApplicationsFolder() -> Bool {
         let path = Bundle.main.bundleURL.standardizedFileURL.path
         return path.hasPrefix("/Applications/")
@@ -1623,16 +1619,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default:
             break
         }
-    }
-
-    private func showStartAtLoginRequiresApplications() {
-        NSApp.activate(ignoringOtherApps: true)
-
-        let alert = NSAlert()
-        alert.messageText = "Move \(appDisplayName) to /Applications"
-        alert.informativeText = "Start at Login is most reliable when the app is in /Applications. Install the app there (for example via the .pkg), then enable Start at Login again."
-        alert.addButton(withTitle: "OK")
-        _ = alert.runModal()
     }
 
     private func currentGeminiApiKey() -> String? {
@@ -2238,6 +2224,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func syncCancelMenuState() {
         cancelCorrectionItem?.isEnabled =
             correctionController?.isBusy == true || toneAnalysisController?.isBusy == true
+    }
+
+    /// Builds a tooltip string showing the app name and active provider/model.
+    private func buildStatusBarToolTip() -> String {
+        let providerName: String
+        let model: String
+        switch settings.provider {
+        case .gemini:
+            providerName = "Gemini"
+            model = settings.geminiModel
+        case .openRouter:
+            providerName = "OpenRouter"
+            model = settings.openRouterModel
+        case .openAI:
+            providerName = "OpenAI"
+            model = settings.openAIModel
+        case .anthropic:
+            providerName = "Anthropic"
+            model = settings.anthropicModel
+        }
+        return "\(appDisplayName) (\(providerName): \(model))"
+    }
+
+    /// Updates the status bar tooltip to reflect the current provider/model.
+    /// Called on settings change so users hovering the menu bar icon see accurate info.
+    private func updateStatusBarToolTip() {
+        let toolTip = buildStatusBarToolTip()
+        statusItem.button?.toolTip = toolTip
+        feedback?.updateBaseToolTip(toolTip)
     }
 
 }
