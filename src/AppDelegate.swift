@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pendingAfterMenuAction: (@MainActor () async -> Void)?
     private var settingsWindowController: SettingsWindowController?
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: false,
         updaterDelegate: self,
         userDriverDelegate: nil
     )
@@ -171,12 +171,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             object: nil
         )
         setupHotKeys()
-        _ = updaterController
         if isUpdaterAvailable {
-            updaterController.updater.automaticallyChecksForUpdates = true
-            TPLogger.log("Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
+            do {
+                try updaterController.updater.start()
+                updaterController.updater.automaticallyChecksForUpdates = true
+                TPLogger.log("Auto-update enabled, interval: \(updaterController.updater.updateCheckInterval)s")
+            } catch {
+                TPLogger.log("Sparkle failed to start: \(error.localizedDescription)")
+            }
         } else {
-            updaterController.updater.automaticallyChecksForUpdates = false
             TPLogger.log("Auto-update disabled (missing SUFeedURL or SUPublicEDKey)")
         }
         scheduleNextDailyReset()
