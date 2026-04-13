@@ -94,6 +94,37 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNotNil(viewController.extraInstructionField, "Extra instruction field should exist")
     }
 
+    func testAboutSectionRenders() {
+        // Switch to the About segment (index 3) and verify the section renders without error
+        viewController.segmentedControl.selectedSegment = 3
+        viewController.segmentedControl.sendAction(
+            viewController.segmentedControl.action,
+            to: viewController.segmentedControl.target
+        )
+
+        // Find the content container (last subview of the root view)
+        guard let contentContainer = viewController.view.subviews.last else {
+            XCTFail("Content container should exist")
+            return
+        }
+
+        // Content container should have one section view (the About section)
+        XCTAssertEqual(contentContainer.subviews.count, 1,
+            "About segment should render one section view")
+
+        // The section should have multiple subviews (title, tagline, privacy bullets, creator info, etc.)
+        let aboutSection = contentContainer.subviews.first
+        XCTAssertGreaterThan(aboutSection?.subviews.count ?? 0, 5,
+            "About section should contain multiple labels (title, tagline, privacy bullets, creator)")
+
+        // Verify at least one label contains "TextPolish" (the app title)
+        let hasTitleLabel = aboutSection?.subviews.contains { view in
+            guard let label = view as? NSTextField else { return false }
+            return label.stringValue.contains("TextPolish")
+        } ?? false
+        XCTAssertTrue(hasTitleLabel, "About section should contain a TextPolish title label")
+    }
+
     func testLoadSettings() {
         viewController.loadSettings()
         XCTAssertNotNil(viewController.settings, "Settings should be loaded")
