@@ -62,10 +62,8 @@ final class SettingsIntegrationTests: XCTestCase {
         settingsWindowViewController?.loadSettings()
         let _ = settingsWindowViewController?.settings.provider
 
-        // When
-        settingsWindowViewController?.geminiProviderButton?.state = .on
-        settingsWindowViewController?.providerChanged(settingsWindowViewController!.geminiProviderButton!)
-        settingsWindowViewController?.saveSettings()
+        // When — use providerTileClicked (the live production path)
+        settingsWindowViewController?.providerTileClicked(settingsWindowViewController!.geminiProviderButton!)
 
         // Then
         XCTAssertEqual(settingsWindowViewController?.settings.provider, .gemini, "Provider should be updated")
@@ -171,26 +169,37 @@ final class SettingsIntegrationTests: XCTestCase {
         )
     }
 
-    func testTabSwitching() {
-        // When
-        settingsWindowViewController?.tabView?.selectTabViewItem(at: 1)
+    func testSegmentSwitching() {
+        guard let vc = settingsWindowViewController else { XCTFail("No VC"); return }
 
-        // Then
-        XCTAssertEqual(settingsWindowViewController?.tabView?.selectedTabViewItem?.label, "Gemini", "Should switch to Gemini tab")
+        // Switch to Hotkeys (segment 1)
+        vc.segmentedControl.selectedSegment = 1
+        vc.segmentedControl.sendAction(vc.segmentedControl.action, to: vc.segmentedControl.target)
+
+        // Content container should have exactly one child (the hotkeys section)
+        let contentContainer = vc.view.subviews.last
+        XCTAssertEqual(contentContainer?.subviews.count, 1, "Content container should have one section view")
+
+        // Switch to Advanced (segment 2)
+        vc.segmentedControl.selectedSegment = 2
+        vc.segmentedControl.sendAction(vc.segmentedControl.action, to: vc.segmentedControl.target)
+
+        XCTAssertEqual(contentContainer?.subviews.count, 1, "Content container should swap to advanced section")
     }
 
-    func testAllTabsAreAccessible() {
+    func testAllSegmentsAreAccessible() {
         // Given
-        let tabLabels = settingsWindowViewController?.tabView?.tabViewItems.map { $0.label } ?? []
+        guard let sc = settingsWindowViewController?.segmentedControl else {
+            XCTFail("Segmented control should exist")
+            return
+        }
+        let labels = (0..<sc.segmentCount).map { sc.label(forSegment: $0) ?? "" }
 
         // Then
-        XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
-        XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
-        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
-        XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
-        XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
+        XCTAssertTrue(labels.contains("Provider"), "Provider segment should exist")
+        XCTAssertTrue(labels.contains("Hotkeys"), "Hotkeys segment should exist")
+        XCTAssertTrue(labels.contains("Advanced"), "Advanced segment should exist")
+        XCTAssertTrue(labels.contains("About"), "About segment should exist")
     }
 
     func testSettingsValidationOnSave() {
@@ -205,18 +214,22 @@ final class SettingsIntegrationTests: XCTestCase {
         XCTAssertNoThrow(settingsWindowViewController?.saveSettings(), "Should handle empty values gracefully")
     }
 
-    func testCancelDoesNotSaveChanges() {
+    func testCancelDoesNotTriggerLiveSave() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let _ = settingsWindowViewController?.settings.geminiModel
+        let originalModel = settingsWindowViewController?.settings.geminiModel
+
+        // Modify a backing field directly (not through the live-save UI path)
         settingsWindowViewController?.geminiModelField?.stringValue = "modified-model"
 
-        // When
+        // When — cancel just closes, doesn't save
         settingsWindowViewController?.cancelButtonClicked(NSButton())
 
-        // Then - Settings should remain unchanged (in real app, this would be handled by not calling saveSettings)
-        // For this test, we verify the method can be called
-        XCTAssertTrue(true, "Cancel should not save changes")
+        // Then — settings.geminiModel should still be the original value
+        // because cancel doesn't trigger liveSave, and the backing field change
+        // was not committed through controlTextDidEndEditing
+        XCTAssertEqual(settingsWindowViewController?.settings.geminiModel, originalModel,
+            "Cancel should not persist backing field changes")
     }
 
     func testExtraInstructionField() {

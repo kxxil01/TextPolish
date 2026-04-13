@@ -21,8 +21,8 @@ final class SettingsWindowControllerTests: XCTestCase {
     func testWindowCreation() {
         XCTAssertNotNil(controller.window, "Window should be created")
         XCTAssertEqual(controller.window?.styleMask, [.titled, .closable, .miniaturizable], "Window should have correct style mask")
-        XCTAssertEqual(controller.window?.minSize, NSSize(width: 600, height: 450), "Window should have correct min size")
-        XCTAssertEqual(controller.window?.maxSize, NSSize(width: 800, height: 800), "Window should have correct max size")
+        XCTAssertEqual(controller.window?.minSize, NSSize(width: 560, height: 480), "Window should have correct min size")
+        XCTAssertEqual(controller.window?.maxSize, NSSize(width: 560, height: 480), "Window should have correct max size")
     }
 
     func testWindowLevel() {

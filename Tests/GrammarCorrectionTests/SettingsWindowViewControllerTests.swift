@@ -27,20 +27,19 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNotNil(viewController.view, "View should be initialized")
     }
 
-    func testTabViewCreation() {
-        XCTAssertNotNil(viewController.tabView, "Tab view should be created")
-        XCTAssertEqual(viewController.tabView?.tabViewItems.count, 7, "Should have 7 tabs")
+    func testSegmentedControlCreation() {
+        XCTAssertNotNil(viewController.segmentedControl, "Segmented control should be created")
+        XCTAssertEqual(viewController.segmentedControl.segmentCount, 4, "Should have 4 segments")
     }
 
-    func testAllTabsCreated() {
-        let tabLabels = viewController.tabView?.tabViewItems.map { $0.label } ?? []
-        XCTAssertTrue(tabLabels.contains("Provider"), "Provider tab should exist")
-        XCTAssertTrue(tabLabels.contains("Gemini"), "Gemini tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenRouter"), "OpenRouter tab should exist")
-        XCTAssertTrue(tabLabels.contains("OpenAI"), "OpenAI tab should exist")
-        XCTAssertTrue(tabLabels.contains("Anthropic"), "Anthropic tab should exist")
-        XCTAssertTrue(tabLabels.contains("Hotkeys"), "Hotkeys tab should exist")
-        XCTAssertTrue(tabLabels.contains("Advanced"), "Advanced tab should exist")
+    func testAllSegmentsExist() {
+        let segmentLabels = (0..<viewController.segmentedControl.segmentCount).map {
+            viewController.segmentedControl.label(forSegment: $0) ?? ""
+        }
+        XCTAssertTrue(segmentLabels.contains("Provider"), "Provider segment should exist")
+        XCTAssertTrue(segmentLabels.contains("Hotkeys"), "Hotkeys segment should exist")
+        XCTAssertTrue(segmentLabels.contains("Advanced"), "Advanced segment should exist")
+        XCTAssertTrue(segmentLabels.contains("About"), "About segment should exist")
     }
 
     func testProviderTabElements() {
@@ -93,6 +92,37 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertNotNil(viewController.openRouterMinSimilarityField, "OpenRouter min similarity field should exist")
         XCTAssertNotNil(viewController.languagePopup, "Language popup should exist")
         XCTAssertNotNil(viewController.extraInstructionField, "Extra instruction field should exist")
+    }
+
+    func testAboutSectionRenders() {
+        // Switch to the About segment (index 3) and verify the section renders without error
+        viewController.segmentedControl.selectedSegment = 3
+        viewController.segmentedControl.sendAction(
+            viewController.segmentedControl.action,
+            to: viewController.segmentedControl.target
+        )
+
+        // Find the content container (last subview of the root view)
+        guard let contentContainer = viewController.view.subviews.last else {
+            XCTFail("Content container should exist")
+            return
+        }
+
+        // Content container should have one section view (the About section)
+        XCTAssertEqual(contentContainer.subviews.count, 1,
+            "About segment should render one section view")
+
+        // The section should have multiple subviews (title, tagline, privacy bullets, creator info, etc.)
+        let aboutSection = contentContainer.subviews.first
+        XCTAssertGreaterThan(aboutSection?.subviews.count ?? 0, 5,
+            "About section should contain multiple labels (title, tagline, privacy bullets, creator)")
+
+        // Verify at least one label contains "TextPolish" (the app title)
+        let hasTitleLabel = aboutSection?.subviews.contains { view in
+            guard let label = view as? NSTextField else { return false }
+            return label.stringValue.contains("TextPolish")
+        } ?? false
+        XCTAssertTrue(hasTitleLabel, "About section should contain a TextPolish title label")
     }
 
     func testLoadSettings() {
@@ -153,17 +183,17 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertFalse(saved, "Save should fail when a hotkey has no modifier")
     }
 
-    func testProviderChanged() {
+    func testProviderTileClicked() {
         // Given
         viewController.loadSettings()
-        viewController.openRouterProviderButton.state = .on
 
-        // When
-        viewController.providerChanged(viewController.geminiProviderButton!)
+        // When — click OpenRouter tile (tag 1)
+        viewController.providerTileClicked(viewController.openRouterProviderButton!)
 
         // Then
-        XCTAssertEqual(viewController.geminiProviderButton.state, .on, "Gemini button should be on")
-        XCTAssertEqual(viewController.openRouterProviderButton.state, .off, "OpenRouter button should be off")
+        XCTAssertEqual(viewController.settings.provider, .openRouter, "Provider should switch to OpenRouter")
+        XCTAssertEqual(viewController.openRouterProviderButton.state, .on, "OpenRouter button should be on")
+        XCTAssertEqual(viewController.geminiProviderButton.state, .off, "Gemini button should be off")
     }
 
     func testLanguageChanged() {
