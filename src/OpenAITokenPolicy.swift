@@ -15,6 +15,16 @@ enum OpenAITokenPolicy {
     return false
   }
 
+  static func omitsTemperature(model: String) -> Bool {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !normalized.isEmpty else { return false }
+
+    return normalized.hasPrefix("gpt-5")
+      || normalized.hasPrefix("o1")
+      || normalized.hasPrefix("o3")
+      || normalized.hasPrefix("o4")
+  }
+
   static func isTokenParameterError(message: String?) -> Bool {
     let lowered = message?.lowercased() ?? ""
     guard !lowered.isEmpty else { return false }

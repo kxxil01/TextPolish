@@ -198,6 +198,10 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
     makeKeyAndOrderFront(nil)
   }
 
+  override func close() {
+    dismiss()
+  }
+
   func dismiss() {
     removeEscapeMonitorIfNeeded()
     orderOut(nil)

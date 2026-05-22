@@ -492,6 +492,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         fallbackCheckbox?.state = settings.enableGeminiOpenRouterFallback ? .on : .off
         syncBackingFieldsFromSettings()
+        loadAdvancedFields()
     }
 
     // MARK: - Hotkeys Section Layout
@@ -835,6 +836,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
         correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
         analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+        loadAdvancedFields()
         syncBackingFieldsFromSettings()
     }
 
@@ -1021,6 +1023,24 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
     }
 
+    private func minSimilarity(in settings: Settings, provider: Settings.Provider) -> Double {
+        switch provider {
+        case .gemini: return settings.geminiMinSimilarity
+        case .openRouter: return settings.openRouterMinSimilarity
+        case .openAI: return settings.openAIMinSimilarity
+        case .anthropic: return settings.anthropicMinSimilarity
+        }
+    }
+
+    private func maxAttempts(in settings: Settings, provider: Settings.Provider) -> Int {
+        switch provider {
+        case .gemini: return settings.geminiMaxAttempts
+        case .openRouter: return settings.openRouterMaxAttempts
+        case .openAI: return settings.openAIMaxAttempts
+        case .anthropic: return settings.anthropicMaxAttempts
+        }
+    }
+
     // MARK: - Actions
 
     @objc func providerTileClicked(_ sender: NSButton) {
@@ -1094,6 +1114,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.provider = .anthropic
         }
         newSettings.enableGeminiOpenRouterFallback = fallbackCheckbox.state == .on
+        let previousActiveMinSimilarity = minSimilarity(in: settings, provider: newSettings.provider)
+        let previousActiveMaxAttempts = maxAttempts(in: settings, provider: newSettings.provider)
 
         // API keys
         do {
@@ -1188,11 +1210,27 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
 
         let extraValue = extraInstructionField.stringValue.isEmpty ? nil : extraInstructionField.stringValue
+        let parsedActiveMinSimilarity = Double(activeSimField.stringValue)
+        let parsedActiveMaxAttempts = Int(activeAttField.stringValue)
+        let activeMinSimilarity = parsedActiveMinSimilarity.flatMap { abs($0 - previousActiveMinSimilarity) > 0.000_001 ? $0 : nil }
+        let activeMaxAttempts = parsedActiveMaxAttempts.flatMap { $0 != previousActiveMaxAttempts ? $0 : nil }
         switch newSettings.provider {
-        case .gemini: newSettings.geminiExtraInstruction = extraValue
-        case .openRouter: newSettings.openRouterExtraInstruction = extraValue
-        case .openAI: newSettings.openAIExtraInstruction = extraValue
-        case .anthropic: newSettings.anthropicExtraInstruction = extraValue
+        case .gemini:
+            newSettings.geminiExtraInstruction = extraValue
+            if let activeMinSimilarity { newSettings.geminiMinSimilarity = activeMinSimilarity }
+            if let activeMaxAttempts { newSettings.geminiMaxAttempts = activeMaxAttempts }
+        case .openRouter:
+            newSettings.openRouterExtraInstruction = extraValue
+            if let activeMinSimilarity { newSettings.openRouterMinSimilarity = activeMinSimilarity }
+            if let activeMaxAttempts { newSettings.openRouterMaxAttempts = activeMaxAttempts }
+        case .openAI:
+            newSettings.openAIExtraInstruction = extraValue
+            if let activeMinSimilarity { newSettings.openAIMinSimilarity = activeMinSimilarity }
+            if let activeMaxAttempts { newSettings.openAIMaxAttempts = activeMaxAttempts }
+        case .anthropic:
+            newSettings.anthropicExtraInstruction = extraValue
+            if let activeMinSimilarity { newSettings.anthropicMinSimilarity = activeMinSimilarity }
+            if let activeMaxAttempts { newSettings.anthropicMaxAttempts = activeMaxAttempts }
         }
 
         newSettings.normalizeRuntimeValues()
@@ -1293,6 +1331,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     @objc func detectGeminiModel(_: NSButton) {
         detectModel(
+            provider: .gemini,
             account: "geminiApiKey",
             backingKeyField: geminiApiKeyField,
             backingButton: detectGeminiModelButton,
@@ -1304,6 +1343,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     @objc func detectOpenRouterModel(_: NSButton) {
         detectModel(
+            provider: .openRouter,
             account: "openRouterApiKey",
             backingKeyField: openRouterApiKeyField,
             backingButton: detectOpenRouterModelButton,
@@ -1315,6 +1355,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     @objc func detectOpenAIModel(_: NSButton) {
         detectModel(
+            provider: .openAI,
             account: "openAIApiKey",
             backingKeyField: openAIApiKeyField,
             backingButton: detectOpenAIModelButton,
@@ -1326,6 +1367,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     @objc func detectAnthropicModel(_: NSButton) {
         detectModel(
+            provider: .anthropic,
             account: "anthropicApiKey",
             backingKeyField: anthropicApiKeyField,
             backingButton: detectAnthropicModelButton,
@@ -1336,6 +1378,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     private func detectModel(
+        provider: Settings.Provider,
         account: String,
         backingKeyField: NSTextField,
         backingButton: NSButton,
@@ -1348,28 +1391,31 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detectModelButton.isEnabled = false
         detectModelButton.title = "Detecting..."
 
+        var apiKey = providerApiKeyField.stringValue
+        if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            apiKey = backingKeyField.stringValue
+        }
+        if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            apiKey = keychainKey(account: account) ?? ""
+        }
+
+        let baseURL = providerBaseURLField.stringValue.isEmpty
+            ? fallbackBaseURL : providerBaseURLField.stringValue
+
         Task {
             do {
-                var apiKey = providerApiKeyField.stringValue
-                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = backingKeyField.stringValue
-                }
-                if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    apiKey = self.keychainKey(account: account) ?? ""
-                }
-
-                let baseURL = providerBaseURLField.stringValue.isEmpty
-                    ? fallbackBaseURL : providerBaseURLField.stringValue
                 let detectedModel = try await detect(apiKey, baseURL)
 
                 await MainActor.run {
-                    providerModelField.stringValue = detectedModel
                     applyModel(detectedModel)
+                    if self.settings.provider == provider {
+                        self.providerModelField.stringValue = detectedModel
+                    }
+                    self.liveSave()
                     backingButton.title = "Detect Model"
                     backingButton.isEnabled = true
-                    detectModelButton.title = "Detect"
-                    detectModelButton.isEnabled = true
-                    syncBackingFieldsFromSettings()
+                    self.detectModelButton.title = "Detect"
+                    self.detectModelButton.isEnabled = true
                 }
             } catch {
                 await MainActor.run {
@@ -1383,8 +1429,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
                     }
                     backingButton.title = "Detect Model"
                     backingButton.isEnabled = true
-                    detectModelButton.title = "Detect"
-                    detectModelButton.isEnabled = true
+                    self.detectModelButton.title = "Detect"
+                    self.detectModelButton.isEnabled = true
                 }
             }
         }

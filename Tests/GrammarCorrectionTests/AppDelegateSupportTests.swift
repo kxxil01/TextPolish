@@ -123,6 +123,31 @@ final class AppDelegateSupportTests: XCTestCase {
   }
 
   @MainActor
+  func testAppDelegateSettingsChangeRefreshesMenuShortcutLabels() throws {
+    let _ = NSApplication.shared
+    UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
+    defer { try? Settings.save(Settings()) }
+
+    try Settings.save(Settings())
+    let delegate = AppDelegate()
+    delegate.debugFinishLaunching()
+
+    var updated = Settings.loadOrCreateDefault()
+    updated.hotKeyCorrectSelection = Settings.HotKey(
+      keyCode: UInt32(kVK_ANSI_P),
+      modifiers: UInt32(controlKey | optionKey | cmdKey)
+    )
+    NotificationCenter.default.post(name: .settingsDidChange, object: updated)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+    let shortcut = try XCTUnwrap(delegate.debugCorrectSelectionMenuShortcut)
+    XCTAssertEqual(shortcut.0, "p")
+    XCTAssertTrue(shortcut.1.contains(.command))
+    XCTAssertTrue(shortcut.1.contains(.control))
+    XCTAssertTrue(shortcut.1.contains(.option))
+  }
+
+  @MainActor
   func testAppDelegatePartialSettingSavePreservesNewerDiskAnthropicModel() throws {
     let _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")

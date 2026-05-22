@@ -151,6 +151,21 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertTrue(viewController.settings.enableGeminiOpenRouterFallback, "Fallback setting should be saved")
     }
 
+    func testSaveSettingsPersistsActiveAdvancedFieldsForCurrentProvider() {
+        viewController.loadSettings()
+        viewController.providerTileClicked(viewController.openAIProviderButton)
+        viewController.activeSimField.stringValue = "0.82"
+        viewController.activeAttField.stringValue = "5"
+        viewController.extraInstructionField.stringValue = "Keep the original tone."
+
+        XCTAssertTrue(viewController.saveSettings())
+
+        XCTAssertEqual(viewController.settings.provider, .openAI)
+        XCTAssertEqual(viewController.settings.openAIMinSimilarity, 0.82, accuracy: 0.001)
+        XCTAssertEqual(viewController.settings.openAIMaxAttempts, 5)
+        XCTAssertEqual(viewController.settings.openAIExtraInstruction, "Keep the original tone.")
+    }
+
     func testSaveSettingsClearsAllProviderApiKeys() {
         viewController.loadSettings()
         viewController.geminiApiKeyField.stringValue = "gemini-key"

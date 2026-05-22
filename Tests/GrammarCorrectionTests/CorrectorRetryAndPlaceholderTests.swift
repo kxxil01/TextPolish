@@ -211,6 +211,64 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     )
   }
 
+  func testOpenAIGPT5RequestOmitsTemperature() async throws {
+    var capturedBody: Data?
+
+    MockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"choices":[{"message":{"content":"Hello"}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test-key",
+      openAIModel: "gpt-5-nano",
+      openAIBaseURL: "https://mock.local",
+      openAIMaxAttempts: 1
+    )
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
+    _ = try await corrector.correct("Hello")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertNil(json["temperature"], "GPT-5 requests should omit unsupported temperature parameters")
+    XCTAssertEqual(json["max_completion_tokens"] as? Int, 1024)
+  }
+
+  func testOpenAILegacyRequestIncludesTemperature() async throws {
+    var capturedBody: Data?
+
+    MockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"choices":[{"message":{"content":"Hello"}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test-key",
+      openAIModel: "gpt-4-turbo",
+      openAIBaseURL: "https://mock.local",
+      openAIMaxAttempts: 1
+    )
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
+    _ = try await corrector.correct("Hello")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["temperature"] as? Double, 0.0)
+    XCTAssertEqual(json["max_tokens"] as? Int, 1024)
+  }
+
   func testOpenAIRequestContainsSystemMessage() async throws {
     var capturedBody: Data?
 

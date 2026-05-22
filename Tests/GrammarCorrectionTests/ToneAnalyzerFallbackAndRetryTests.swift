@@ -87,6 +87,34 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(timestamps[1].timeIntervalSince(timestamps[0]), 0.9)
   }
 
+  func testOpenAIToneGPT5RequestOmitsTemperature() async throws {
+    var capturedBody: Data?
+
+    ToneMockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test",
+      openAIModel: "gpt-5-nano",
+      openAIBaseURL: "https://mock.local"
+    )
+    let analyzer = try OpenAIToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertNil(json["temperature"], "GPT-5 tone requests should omit unsupported temperature parameters")
+    XCTAssertEqual(json["max_completion_tokens"] as? Int, ToneAnalysisConfig.default.maxOutputTokens)
+  }
+
   func testAnthropicToneAnalyzerRetriesOnRateLimit() async throws {
     var callCount = 0
     var timestamps: [Date] = []
@@ -325,6 +353,36 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       let enabledWithoutCredentialsAnalyzer = ToneAnalyzerFactory.make(settings: enabledWithoutCredentials)
       XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
     }
+  }
+
+  private static func requestBodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody {
+      return body
+    }
+
+    guard let stream = request.httpBodyStream else {
+      return nil
+    }
+
+    stream.open()
+    defer { stream.close() }
+
+    var data = Data()
+    let bufferSize = 1024
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+
+    while stream.hasBytesAvailable {
+      let count = stream.read(&buffer, maxLength: bufferSize)
+      if count < 0 {
+        return nil
+      }
+      if count == 0 {
+        break
+      }
+      data.append(contentsOf: buffer.prefix(count))
+    }
+
+    return data.isEmpty ? nil : data
   }
 
   private static func makeMockSession() -> URLSession {
