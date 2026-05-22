@@ -134,7 +134,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         )
 
         // Shared provider detail
-        providerApiKeyField = NSSecureTextField()
+        providerApiKeyField = PastableSecureTextField()
         providerApiKeyField.delegate = self
 
         providerModelField = NSTextField()
@@ -146,21 +146,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detectModelButton = NSButton(title: "Detect", target: self, action: #selector(detectModelClicked(_:)))
 
         // Per-provider backing fields
-        geminiApiKeyField = NSSecureTextField()
+        geminiApiKeyField = PastableSecureTextField()
         geminiModelField = NSTextField()
         geminiBaseURLField = NSTextField()
         geminiMaxAttemptsField = NSTextField()
         geminiExtraInstructionField = NSTextField()
         detectGeminiModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectGeminiModel(_:)))
 
-        openRouterApiKeyField = NSSecureTextField()
+        openRouterApiKeyField = PastableSecureTextField()
         openRouterModelField = NSTextField()
         openRouterBaseURLField = NSTextField()
         openRouterMaxAttemptsField = NSTextField()
         openRouterExtraInstructionField = NSTextField()
         detectOpenRouterModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectOpenRouterModel(_:)))
 
-        openAIApiKeyField = NSSecureTextField()
+        openAIApiKeyField = PastableSecureTextField()
         openAIModelField = NSTextField()
         openAIBaseURLField = NSTextField()
         openAIMaxAttemptsField = NSTextField()
@@ -168,7 +168,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         openAIExtraInstructionField = NSTextField()
         detectOpenAIModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectOpenAIModel(_:)))
 
-        anthropicApiKeyField = NSSecureTextField()
+        anthropicApiKeyField = PastableSecureTextField()
         anthropicModelField = NSTextField()
         anthropicBaseURLField = NSTextField()
         anthropicMaxAttemptsField = NSTextField()
