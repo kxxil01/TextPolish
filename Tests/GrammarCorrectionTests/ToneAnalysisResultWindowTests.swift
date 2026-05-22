@@ -23,6 +23,15 @@ final class ToneAnalysisResultWindowTests: XCTestCase {
         super.tearDown()
     }
 
+    func testNativeCloseRemovesEscapeMonitor() {
+        window.showError("Test error")
+        XCTAssertTrue(window.hasActiveEscapeMonitor, "Monitor should be active while result window is visible")
+
+        window.close()
+
+        XCTAssertFalse(window.hasActiveEscapeMonitor, "Native window close should remove the Escape monitor")
+    }
+
     func testEscapeMonitorIsReinstalledAfterDismiss() {
         XCTAssertFalse(window.hasActiveEscapeMonitor, "Monitor should not be active before first presentation")
 

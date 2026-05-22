@@ -326,7 +326,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
 
   let model: String
   let messages: [Message]
-  let temperature: Double
+  let temperature: Double?
   let maxTokens: Int
   let useMaxCompletionTokens: Bool
 
@@ -339,7 +339,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
   ) {
     self.model = model
     self.messages = messages
-    self.temperature = temperature
+    self.temperature = OpenAITokenPolicy.omitsTemperature(model: model) ? nil : temperature
     self.maxTokens = maxTokens
     self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
   }
@@ -348,7 +348,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
-    try container.encode(temperature, forKey: .temperature)
+    try container.encodeIfPresent(temperature, forKey: .temperature)
     if useMaxCompletionTokens {
       try container.encode(maxTokens, forKey: .maxCompletionTokens)
     } else {

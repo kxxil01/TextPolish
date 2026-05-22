@@ -159,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.settings = newSettings
                 self.refreshCorrector()
                 self.setupHotKeys()
+                self.syncHotKeyMenuItems()
                 self.updateStatusBarToolTip()
             }
         }
@@ -2274,6 +2275,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugStatusItemTitle: String? {
             statusItem.button?.title
+        }
+
+        var debugCorrectSelectionMenuShortcut: (String, NSEvent.ModifierFlags)? {
+            guard let selectionItem else { return nil }
+            return (selectionItem.keyEquivalent, selectionItem.keyEquivalentModifierMask)
         }
 
         @discardableResult

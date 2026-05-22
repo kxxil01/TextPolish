@@ -85,9 +85,9 @@ mkdir -p "$FRAMEWORKS_DIR"
 
 "$ROOT_DIR/scripts/generate_app_icon.sh" "$RES_DIR/$ICON_FILE" >/dev/null
 
-swift build -c release --product "$APP_NAME"
+swift build --package-path "$ROOT_DIR" -c release --product "$APP_NAME"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
+BIN_DIR="$(swift build --package-path "$ROOT_DIR" -c release --show-bin-path)"
 BINARY_PATH="$BIN_DIR/$APP_NAME"
 if [[ ! -x "$BINARY_PATH" ]]; then
   echo "Failed to find built binary at: $BINARY_PATH"

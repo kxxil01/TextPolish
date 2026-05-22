@@ -5,3 +5,5 @@ build/
 firebase-debug.log
 .serena/
 .claude/
+.superpowers/
+docs/superpowers/

@@ -25,4 +25,14 @@ final class OpenAITokenPolicyTests: XCTestCase {
   func testModelNormalization() {
     XCTAssertTrue(OpenAITokenPolicy.usesMaxCompletionTokens(model: "  GPT-4.1  "))
   }
+
+  func testOmitsTemperatureForGPT5AndOModels() {
+    XCTAssertTrue(OpenAITokenPolicy.omitsTemperature(model: "gpt-5-nano"))
+    XCTAssertTrue(OpenAITokenPolicy.omitsTemperature(model: " o3-mini "))
+  }
+
+  func testKeepsTemperatureForLegacyChatModels() {
+    XCTAssertFalse(OpenAITokenPolicy.omitsTemperature(model: "gpt-4-turbo"))
+    XCTAssertFalse(OpenAITokenPolicy.omitsTemperature(model: "gpt-4.1-mini"))
+  }
 }
