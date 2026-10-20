@@ -136,6 +136,7 @@ final class CorrectionController {
   private nonisolated(unsafe) var localEscapeMonitor: Any?
   private let frontmostApplicationPIDProvider: @MainActor () -> pid_t?
   private let applicationResolver: @MainActor (pid_t) -> NSRunningApplication?
+  private let selectionStateProvider: @MainActor (pid_t?) -> SelectionState
 
   init(
     corrector: GrammarCorrector,
@@ -150,6 +151,7 @@ final class CorrectionController {
     fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)? = nil,
     frontmostApplicationPIDProvider: (@MainActor () -> pid_t?)? = nil,
     applicationResolver: (@MainActor (pid_t) -> NSRunningApplication?)? = nil,
+    selectionStateProvider: (@MainActor (pid_t?) -> SelectionState)? = nil,
     addGlobalKeyMonitor: GlobalKeyMonitorInstaller? = nil,
     addLocalKeyMonitor: LocalKeyMonitorInstaller? = nil,
     removeEventMonitor: EventMonitorRemover? = nil,
@@ -171,6 +173,8 @@ final class CorrectionController {
     self.applicationResolver = applicationResolver ?? { pid in
       NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
     }
+    // Unknown by default so tests never depend on whichever app is focused; the app injects SelectionProbe.
+    self.selectionStateProvider = selectionStateProvider ?? { _ in .unknown }
     self.addGlobalKeyMonitor = addGlobalKeyMonitor ?? CorrectionController.defaultAddGlobalKeyMonitor
     self.addLocalKeyMonitor = addLocalKeyMonitor ?? CorrectionController.defaultAddLocalKeyMonitor
     self.removeEventMonitor = removeEventMonitor ?? CorrectionController.defaultRemoveEventMonitor
@@ -204,28 +208,14 @@ final class CorrectionController {
     return true
   }
 
-  func correctSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selection, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  func correctAll(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .all, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  /// Like Correct Selection, but lightly rephrases unclear wording so it reads naturally.
-  func rewriteSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selection, style: .clarify, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  private enum Mode {
-    case selection
-    case all
+  /// Polishes the selection, or the whole field when nothing is selected.
+  func polish(style: CorrectionStyle, targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
+    run(style: style, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
   // Legacy hotspot: split this up before removing the suppression.
   // swiftlint:disable:next function_body_length cyclomatic_complexity
   private func run(
-    mode: Mode,
     style: CorrectionStyle,
     targetApplication: NSRunningApplication?,
     timingsOverride: Timings?
@@ -306,16 +296,30 @@ final class CorrectionController {
           }
         }
 
-        if mode == .all {
+        let selection = self.selectionStateProvider(targetPID)
+        if selection == .nothingSelected {
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
         }
 
-        let inputText = try await self.copySelectedText(
-          timings: timings,
-          deadline: deadline,
-          updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
-        )
+        let inputText: String
+        do {
+          inputText = try await self.copySelectedText(
+            timings: timings,
+            deadline: deadline,
+            updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
+          )
+        } catch where selection == .unknown && self.shouldRetryCopy(error) {
+          // Nothing could be copied and Accessibility could not tell why, so polish the whole field.
+          self.keyboard.sendCommandA()
+          try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
+          inputText = try await self.attemptCopy(
+            excluding: self.copySentinel(),
+            timings: timings,
+            deadline: deadline,
+            updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
+          )
+        }
         try Task.checkCancellation()
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else {
@@ -714,8 +718,8 @@ final class CorrectionController {
       postPasteDelayMilliseconds: settings.postPasteDelayMilliseconds,
       timingProfiles: settings.timingProfiles,
       correctionLanguage: settings.correctionLanguage,
-      hotKeyCorrectSelection: settings.hotKeyCorrectSelection,
-      hotKeyCorrectAll: settings.hotKeyCorrectAll,
+      polishStyle: settings.polishStyle,
+      hotKeyPolish: settings.hotKeyPolish,
       hotKeyAnalyzeTone: settings.hotKeyAnalyzeTone,
       enableGeminiOpenRouterFallback: settings.enableGeminiOpenRouterFallback,
       geminiApiKey: settings.geminiApiKey,

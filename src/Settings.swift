@@ -12,16 +12,8 @@ struct Settings: Codable {
     var keyCode: UInt32
     var modifiers: UInt32
 
-    static let correctSelectionDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
-    static let correctAllDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
+    static let polishDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let analyzeToneDefault = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey))
-    static let rewriteSelectionDefault = HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey | cmdKey))
-
-    /// Settings saved before Rewrite existed may already use its default combo for another action.
-    static func rewriteSelectionDefault(avoiding taken: [HotKey]) -> HotKey {
-      guard taken.contains(rewriteSelectionDefault) else { return rewriteSelectionDefault }
-      return HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
-    }
 
     var displayString: String {
       var parts: [String] = []
@@ -204,6 +196,33 @@ struct Settings: Codable {
     }
   }
 
+  /// How far Polish may change text.
+  enum PolishStyle: String, Codable, Sendable, CaseIterable {
+    /// Improve wording so it reads naturally, and join choppy line breaks.
+    case natural
+    /// Fix typos, grammar, and clear punctuation mistakes only.
+    case minimal
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.singleValueContainer()
+      self = PolishStyle(rawValue: try container.decode(String.self)) ?? .natural
+    }
+
+    var correctionStyle: CorrectionStyle {
+      switch self {
+      case .natural: return .clarify
+      case .minimal: return .minimal
+      }
+    }
+
+    var displayName: String {
+      switch self {
+      case .natural: return "Natural"
+      case .minimal: return "Minimal"
+      }
+    }
+  }
+
   enum CorrectionLanguage: String, Codable, Sendable {
     case auto = "auto"
     case englishUS = "en-US"
@@ -287,10 +306,9 @@ struct Settings: Codable {
   var postPasteDelayMilliseconds: Int
   var timingProfiles: [String: TimingProfile]
   var correctionLanguage: CorrectionLanguage
-  var hotKeyCorrectSelection: HotKey
-  var hotKeyCorrectAll: HotKey
+  var polishStyle: PolishStyle
+  var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
-  var hotKeyRewriteSelection: HotKey
   var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
@@ -340,10 +358,9 @@ struct Settings: Codable {
     postPasteDelayMilliseconds: Int = 180,
     timingProfiles: [String: TimingProfile] = [:],
     correctionLanguage: CorrectionLanguage = .auto,
-    hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
-    hotKeyCorrectAll: HotKey = .correctAllDefault,
+    polishStyle: PolishStyle = .natural,
+    hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
-    hotKeyRewriteSelection: HotKey = .rewriteSelectionDefault,
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.5-flash",
@@ -380,10 +397,9 @@ struct Settings: Codable {
     self.postPasteDelayMilliseconds = postPasteDelayMilliseconds
     self.timingProfiles = timingProfiles
     self.correctionLanguage = correctionLanguage
-    self.hotKeyCorrectSelection = hotKeyCorrectSelection
-    self.hotKeyCorrectAll = hotKeyCorrectAll
+    self.polishStyle = polishStyle
+    self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
-    self.hotKeyRewriteSelection = hotKeyRewriteSelection
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
@@ -424,11 +440,9 @@ struct Settings: Codable {
     postPasteDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .postPasteDelayMilliseconds) ?? 180
     timingProfiles = try container.decodeIfPresent([String: TimingProfile].self, forKey: .timingProfiles) ?? [:]
     correctionLanguage = try container.decodeIfPresent(CorrectionLanguage.self, forKey: .correctionLanguage) ?? .auto
-    hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
-    hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
+    polishStyle = (try? container.decode(PolishStyle.self, forKey: .polishStyle)) ?? .natural
+    hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
-    hotKeyRewriteSelection = (try? container.decode(HotKey.self, forKey: .hotKeyRewriteSelection))
-      ?? HotKey.rewriteSelectionDefault(avoiding: [hotKeyCorrectSelection, hotKeyCorrectAll, hotKeyAnalyzeTone])
     enableGeminiOpenRouterFallback =
       try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
@@ -474,10 +488,9 @@ struct Settings: Codable {
     try container.encode(postPasteDelayMilliseconds, forKey: .postPasteDelayMilliseconds)
     try container.encode(timingProfiles, forKey: .timingProfiles)
     try container.encode(correctionLanguage, forKey: .correctionLanguage)
-    try container.encode(hotKeyCorrectSelection, forKey: .hotKeyCorrectSelection)
-    try container.encode(hotKeyCorrectAll, forKey: .hotKeyCorrectAll)
+    try container.encode(polishStyle, forKey: .polishStyle)
+    try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
-    try container.encode(hotKeyRewriteSelection, forKey: .hotKeyRewriteSelection)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .fallbackToOpenRouterOnGeminiError)
     try container.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
@@ -610,10 +623,10 @@ struct Settings: Codable {
     case postPasteDelayMilliseconds
     case timingProfiles
     case correctionLanguage
-    case hotKeyCorrectSelection
-    case hotKeyCorrectAll
+    case polishStyle
+    // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
+    case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone
-    case hotKeyRewriteSelection
     case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey

@@ -20,8 +20,7 @@ final class SettingsIntegrationTests: XCTestCase {
             provider: .gemini,
             requestTimeoutSeconds: 30.0,
             correctionLanguage: .englishUS,
-            hotKeyCorrectSelection: Settings.HotKey.correctSelectionDefault,
-            hotKeyCorrectAll: Settings.HotKey.correctAllDefault,
+            hotKeyPolish: Settings.HotKey.polishDefault,
             hotKeyAnalyzeTone: Settings.HotKey.analyzeToneDefault,
             enableGeminiOpenRouterFallback: false,
             geminiApiKey: "",
@@ -115,11 +114,11 @@ final class SettingsIntegrationTests: XCTestCase {
         let testHotkey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey))
 
         // When
-        settingsWindowViewController?.correctSelectionField?.hotKey = testHotkey
+        settingsWindowViewController?.polishField?.hotKey = testHotkey
         settingsWindowViewController?.saveSettings()
 
         // Then
-        XCTAssertEqual(settingsWindowViewController?.settings.hotKeyCorrectSelection, testHotkey, "Hotkey should be updated")
+        XCTAssertEqual(settingsWindowViewController?.settings.hotKeyPolish, testHotkey, "Hotkey should be updated")
     }
 
     func testLanguageSelection() {
@@ -298,8 +297,8 @@ final class SettingsIntegrationTests: XCTestCase {
         _ = settingsWindowViewController?.settings.geminiModel
         _ = settingsWindowViewController?.settings.openRouterApiKey
         _ = settingsWindowViewController?.settings.openRouterModel
-        _ = settingsWindowViewController?.settings.hotKeyCorrectSelection
-        _ = settingsWindowViewController?.settings.hotKeyCorrectAll
+        _ = settingsWindowViewController?.settings.hotKeyPolish
+        _ = settingsWindowViewController?.settings.polishStyle
         _ = settingsWindowViewController?.settings.hotKeyAnalyzeTone
 
         XCTAssertTrue(true, "All settings should be accessible")

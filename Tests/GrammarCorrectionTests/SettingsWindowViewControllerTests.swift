@@ -93,9 +93,9 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     }
 
     func testHotkeysTabElements() {
-        XCTAssertNotNil(viewController.correctSelectionField, "Correct selection field should exist")
-        XCTAssertNotNil(viewController.correctAllField, "Correct all field should exist")
+        XCTAssertNotNil(viewController.polishField, "Polish field should exist")
         XCTAssertNotNil(viewController.analyzeToneField, "Analyze tone field should exist")
+        XCTAssertNotNil(viewController.polishStylePopup, "Polish style picker should exist")
     }
 
     func testAdvancedTabElements() {
@@ -193,8 +193,8 @@ final class SettingsWindowViewControllerTests: XCTestCase {
 
         // loadFromHotKey skips live validation, which would otherwise revert the field before save runs.
         let duplicate = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
-        viewController.correctSelectionField.loadFromHotKey(duplicate)
-        viewController.correctAllField.loadFromHotKey(duplicate)
+        viewController.polishField.loadFromHotKey(duplicate)
+        viewController.analyzeToneField.loadFromHotKey(duplicate)
 
         let saved = viewController.saveSettings()
 

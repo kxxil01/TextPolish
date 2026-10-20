@@ -116,9 +116,9 @@ final class AppDelegateSupportTests: XCTestCase {
     let delegate = AppDelegate()
     let start = ContinuousClock.now
 
-    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start))
-    XCTAssertFalse(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start + .milliseconds(200)))
-    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.correctSelection.rawValue, now: start + .milliseconds(400)))
+    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.polish.rawValue, now: start))
+    XCTAssertFalse(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.polish.rawValue, now: start + .milliseconds(200)))
+    XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.polish.rawValue, now: start + .milliseconds(400)))
     XCTAssertTrue(delegate.debugHandleRegisteredHotKey(HotKeyManager.HotKeyID.analyzeTone.rawValue, now: start + .milliseconds(450)))
   }
 
@@ -133,19 +133,32 @@ final class AppDelegateSupportTests: XCTestCase {
     delegate.debugFinishLaunching()
 
     var updated = Settings.loadOrCreateDefault()
-    updated.hotKeyCorrectSelection = Settings.HotKey(
+    updated.hotKeyPolish = Settings.HotKey(
       keyCode: UInt32(kVK_ANSI_P),
       modifiers: UInt32(controlKey | optionKey | cmdKey)
     )
     NotificationCenter.default.post(name: .settingsDidChange, object: updated)
     // The observer applies settings in a main-actor Task, so wait for it instead of a fixed delay.
-    try await waitUntil { delegate.debugCorrectSelectionMenuShortcut?.0 == "p" }
+    try await waitUntil { delegate.debugPolishMenuShortcut?.0 == "p" }
 
-    let shortcut = try XCTUnwrap(delegate.debugCorrectSelectionMenuShortcut)
+    let shortcut = try XCTUnwrap(delegate.debugPolishMenuShortcut)
     XCTAssertEqual(shortcut.0, "p")
     XCTAssertTrue(shortcut.1.contains(.command))
     XCTAssertTrue(shortcut.1.contains(.control))
     XCTAssertTrue(shortcut.1.contains(.option))
+  }
+
+  @MainActor
+  func testPolishStyleMenuMarksNaturalByDefault() throws {
+    _ = NSApplication.shared
+    UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
+    defer { try? Settings.save(Settings()) }
+
+    try Settings.save(Settings())
+    let delegate = AppDelegate()
+    delegate.debugFinishLaunching()
+
+    XCTAssertEqual(delegate.debugSelectedPolishStyleTitle, "Natural")
   }
 
   @MainActor
