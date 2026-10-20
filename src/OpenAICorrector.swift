@@ -111,7 +111,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let protected = protect(text)
 
     var retryReason: CorrectionRetryReason?
-    for _ in 1...maxAttempts {
+    for attempt in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
         retryReason: retryReason,
@@ -124,10 +124,12 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       guard !cleaned.isEmpty else { throw OpenAIError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
         retryReason = .refusal
+        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: refusal")
         continue
       }
       if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
         retryReason = .outputTooLong
+        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: outputTooLong")
         continue
       }
 
@@ -135,6 +137,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
         retryReason = .placeholdersMissing
+        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: placeholdersMissing")
         continue
       }
 
@@ -143,6 +146,12 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return restored
       }
       retryReason = .overRewrite
+      let summary = rejectionSummary(
+        original: text,
+        candidate: restored,
+        minimumSimilarity: style.minimumSimilarity(configured: minSimilarity)
+      )
+      TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: overRewrite, \(summary)")
     }
 
     throw OpenAIError.overRewrite

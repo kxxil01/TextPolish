@@ -22,6 +22,14 @@ final class RewriteLineBreakTests: XCTestCase {
     I've updated the report, and the numbers on page 3 now match the sheet. Let me know if anything else is needed.
     """
 
+  func testRejectionSummaryReportsCountsAndScoreWithoutText() {
+    let summary = checker.rejectionSummary(original: choppy, candidate: joined, minimumSimilarity: 0.4)
+
+    XCTAssertTrue(summary.hasPrefix("lines 4->2 blank 1->1 list 0->0 similarity 0."), summary)
+    XCTAssertTrue(summary.hasSuffix("(min 0.40)"), summary)
+    XCTAssertFalse(summary.contains("report"), "The log line must never include the user's text")
+  }
+
   func testCorrectKeepsEveryLine() {
     XCTAssertTrue(checker.keepsLineStructure(original: choppy, candidate: choppy, style: .minimal))
     XCTAssertFalse(checker.keepsLineStructure(original: choppy, candidate: joined, style: .minimal))
