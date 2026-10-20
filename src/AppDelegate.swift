@@ -1068,7 +1068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             existing.viewController?.loadSettings()
             existing.window?.makeKeyAndOrderFront(nil)
         } else {
-            settingsWindowController = SettingsWindowController()
+            settingsWindowController = SettingsWindowController(keychainServiceOverride: nil)
             settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
