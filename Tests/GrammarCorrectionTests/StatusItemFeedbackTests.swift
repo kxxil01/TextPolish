@@ -55,9 +55,8 @@ final class StatusItemFeedbackTests: XCTestCase {
     XCTAssertEqual(button.title, "\u{2713}")
     XCTAssertEqual(button.toolTip, "Corrected")
 
-    // Verify sleepHandler was called with expected duration
-    // Give it a moment to schedule the task
-    try await Task.sleep(for: .milliseconds(50))
+    // Verify sleepHandler was called with expected duration once the flash task reaches it
+    try await waitUntil { !sleeper.durations.isEmpty }
     XCTAssertEqual(sleeper.durations.count, 1)
     XCTAssertEqual(sleeper.durations.first, .milliseconds(800))
   }
@@ -124,10 +123,19 @@ final class StatusItemFeedbackTests: XCTestCase {
     feedback.updateBaseToolTip("ProviderTip")
     feedback.showInfo("Working")
 
-    try await Task.sleep(for: .milliseconds(50))
+    try await waitUntil { !sleeper.continuations.isEmpty }
     sleeper.resumeAll()
-    try await Task.sleep(for: .milliseconds(20))
+    try await waitUntil { button.toolTip == "ProviderTip" }
 
     XCTAssertEqual(button.toolTip, "ProviderTip")
+  }
+
+  /// Suspends between checks so the flash task can run; the caller's assertions report a timeout.
+  @MainActor
+  private func waitUntil(timeout: Duration = .seconds(2), _ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition(), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(10))
+    }
   }
 }

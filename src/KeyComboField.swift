@@ -16,6 +16,9 @@ class KeyComboField: NSView {
     private var isRecording = false
     private var keyDownMonitor: Any?
 
+    /// Only one field records at a time; starting another stops the previous one.
+    private static weak var activeRecorder: KeyComboField?
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupUI()
@@ -28,23 +31,69 @@ class KeyComboField: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        layer?.cornerRadius = 4
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 1
 
         textField.isBezeled = false
         textField.drawsBackground = false
         textField.isEditable = false
+        textField.isSelectable = false
         textField.alignment = .center
         textField.font = NSFont.systemFont(ofSize: 13)
+        textField.lineBreakMode = .byTruncatingTail
         textField.stringValue = "Click to set"
         textField.textColor = .secondaryLabelColor
 
         addSubview(textField)
-        textField.frame = bounds
-        textField.autoresizingMask = [.width, .height]
+        centerTextField()
+        applyColors()
 
         let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
         addGestureRecognizer(clickGesture)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        centerTextField()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+        return true
+    }
+
+    /// Labels draw from the top, so center a single text line vertically inside the field.
+    private func centerTextField() {
+        let lineHeight = ceil(textField.intrinsicContentSize.height)
+        textField.frame = NSRect(
+            x: 4,
+            y: (bounds.height - lineHeight) / 2,
+            width: max(0, bounds.width - 8),
+            height: lineHeight
+        )
+    }
+
+    /// Layer colors are fixed CGColors, so resolve them for the current appearance.
+    private func applyColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let background = isRecording
+                ? NSColor.controlAccentColor.withAlphaComponent(0.12)
+                : NSColor.controlBackgroundColor
+            let border = isRecording ? NSColor.controlAccentColor : NSColor.separatorColor
+            layer?.backgroundColor = background.cgColor
+            layer?.borderColor = border.cgColor
+        }
     }
 
     @objc private func handleClick(_ sender: NSClickGestureRecognizer) {
@@ -56,11 +105,15 @@ class KeyComboField: NSView {
     }
 
     private func startRecording() {
+        if let other = Self.activeRecorder, other !== self {
+            other.stopRecording()
+        }
+        Self.activeRecorder = self
         removeKeyMonitorIfNeeded()
         isRecording = true
-        textField.stringValue = "Press keys..."
-        textField.textColor = .systemBlue
-        layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.1).cgColor
+        textField.stringValue = "Type shortcut, Esc to cancel"
+        textField.textColor = .controlAccentColor
+        applyColors()
 
         // Capture key events
         keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: NSEvent.EventTypeMask.keyDown) { [weak self] event in
@@ -77,9 +130,12 @@ class KeyComboField: NSView {
     }
 
     private func stopRecording() {
+        if Self.activeRecorder === self {
+            Self.activeRecorder = nil
+        }
         isRecording = false
         removeKeyMonitorIfNeeded()
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        applyColors()
         updateDisplay()
     }
 
@@ -112,6 +168,14 @@ class KeyComboField: NSView {
 
         textField.stringValue = hotKey.displayString
         textField.textColor = .labelColor
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Leaving the window (tab switch, window close) must not leave a key monitor running.
+        if window == nil, isRecording {
+            stopRecording()
+        }
     }
 
     var hasActiveKeyDownMonitor: Bool {

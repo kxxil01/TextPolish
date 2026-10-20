@@ -259,6 +259,15 @@ struct Settings: Codable {
       var container = encoder.singleValueContainer()
       try container.encode(rawValue)
     }
+
+    var displayName: String {
+      switch self {
+      case .gemini: return "Gemini"
+      case .openRouter: return "OpenRouter"
+      case .openAI: return "OpenAI"
+      case .anthropic: return "Anthropic"
+      }
+    }
   }
 
   var provider: Provider

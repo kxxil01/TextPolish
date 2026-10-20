@@ -26,8 +26,9 @@ final class SettingsWindowControllerTests: XCTestCase {
             [.titled, .closable, .miniaturizable, .fullSizeContentView],
             "Window should have correct style mask"
         )
-        XCTAssertEqual(controller.window?.minSize, NSSize(width: 560, height: 480), "Window should have correct min size")
-        XCTAssertEqual(controller.window?.maxSize, NSSize(width: 560, height: 480), "Window should have correct max size")
+        // The height follows the selected tab, but users cannot resize the window.
+        XCTAssertEqual(controller.window?.minSize, controller.window?.maxSize, "Window should not be user-resizable")
+        XCTAssertEqual(controller.window?.contentMinSize.width, 560, "Window should keep its width")
     }
 
     func testWindowLevel() {
