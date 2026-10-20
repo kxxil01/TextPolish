@@ -29,12 +29,6 @@ final class OpenAITokenPolicyTests: XCTestCase {
     XCTAssertEqual(OpenAITokenPolicy.reasoningEffort(model: "gpt-5-nano-2025-08-07"), "minimal")
   }
 
-  func testClarifyUsesLowReasoningEffort() {
-    XCTAssertEqual(OpenAITokenPolicy.reasoningEffort(model: "gpt-5-nano", style: .clarify), "low")
-    XCTAssertEqual(OpenAITokenPolicy.reasoningEffort(model: "gpt-5-nano", style: .minimal), "minimal")
-    XCTAssertNil(OpenAITokenPolicy.reasoningEffort(model: "gpt-4.1-mini", style: .clarify))
-  }
-
   func testReasoningEffortOmittedForOtherModels() {
     XCTAssertNil(OpenAITokenPolicy.reasoningEffort(model: "gpt-5.5"))
     XCTAssertNil(OpenAITokenPolicy.reasoningEffort(model: "gpt-5-chat-latest"))

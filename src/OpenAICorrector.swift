@@ -119,7 +119,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         extraInstruction: extraInstruction,
         style: style
       )
-      let output = try await generate(prompt: prompt, apiKey: apiKey, style: style)
+      let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw OpenAIError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
@@ -197,7 +197,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return url
   }
 
-  private func generate(prompt: PromptPair, apiKey: String, style: CorrectionStyle) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
     var lastError: Error?
     var retryCount = 0
@@ -211,7 +211,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           return try await sendRequest(
             prompt: prompt,
             apiKey: apiKey,
-            style: style,
             useMaxCompletionTokens: preferredUsesMaxCompletionTokens
           )
         } catch let preferredError as OpenAIError {
@@ -222,7 +221,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             return try await sendRequest(
               prompt: prompt,
               apiKey: apiKey,
-              style: style,
               useMaxCompletionTokens: !preferredUsesMaxCompletionTokens
             )
           }
@@ -273,7 +271,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private func sendRequest(
     prompt: PromptPair,
     apiKey: String,
-    style: CorrectionStyle,
     useMaxCompletionTokens: Bool
   ) async throws -> String {
     let url = try makeChatCompletionsURL()
@@ -291,8 +288,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       ],
       temperature: 0.0,
       maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
-      useMaxCompletionTokens: useMaxCompletionTokens,
-      style: style
+      useMaxCompletionTokens: useMaxCompletionTokens
     )
     request.httpBody = try JSONEncoder().encode(body)
 
@@ -363,15 +359,14 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     messages: [Message],
     temperature: Double,
     maxTokens: Int,
-    useMaxCompletionTokens: Bool? = nil,
-    style: CorrectionStyle
+    useMaxCompletionTokens: Bool? = nil
   ) {
     self.model = model
     self.messages = messages
     self.temperature = OpenAITokenPolicy.omitsTemperature(model: model) ? nil : temperature
     self.maxTokens = maxTokens
     self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
-    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model, style: style)
+    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model)
   }
 
   func encode(to encoder: Encoder) throws {
