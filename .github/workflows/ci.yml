@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  security-events: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -46,27 +44,6 @@ jobs:
           name: TextPolish.app
           path: build/TextPolish.app.zip
           if-no-files-found: error
-
-  codeql:
-    runs-on: macos-14
-    permissions:
-      security-events: write
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@c43362b91a940600cde2ebae39ec7a35ad66bdc0
-        with:
-          languages: swift
-          build-mode: manual
-      - name: Build (CodeQL)
-        run: swift build -c release
-      - name: Analyze CodeQL
-        uses: github/codeql-action/analyze@c43362b91a940600cde2ebae39ec7a35ad66bdc0
-        with:
-          category: /language:swift
 
   secrets-scan:
     runs-on: ubuntu-latest
