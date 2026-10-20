@@ -15,6 +15,13 @@ struct Settings: Codable {
     static let correctSelectionDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let correctAllDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
     static let analyzeToneDefault = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey))
+    static let rewriteSelectionDefault = HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey | cmdKey))
+
+    /// Settings saved before Rewrite existed may already use its default combo for another action.
+    static func rewriteSelectionDefault(avoiding taken: [HotKey]) -> HotKey {
+      guard taken.contains(rewriteSelectionDefault) else { return rewriteSelectionDefault }
+      return HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
+    }
 
     var displayString: String {
       var parts: [String] = []
@@ -283,6 +290,7 @@ struct Settings: Codable {
   var hotKeyCorrectSelection: HotKey
   var hotKeyCorrectAll: HotKey
   var hotKeyAnalyzeTone: HotKey
+  var hotKeyRewriteSelection: HotKey
   var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
@@ -335,6 +343,7 @@ struct Settings: Codable {
     hotKeyCorrectSelection: HotKey = .correctSelectionDefault,
     hotKeyCorrectAll: HotKey = .correctAllDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
+    hotKeyRewriteSelection: HotKey = .rewriteSelectionDefault,
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.5-flash",
@@ -374,6 +383,7 @@ struct Settings: Codable {
     self.hotKeyCorrectSelection = hotKeyCorrectSelection
     self.hotKeyCorrectAll = hotKeyCorrectAll
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
+    self.hotKeyRewriteSelection = hotKeyRewriteSelection
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
@@ -417,6 +427,8 @@ struct Settings: Codable {
     hotKeyCorrectSelection = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectSelection)) ?? .correctSelectionDefault
     hotKeyCorrectAll = (try? container.decode(HotKey.self, forKey: .hotKeyCorrectAll)) ?? .correctAllDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
+    hotKeyRewriteSelection = (try? container.decode(HotKey.self, forKey: .hotKeyRewriteSelection))
+      ?? HotKey.rewriteSelectionDefault(avoiding: [hotKeyCorrectSelection, hotKeyCorrectAll, hotKeyAnalyzeTone])
     enableGeminiOpenRouterFallback =
       try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
@@ -465,6 +477,7 @@ struct Settings: Codable {
     try container.encode(hotKeyCorrectSelection, forKey: .hotKeyCorrectSelection)
     try container.encode(hotKeyCorrectAll, forKey: .hotKeyCorrectAll)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
+    try container.encode(hotKeyRewriteSelection, forKey: .hotKeyRewriteSelection)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .fallbackToOpenRouterOnGeminiError)
     try container.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
@@ -596,6 +609,7 @@ struct Settings: Codable {
     case hotKeyCorrectSelection
     case hotKeyCorrectAll
     case hotKeyAnalyzeTone
+    case hotKeyRewriteSelection
     case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey

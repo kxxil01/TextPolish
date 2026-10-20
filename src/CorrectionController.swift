@@ -205,11 +205,16 @@ final class CorrectionController {
   }
 
   func correctSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selection, targetApplication: targetApplication, timingsOverride: timingsOverride)
+    run(mode: .selection, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
   func correctAll(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .all, targetApplication: targetApplication, timingsOverride: timingsOverride)
+    run(mode: .all, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
+  }
+
+  /// Like Correct Selection, but lightly rephrases unclear wording so it reads naturally.
+  func rewriteSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
+    run(mode: .selection, style: .clarify, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
   private enum Mode {
@@ -219,7 +224,12 @@ final class CorrectionController {
 
   // Legacy hotspot: split this up before removing the suppression.
   // swiftlint:disable:next function_body_length cyclomatic_complexity
-  private func run(mode: Mode, targetApplication: NSRunningApplication?, timingsOverride: Timings?) {
+  private func run(
+    mode: Mode,
+    style: CorrectionStyle,
+    targetApplication: NSRunningApplication?,
+    timingsOverride: Timings?
+  ) {
     guard !isRunning else {
       maybeShowBusyFeedback()
       return
@@ -325,7 +335,7 @@ final class CorrectionController {
 
         var corrected: String?
         do {
-          corrected = try await self.runCorrector(corrector, text: inputText, deadline: deadline)
+          corrected = try await self.runCorrector(corrector, text: inputText, style: style, deadline: deadline)
         } catch {
           let primaryError = error
           var unresolvedError: Error? = primaryError
@@ -339,7 +349,7 @@ final class CorrectionController {
               fallbackCount += 1
               usedCorrector = fallbackCorrector
               self.updateProviderModel(for: fallbackCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(fallbackCorrector, text: inputText, deadline: deadline)
+              corrected = try await self.runCorrector(fallbackCorrector, text: inputText, style: style, deadline: deadline)
               unresolvedError = nil
             } catch {
               unresolvedError = error
@@ -353,7 +363,7 @@ final class CorrectionController {
               let retryCorrector = action.corrector ?? self.corrector
               usedCorrector = retryCorrector
               self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(retryCorrector, text: inputText, deadline: deadline)
+              corrected = try await self.runCorrector(retryCorrector, text: inputText, style: style, deadline: deadline)
             } else {
               throw unresolvedError
             }
@@ -595,12 +605,13 @@ final class CorrectionController {
   private func runCorrector(
     _ corrector: GrammarCorrector,
     text: String,
+    style: CorrectionStyle,
     deadline: ContinuousClock.Instant
   ) async throws -> String {
     let remaining = try remainingDuration(until: deadline)
     let timeoutError = OperationError.timedOut(operationTimeout)
     let task = Task.detached(priority: .userInitiated) {
-      try await corrector.correct(text)
+      try await corrector.correct(text, style: style)
     }
     defer {
       task.cancel()

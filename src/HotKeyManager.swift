@@ -10,6 +10,7 @@ final class HotKeyManager {
     case correctSelection = 1
     case correctAll = 2
     case analyzeTone = 3
+    case rewriteSelection = 4
   }
 
   enum HotKeyManagerError: Error {
@@ -25,6 +26,7 @@ final class HotKeyManager {
   private var registeredSelection: Settings.HotKey?
   private var registeredAll: Settings.HotKey?
   private var registeredAnalyzeTone: Settings.HotKey?
+  private var registeredRewrite: Settings.HotKey?
 
   private static let signature: OSType = 0x47434F52 // 'GCOR'
   private static let eventHotKeyDuplicateErr: OSStatus = -9962
@@ -42,14 +44,21 @@ final class HotKeyManager {
     self.installHandler = installHandler
   }
 
-  func registerHotKeys(correctSelection: Settings.HotKey, correctAll: Settings.HotKey, analyzeTone: Settings.HotKey) throws {
+  func registerHotKeys(
+    correctSelection: Settings.HotKey,
+    correctAll: Settings.HotKey,
+    analyzeTone: Settings.HotKey,
+    rewriteSelection: Settings.HotKey
+  ) throws {
     try installHandlerIfNeeded()
     if registeredSelection == correctSelection,
        registeredAll == correctAll,
        registeredAnalyzeTone == analyzeTone,
+       registeredRewrite == rewriteSelection,
        hotKeyRefs[HotKeyID.correctSelection.rawValue] != nil,
        hotKeyRefs[HotKeyID.correctAll.rawValue] != nil,
-       hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil
+       hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil,
+       hotKeyRefs[HotKeyID.rewriteSelection.rawValue] != nil
     {
       return
     }
@@ -57,11 +66,13 @@ final class HotKeyManager {
     let previousSelection = registeredSelection
     let previousAll = registeredAll
     let previousAnalyzeTone = registeredAnalyzeTone
+    let previousRewrite = registeredRewrite
     unregisterAll()
 
     let correctSelectionID = HotKeyID.correctSelection.rawValue
     let correctAllID = HotKeyID.correctAll.rawValue
     let analyzeToneID = HotKeyID.analyzeTone.rawValue
+    let rewriteSelectionID = HotKeyID.rewriteSelection.rawValue
 
     var firstError: Error?
 
@@ -95,6 +106,7 @@ final class HotKeyManager {
     registeredSelection = registerWithFallback(id: correctSelectionID, desired: correctSelection, previous: previousSelection)
     registeredAll = registerWithFallback(id: correctAllID, desired: correctAll, previous: previousAll)
     registeredAnalyzeTone = registerWithFallback(id: analyzeToneID, desired: analyzeTone, previous: previousAnalyzeTone)
+    registeredRewrite = registerWithFallback(id: rewriteSelectionID, desired: rewriteSelection, previous: previousRewrite)
 
     if let firstError {
       throw firstError
