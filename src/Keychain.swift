@@ -93,11 +93,23 @@ enum Keychain {
     return nil
   }
 
+  /// Checks for a stored key by its attributes only. Reading the secret asks the user for keychain access
+  /// unless they chose Always Allow, so the Settings window used to prompt once per provider.
   static func hasConfiguredPassword(primaryService: String, account: String) -> Bool {
-    guard let password = try? getConfiguredPassword(primaryService: primaryService, account: account) else {
-      return false
+    configuredServices(primaryService: primaryService).contains { service in
+      passwordExists(service: service, account: account)
     }
-    return !trim(password).isEmpty
+  }
+
+  private static func passwordExists(service: String, account: String) -> Bool {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecReturnAttributes as String: true,
+    ]
+    return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
   }
 
   static func setConfiguredPassword(
