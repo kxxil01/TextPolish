@@ -136,7 +136,7 @@ struct ToneAnalysisConfig: Sendable {
   static let `default` = ToneAnalysisConfig(
     minTextLength: 2,
     maxTextLength: 10000,
-    maxOutputTokens: 1024
+    maxOutputTokens: 2048
   )
 
   func validatedInputText(_ text: String) throws -> String {
@@ -170,10 +170,10 @@ enum ToneAnalysisPromptBuilder {
       - "level": one of ["low", "medium", "high"]
       - "reason": one short reason for that risk level
     - "ambiguities": array of 0-3 short strings describing ambiguous phrases (empty array if none)
-    - "suggested_reply": array of 0-2 concise, appropriate reply options (empty array if not needed)
+    - "suggested_replies": array of 0-2 concise, appropriate reply options (empty array if not needed)
 
     Rules:
-    - Keep plain_meaning and suggested_reply in the same language as the input message.
+    - Write plain_meaning, likely_intent, the misunderstanding_risk reason, ambiguities, and suggested_replies in the same language as the input message.
     - For key_phrases, always explain in English since these are language-learning aids.
     - Be concise and literal; do not add facts not implied by the message.
     - Respond with ONLY the JSON object (no markdown, no code fences, no extra text).
@@ -227,7 +227,7 @@ enum ToneAnalysisJSONParser {
         limit: 3
       )
       let suggestedReplies = try requiredStringArray(
-        key: "suggested_reply",
+        key: "suggested_replies",
         in: dictionary,
         limit: 2
       )

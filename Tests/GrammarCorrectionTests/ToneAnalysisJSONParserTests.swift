@@ -3,7 +3,7 @@ import XCTest
 
 final class ToneAnalysisJSONParserTests: XCTestCase {
   func testParseStructuredResponse() throws {
-    let response = #"{"tone":"Friendly","plain_meaning":"The sender is checking your availability.","likely_intent":"Schedule a quick sync","sentiment":"positive","formality":"casual","key_phrases":[{"phrase":"quick sync","meaning":"A brief meeting to align on something"}],"misunderstanding_risk":{"level":"low","reason":"The request is direct."},"ambiguities":[],"suggested_reply":[]}"#
+    let response = #"{"tone":"Friendly","plain_meaning":"The sender is checking your availability.","likely_intent":"Schedule a quick sync","sentiment":"positive","formality":"casual","key_phrases":[{"phrase":"quick sync","meaning":"A brief meeting to align on something"}],"misunderstanding_risk":{"level":"low","reason":"The request is direct."},"ambiguities":[],"suggested_replies":[]}"#
 
     let result = try ToneAnalysisJSONParser.parseResponse(response)
 
@@ -30,7 +30,7 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
   func testParseCodeFenceResponse() throws {
     let fenced = """
     ```json
-    {"tone":"Direct","plain_meaning":"The sender wants a confirmation today.","likely_intent":"Get confirmation","misunderstanding_risk":{"level":"high","reason":"Deadline wording is ambiguous."},"ambiguities":["today could mean local timezone cutoff"],"suggested_reply":[]}
+    {"tone":"Direct","plain_meaning":"The sender wants a confirmation today.","likely_intent":"Get confirmation","misunderstanding_risk":{"level":"high","reason":"Deadline wording is ambiguous."},"ambiguities":["today could mean local timezone cutoff"],"suggested_replies":[]}
     ```
     """
 
@@ -53,7 +53,7 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
       "key_phrases": [{"phrase": "ASAP", "meaning": "As soon as possible — implies urgency"}, {"phrase": "circle back", "meaning": "Return to discuss this topic later"}],
       "misunderstanding_risk": { "level": "medium", "reason": "Timeline wording is vague." },
       "ambiguities": ["'soon' could mean today or this week", "Scope of 'fix' is unclear"],
-      "suggested_reply": ["I can share a concrete ETA by 5 PM.", "Do you want a quick summary or full details?"]
+      "suggested_replies": ["I can share a concrete ETA by 5 PM.", "Do you want a quick summary or full details?"]
     }
     """#
 
@@ -72,7 +72,7 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
   }
 
   func testParseMissingRequiredFieldReportsSingleClearError() {
-    let invalid = #"{"tone":"Neutral","likely_intent":"Share information","misunderstanding_risk":{"level":"low","reason":"Clear wording."},"ambiguities":[],"suggested_reply":[]}"#
+    let invalid = #"{"tone":"Neutral","likely_intent":"Share information","misunderstanding_risk":{"level":"low","reason":"Clear wording."},"ambiguities":[],"suggested_replies":[]}"#
 
     XCTAssertThrowsError(try ToneAnalysisJSONParser.parseResponse(invalid)) { error in
       guard case ToneAnalysisError.invalidResponse(let details) = error else {
@@ -84,7 +84,7 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
   }
 
   func testParseMissingNewFieldsDefaultsGracefully() throws {
-    let response = #"{"tone":"Neutral","plain_meaning":"A simple statement.","likely_intent":"Inform","misunderstanding_risk":{"level":"low","reason":"Clear."},"ambiguities":[],"suggested_reply":[]}"#
+    let response = #"{"tone":"Neutral","plain_meaning":"A simple statement.","likely_intent":"Inform","misunderstanding_risk":{"level":"low","reason":"Clear."},"ambiguities":[],"suggested_replies":[]}"#
 
     let result = try ToneAnalysisJSONParser.parseResponse(response)
 
@@ -110,5 +110,15 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
     let pair = ToneAnalysisPromptBuilder.makePrompt(text: "secret message")
 
     XCTAssertFalse(pair.system.contains("secret message"))
+  }
+
+  func testTonePromptUsesPluralRepliesKeyAndCoversAllLanguageFields() {
+    let pair = ToneAnalysisPromptBuilder.makePrompt(text: "Hey, can we chat?")
+
+    XCTAssertTrue(pair.system.contains("\"suggested_replies\""))
+    XCTAssertFalse(pair.system.contains("\"suggested_reply\""))
+    XCTAssertTrue(pair.system.contains(
+      "Write plain_meaning, likely_intent, the misunderstanding_risk reason, ambiguities, and suggested_replies in the same language"
+    ))
   }
 }

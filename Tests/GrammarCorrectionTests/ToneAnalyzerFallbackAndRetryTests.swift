@@ -29,7 +29,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
       )
     }
 
@@ -69,7 +69,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
       )
     }
 
@@ -95,7 +95,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
       )
     }
 
@@ -140,7 +140,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}"#
+        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}"#
       )
     }
 
@@ -235,7 +235,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
       )
     }
 
@@ -261,7 +261,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
       )
     }
 
@@ -279,6 +279,36 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       "/custom-prefix/v1beta/models/gemini-2.5-flash:generateContent",
       "Gemini tone endpoint should not duplicate version segments from configured base URL"
     )
+  }
+
+  func testGeminiToneRequestAsksForJSONWithoutThinking() async throws {
+    var capturedBody: Data?
+
+    ToneMockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test",
+      geminiBaseURL: "https://mock.local"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+    XCTAssertEqual(config["responseMimeType"] as? String, "application/json")
+    XCTAssertEqual(config["maxOutputTokens"] as? Int, ToneAnalysisConfig.default.maxOutputTokens)
+    let thinking = try XCTUnwrap(config["thinkingConfig"] as? [String: Any])
+    XCTAssertEqual(thinking["thinkingBudget"] as? Int, 0)
   }
 
   func testGeminiToneAnalyzerRejectsWhitespaceOnlyTextBeforeCredentialLookup() async throws {
