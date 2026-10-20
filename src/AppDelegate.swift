@@ -1294,9 +1294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Fetch model list
         do {
             let models = try await fetchOpenAIModels(apiKey: apiKey)
-            let chatModels = models.filter {
-                $0.contains("gpt") || $0.hasPrefix("o1") || $0.hasPrefix("o3") || $0.hasPrefix("o4")
-            }.sorted()
+            let chatModels = models.filter(OpenAITokenPolicy.isChatModel).sorted()
             lines.append("Chat models (\(chatModels.count)):")
             let displayModels = chatModels.prefix(20)
             for model in displayModels {
@@ -1310,6 +1308,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if !chatModels.contains(settings.openAIModel), !models.contains(settings.openAIModel) {
                 lines.append("")
                 lines.append("⚠ Current model \"\(settings.openAIModel)\" not found.")
+            } else if OpenAITokenPolicy.isModelFamily(settings.openAIModel),
+                      !OpenAITokenPolicy.isChatModel(settings.openAIModel)
+            {
+                lines.append("")
+                lines.append("⚠ \"\(settings.openAIModel)\" is not a chat model. Use Detect Model or set gpt-5-nano.")
             }
         } catch {
             lines.append("✗ Failed to fetch models: \(error.localizedDescription)")

@@ -43,6 +43,27 @@ enum OpenAITokenPolicy {
     return jsonModePrefixes.contains { normalized.hasPrefix($0) }
   }
 
+  /// Model kinds that the Chat Completions endpoint rejects or that are not text chat models.
+  private static let nonChatMarkers = [
+    "realtime", "audio", "tts", "transcribe", "whisper", "image", "dall-e", "embedding",
+    "moderation", "search", "instruct", "codex", "computer-use", "deep-research",
+  ]
+
+  static func isModelFamily(_ model: String) -> Bool {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalized.hasPrefix("gpt-") || normalized.hasPrefix("o1") || normalized.hasPrefix("o3") || normalized.hasPrefix("o4")
+  }
+
+  /// True for OpenAI models that work with Chat Completions. Pro models are Responses API only.
+  static func isChatModel(_ model: String) -> Bool {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard isModelFamily(normalized) else { return false }
+    if normalized.hasSuffix("-pro") || normalized.contains("-pro-") {
+      return false
+    }
+    return !nonChatMarkers.contains { normalized.contains($0) }
+  }
+
   static func isTokenParameterError(message: String?) -> Bool {
     let lowered = message?.lowercased() ?? ""
     guard !lowered.isEmpty else { return false }

@@ -171,27 +171,37 @@ enum ModelDetector {
             }
 
             let decoded = try JSONDecoder().decode(OpenAIModelsResponse.self, from: data)
-            let gptModels = decoded.data?.filter { $0.id.lowercased().hasPrefix("gpt") } ?? []
-
-            if let preferred = gptModels.first(where: {
-                let id = $0.id.lowercased()
-                return id.contains("nano") || id.contains("mini")
-            }) {
-                return preferred.id
-            }
-            if let gpt = gptModels.first {
-                return gpt.id
-            }
-            if let first = decoded.data?.first {
-                return first.id
+            let ids = decoded.data?.map(\.id) ?? []
+            if let model = preferredOpenAIModel(from: ids) {
+                return model
             }
 
-            throw DetectorError.requestFailed("No models found")
+            throw DetectorError.requestFailed(ids.isEmpty ? "No models found" : "No chat models found for this API key")
         } catch let error as DetectorError {
             throw error
         } catch {
             throw DetectorError.requestFailed(error.localizedDescription)
         }
+    }
+
+    /// Fast, low-cost chat models that suit short corrections, most preferred first.
+    private static let openAIPreferredModels = ["gpt-5-nano", "gpt-5-mini", "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4o-mini"]
+
+    /// Picks a chat model for corrections. OpenAI-compatible servers with their own model names
+    /// get their first model; OpenAI lists that hold no chat model get nil instead of a model that fails.
+    static func preferredOpenAIModel(from ids: [String]) -> String? {
+        let chatModels = ids.filter(OpenAITokenPolicy.isChatModel).sorted()
+        if let preferred = openAIPreferredModels.first(where: chatModels.contains) {
+            return preferred
+        }
+        if let small = chatModels.first(where: { $0.contains("nano") || $0.contains("mini") }) {
+            return small
+        }
+        if let first = chatModels.first {
+            return first
+        }
+        let isOpenAIList = ids.contains(where: OpenAITokenPolicy.isModelFamily)
+        return isOpenAIList ? nil : ids.sorted().first
     }
 
     static func detectAnthropicModel(

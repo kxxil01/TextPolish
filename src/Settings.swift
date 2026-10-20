@@ -547,6 +547,10 @@ struct Settings: Codable {
 
     openAIModel = Self.trimmed(openAIModel)
     if openAIModel.isEmpty { openAIModel = Defaults.openAIModel }
+    // A realtime, audio, or image model fails every correction; use the default chat model instead.
+    if OpenAITokenPolicy.isModelFamily(openAIModel), !OpenAITokenPolicy.isChatModel(openAIModel) {
+      openAIModel = Defaults.openAIModel
+    }
 
     anthropicModel = Self.trimmed(anthropicModel)
     if anthropicModel.isEmpty { anthropicModel = Defaults.anthropicModel }
