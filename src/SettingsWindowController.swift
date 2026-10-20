@@ -3,7 +3,14 @@ import AppKit
 class SettingsWindowController: NSWindowController {
     var viewController: SettingsWindowViewController?
 
-    convenience init(keychainServiceOverride: String? = nil) {
+    /// A bare `SettingsWindowController()` would otherwise resolve to NSWindowController's inherited
+    /// `init()`, which builds no window, so Settings silently never opens. Block it at compile time.
+    @available(*, unavailable, message: "Use init(keychainServiceOverride:) and pass nil for the app keychain")
+    convenience init() {
+        self.init(window: nil)
+    }
+
+    convenience init(keychainServiceOverride: String?) {
         let window = Self.createWindow()
         self.init(window: window)
         self.window?.title = "TextPolish Settings"
