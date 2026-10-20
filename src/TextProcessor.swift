@@ -218,6 +218,23 @@ extension TextProcessor {
     }
   }
 
+  /// Why a candidate failed the acceptance checks, for the system log. Counts and scores only, never the text.
+  func rejectionSummary(original: String, candidate: String, minimumSimilarity: Double) -> String {
+    let lines = "lines \(newlineCount(in: original))->\(newlineCount(in: candidate))"
+    let blanks = "blank \(blankLineCount(in: original))->\(blankLineCount(in: candidate))"
+    let lists = "list \(listItemCount(in: original))->\(listItemCount(in: candidate))"
+    let minimum = String(format: "%.2f", minimumSimilarity)
+    let similarityText: String
+    // An exact score costs a full edit-distance pass, so only compute it for short texts.
+    if original.unicodeScalars.count <= 4_000, candidate.unicodeScalars.count <= 4_000 {
+      similarityText = String(format: "similarity %.2f", similarity(original, candidate)) + " (min \(minimum))"
+    } else {
+      let passes = isSimilarEnough(original: original, candidate: candidate, minimum: minimumSimilarity)
+      similarityText = "similarity \(passes ? "at or above" : "below") min \(minimum)"
+    }
+    return [lines, blanks, lists, similarityText].joined(separator: " ")
+  }
+
   private func blankLineCount(in string: String) -> Int {
     string.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).isEmpty }.count
   }

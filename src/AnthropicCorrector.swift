@@ -110,7 +110,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     let protected = protect(text)
 
     var retryReason: CorrectionRetryReason?
-    for _ in 1...maxAttempts {
+    for attempt in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
         retryReason: retryReason,
@@ -123,10 +123,12 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       guard !cleaned.isEmpty else { throw AnthropicError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
         retryReason = .refusal
+        TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: refusal")
         continue
       }
       if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
         retryReason = .outputTooLong
+        TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: outputTooLong")
         continue
       }
 
@@ -134,6 +136,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
         retryReason = .placeholdersMissing
+        TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: placeholdersMissing")
         continue
       }
 
@@ -142,6 +145,12 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         return restored
       }
       retryReason = .overRewrite
+      let summary = rejectionSummary(
+        original: text,
+        candidate: restored,
+        minimumSimilarity: style.minimumSimilarity(configured: minSimilarity)
+      )
+      TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: overRewrite, \(summary)")
     }
 
     throw AnthropicError.overRewrite
