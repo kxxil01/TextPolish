@@ -25,13 +25,14 @@ enum OpenAITokenPolicy {
       || normalized.hasPrefix("o4")
   }
 
-  /// Lowest reasoning effort for the GPT-5 models documented to accept "minimal".
-  /// Other reasoning models keep their default because accepted values differ per model.
-  static func reasoningEffort(model: String) -> String? {
+  /// Reasoning effort for the GPT-5 models documented to accept "minimal" and "low". Corrections use
+  /// "minimal" for speed; clarifying rewrites use "low" so the model can rephrase well. Other reasoning
+  /// models keep their default because accepted values differ per model.
+  static func reasoningEffort(model: String, style: CorrectionStyle = .minimal) -> String? {
     let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     let minimalEffortModels = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
     for name in minimalEffortModels where normalized == name || normalized.hasPrefix(name + "-20") {
-      return "minimal"
+      return style == .clarify ? "low" : "minimal"
     }
     return nil
   }

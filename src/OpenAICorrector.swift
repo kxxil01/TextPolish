@@ -119,7 +119,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         extraInstruction: extraInstruction,
         style: style
       )
-      let output = try await generate(prompt: prompt, apiKey: apiKey)
+      let output = try await generate(prompt: prompt, apiKey: apiKey, style: style)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw OpenAIError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
@@ -139,8 +139,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       }
 
       let restored = restore(cleaned, placeholders: protected.placeholders)
-      let minimum = style.minimumSimilarity(configured: minSimilarity)
-      if isAcceptable(original: text, candidate: restored, minimum: minimum) {
+      if isAcceptable(original: text, candidate: restored, style: style) {
         return restored
       }
       retryReason = .overRewrite
@@ -189,7 +188,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return url
   }
 
-  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String, style: CorrectionStyle) async throws -> String {
     let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
     var lastError: Error?
     var retryCount = 0
@@ -203,6 +202,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
           return try await sendRequest(
             prompt: prompt,
             apiKey: apiKey,
+            style: style,
             useMaxCompletionTokens: preferredUsesMaxCompletionTokens
           )
         } catch let preferredError as OpenAIError {
@@ -213,6 +213,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             return try await sendRequest(
               prompt: prompt,
               apiKey: apiKey,
+              style: style,
               useMaxCompletionTokens: !preferredUsesMaxCompletionTokens
             )
           }
@@ -263,6 +264,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private func sendRequest(
     prompt: PromptPair,
     apiKey: String,
+    style: CorrectionStyle,
     useMaxCompletionTokens: Bool
   ) async throws -> String {
     let url = try makeChatCompletionsURL()
@@ -280,7 +282,8 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       ],
       temperature: 0.0,
       maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
-      useMaxCompletionTokens: useMaxCompletionTokens
+      useMaxCompletionTokens: useMaxCompletionTokens,
+      style: style
     )
     request.httpBody = try JSONEncoder().encode(body)
 
@@ -325,9 +328,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return nil
   }
 
-  private func isAcceptable(original: String, candidate: String, minimum: Double) -> Bool {
+  private func isAcceptable(original: String, candidate: String, style: CorrectionStyle) -> Bool {
     guard candidate != original else { return true }
-    guard newlineCount(in: candidate) == newlineCount(in: original) else { return false }
+    guard keepsLineStructure(original: original, candidate: candidate, style: style) else { return false }
+    let minimum = style.minimumSimilarity(configured: minSimilarity)
     return isSimilarEnough(original: original, candidate: candidate, minimum: minimum)
   }
 }
@@ -350,14 +354,15 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     messages: [Message],
     temperature: Double,
     maxTokens: Int,
-    useMaxCompletionTokens: Bool? = nil
+    useMaxCompletionTokens: Bool? = nil,
+    style: CorrectionStyle
   ) {
     self.model = model
     self.messages = messages
     self.temperature = OpenAITokenPolicy.omitsTemperature(model: model) ? nil : temperature
     self.maxTokens = maxTokens
     self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
-    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model)
+    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model, style: style)
   }
 
   func encode(to encoder: Encoder) throws {

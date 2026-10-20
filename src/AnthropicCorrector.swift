@@ -138,8 +138,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       }
 
       let restored = restore(cleaned, placeholders: protected.placeholders)
-      let minimum = style.minimumSimilarity(configured: minSimilarity)
-      if isAcceptable(original: text, candidate: restored, minimum: minimum) {
+      if isAcceptable(original: text, candidate: restored, style: style) {
         return restored
       }
       retryReason = .overRewrite
@@ -294,9 +293,10 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     return nil
   }
 
-  private func isAcceptable(original: String, candidate: String, minimum: Double) -> Bool {
+  private func isAcceptable(original: String, candidate: String, style: CorrectionStyle) -> Bool {
     guard candidate != original else { return true }
-    guard newlineCount(in: candidate) == newlineCount(in: original) else { return false }
+    guard keepsLineStructure(original: original, candidate: candidate, style: style) else { return false }
+    let minimum = style.minimumSimilarity(configured: minSimilarity)
     return isSimilarEnough(original: original, candidate: candidate, minimum: minimum)
   }
 }

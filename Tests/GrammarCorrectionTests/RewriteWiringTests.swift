@@ -7,23 +7,31 @@ import XCTest
 extension CorrectionControllerTests {
 
   @MainActor
-  func testRewriteSelectionUsesClarifyStyle() async {
-    let styles = await runCorrection { $0.rewriteSelection() }
+  func testRewriteSelectionUsesClarifyStyleAndRewriteFeedback() async {
+    let feedback = StubFeedback()
+    let styles = await runCorrection(feedback: feedback) { $0.rewriteSelection() }
 
     XCTAssertEqual(styles, [.clarify])
+    XCTAssertEqual(feedback.rewriteSuccessCount, 1)
+    XCTAssertEqual(feedback.successCount, 0)
   }
 
   @MainActor
-  func testCorrectSelectionKeepsMinimalStyle() async {
-    let styles = await runCorrection { $0.correctSelection() }
+  func testCorrectSelectionKeepsMinimalStyleAndCorrectFeedback() async {
+    let feedback = StubFeedback()
+    let styles = await runCorrection(feedback: feedback) { $0.correctSelection() }
 
     XCTAssertEqual(styles, [.minimal])
+    XCTAssertEqual(feedback.successCount, 1)
+    XCTAssertEqual(feedback.rewriteSuccessCount, 0)
   }
 
   @MainActor
-  private func runCorrection(_ start: (CorrectionController) -> Void) async -> [CorrectionStyle] {
+  private func runCorrection(
+    feedback: StubFeedback,
+    _ start: (CorrectionController) -> Void
+  ) async -> [CorrectionStyle] {
     let completion = expectation(description: "correction finished")
-    let feedback = StubFeedback()
     feedback.onSuccess = { completion.fulfill() }
     let recorder = StyleRecordingCorrector()
     let controller = CorrectionController(

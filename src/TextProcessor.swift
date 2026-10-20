@@ -205,6 +205,37 @@ extension TextProcessor {
     }
   }
 
+  /// Corrections keep every line. Rewrites may join lines inside a paragraph, but never add lines,
+  /// and paragraph breaks and list items must survive.
+  func keepsLineStructure(original: String, candidate: String, style: CorrectionStyle) -> Bool {
+    switch style {
+    case .minimal:
+      return newlineCount(in: candidate) == newlineCount(in: original)
+    case .clarify:
+      return newlineCount(in: candidate) <= newlineCount(in: original)
+        && blankLineCount(in: candidate) == blankLineCount(in: original)
+        && listItemCount(in: candidate) == listItemCount(in: original)
+    }
+  }
+
+  private func blankLineCount(in string: String) -> Int {
+    string.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+  }
+
+  /// Lines that start with a bullet ("-", "*", "•") or a number marker ("1." or "1)").
+  private func listItemCount(in string: String) -> Int {
+    string.components(separatedBy: "\n").filter { line in
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+      if ["- ", "* ", "• "].contains(where: trimmed.hasPrefix) {
+        return true
+      }
+      let digits = trimmed.prefix(while: \.isNumber)
+      guard !digits.isEmpty else { return false }
+      let rest = trimmed.dropFirst(digits.count)
+      return rest.hasPrefix(". ") || rest.hasPrefix(") ")
+    }.count
+  }
+
   /// Calculates similarity between two strings using Levenshtein distance
   func similarity(_ source: String, _ target: String) -> Double {
     let sourceScalars = Array(source.unicodeScalars)

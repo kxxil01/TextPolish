@@ -123,7 +123,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         extraInstruction: extraInstruction,
         style: style
       )
-      let output = try await generate(prompt: prompt, apiKey: apiKey)
+      let output = try await generate(prompt: prompt, apiKey: apiKey, style: style)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw GeminiError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
@@ -143,8 +143,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       }
 
       let restored = restore(cleaned, placeholders: protected.placeholders)
-      let minimum = style.minimumSimilarity(configured: minSimilarity)
-      if isAcceptable(original: text, candidate: restored, minimum: minimum) {
+      if isAcceptable(original: text, candidate: restored, style: style) {
         return restored
       }
       retryReason = .overRewrite
@@ -195,7 +194,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case tryNextVersion
   }
 
-  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String, style: CorrectionStyle) async throws -> String {
     let versionsToTry = ["v1beta"]
     var lastError: Error?
     var retryCount = 0
@@ -221,7 +220,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             ],
             generationConfig: GeminiRequestPolicy.generationConfig(
               model: model,
-              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
+              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
+              style: style
             )
           )
           request.httpBody = try JSONEncoder().encode(body)
@@ -341,9 +341,10 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return components.url?.absoluteString ?? url.absoluteString
   }
 
-  private func isAcceptable(original: String, candidate: String, minimum: Double) -> Bool {
+  private func isAcceptable(original: String, candidate: String, style: CorrectionStyle) -> Bool {
     guard candidate != original else { return true }
-    guard newlineCount(in: candidate) == newlineCount(in: original) else { return false }
+    guard keepsLineStructure(original: original, candidate: candidate, style: style) else { return false }
+    let minimum = style.minimumSimilarity(configured: minSimilarity)
     return isSimilarEnough(original: original, candidate: candidate, minimum: minimum)
   }
 }

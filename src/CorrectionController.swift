@@ -411,7 +411,7 @@ final class CorrectionController {
         self.keyboard.sendCommandV()
         didPaste = true
         try await self.sleepRespectingDeadline(timings.postPasteDelay, until: deadline)
-        self.feedback.showSuccess()
+        self.showSuccess(for: style)
         let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
         DiagnosticsStore.shared.recordSuccess(
           operation: .correction,
@@ -424,7 +424,7 @@ final class CorrectionController {
         self.onSuccess?()
       } catch is CancellationError {
         if didPaste {
-          self.feedback.showSuccess()
+          self.showSuccess(for: style)
           let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
           DiagnosticsStore.shared.recordSuccess(
             operation: .correction,
@@ -452,7 +452,7 @@ final class CorrectionController {
         }
       } catch {
         if didPaste, let operationError = error as? OperationError, case .timedOut = operationError {
-          self.feedback.showSuccess()
+          self.showSuccess(for: style)
           let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
           DiagnosticsStore.shared.recordSuccess(
             operation: .correction,
@@ -600,6 +600,13 @@ final class CorrectionController {
 
   private func copySentinel() -> String {
     "GC_COPY_SENTINEL_" + UUID().uuidString
+  }
+
+  private func showSuccess(for style: CorrectionStyle) {
+    switch style {
+    case .minimal: feedback.showSuccess()
+    case .clarify: feedback.showRewriteSuccess()
+    }
   }
 
   private func runCorrector(

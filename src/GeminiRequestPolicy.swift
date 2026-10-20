@@ -17,12 +17,13 @@ enum GeminiRequestPolicy {
   static func generationConfig(
     model: String,
     maxOutputTokens: Int,
-    responseMimeType: String? = nil
+    responseMimeType: String? = nil,
+    style: CorrectionStyle = .minimal
   ) -> GeminiGenerationConfig {
     GeminiGenerationConfig(
       temperature: temperature(model: model),
       maxOutputTokens: maxOutputTokens,
-      thinkingConfig: thinkingConfig(model: model),
+      thinkingConfig: thinkingConfig(model: model, style: style),
       responseMimeType: responseMimeType
     )
   }
@@ -32,17 +33,19 @@ enum GeminiRequestPolicy {
     isGemini3(normalize(model)) ? nil : 0.0
   }
 
-  /// Keeps thinking as low as each model allows. Gemini 2.5 Pro cannot disable thinking; 128 is its minimum budget.
-  static func thinkingConfig(model: String) -> GeminiGenerationConfig.ThinkingConfig? {
+  /// Corrections keep thinking as low as each model allows (Gemini 2.5 Pro cannot disable it; 128 is its minimum).
+  /// Clarifying rewrites get a small allowance, Google's "low" level, so rephrasing is careful.
+  static func thinkingConfig(model: String, style: CorrectionStyle = .minimal) -> GeminiGenerationConfig.ThinkingConfig? {
     let normalized = normalize(model)
+    let rewriteBudget = 1024
     if normalized.hasPrefix("gemini-2.5-flash") {
-      return .init(thinkingBudget: 0, thinkingLevel: nil)
+      return .init(thinkingBudget: style == .clarify ? rewriteBudget : 0, thinkingLevel: nil)
     }
     if normalized.hasPrefix("gemini-2.5-pro") {
-      return .init(thinkingBudget: 128, thinkingLevel: nil)
+      return .init(thinkingBudget: style == .clarify ? rewriteBudget : 128, thinkingLevel: nil)
     }
     if isGemini3(normalized) {
-      let level = normalized.contains("pro") ? "low" : "minimal"
+      let level = normalized.contains("pro") || style == .clarify ? "low" : "minimal"
       return .init(thinkingBudget: nil, thinkingLevel: level)
     }
     return nil

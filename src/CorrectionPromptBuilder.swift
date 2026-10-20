@@ -36,7 +36,7 @@ enum CorrectionPromptBuilder {
     style: CorrectionStyle = .minimal
   ) -> PromptPair {
     var instructions = style == .clarify ? clarifyRules : minimalRules
-    instructions.append(contentsOf: formattingRules)
+    instructions.append(contentsOf: formattingRules(for: style))
 
     if let retryReason {
       instructions.insert(retryReason.promptInstruction(for: style), at: 2)
@@ -86,29 +86,48 @@ enum CorrectionPromptBuilder {
     "Do not add or remove words unless required to fix an error.",
   ]
 
-  /// Light paraphrase for writers using a second language: clear and natural, same meaning and voice.
+  /// Improves wording for writers using a second language: natural to a native reader, same meaning and voice.
   private static let clarifyRules: [String] = [
-    "You are an editor helping someone who writes in a second language sound clear and natural.",
+    "You are an editor. Improve the text so it reads clearly and naturally to a native speaker, "
+      + "as if the same person wrote it fluently.",
     "Fix spelling, grammar, punctuation, and word order.",
-    "If the text is already clear and correct, return it exactly as given.",
-    "Rephrase only the parts that are unclear, awkward, or easy to misread, and keep every word that already works. "
-      + "Do not translate.",
-    "Split a run-on sentence into shorter sentences when that makes it easier to read.",
+    "Rewrite phrases that sound translated, unclear, or awkward into natural wording. "
+      + "For example, \"until now I still not receive it\" becomes \"I still haven't received it\", "
+      + "and \"please revert back to me\" becomes \"please get back to me\".",
+    "Break a long run-on sentence into shorter, clear sentences.",
     "Keep the meaning exactly. Do not add, drop, or change facts, requests, names, numbers, dates, or commitments, "
       + "and do not add new ideas, greetings, or sign-offs.",
     "Keep the tone and formality. Casual stays casual, and slang or abbreviations such as pls, tbh, or btw stay.",
-    "Keep it human; it should sound like the same person wrote it, not AI.",
+    "Keep it concise and human: do not make it longer or more formal than needed, and do not translate.",
     "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
+    "If the text already reads naturally, return it unchanged.",
   ]
 
-  private static let formattingRules: [String] = [
-    "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons "
-      + "unless they already appear in the original text.",
-    "Keep the original quote and apostrophe style: straight quotes stay straight, curly quotes stay curly.",
-    "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
-      + "mentions (@user, #channel), links, and code blocks.",
-    "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
-  ]
+  private static func formattingRules(for style: CorrectionStyle) -> [String] {
+    let layoutRules: [String]
+    switch style {
+    case .minimal:
+      layoutRules = [
+        "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
+          + "mentions (@user, #channel), links, and code blocks.",
+      ]
+    case .clarify:
+      // AI-written text often puts every sentence on its own line; a person writes flowing paragraphs.
+      layoutRules = [
+        "Join line breaks that split one paragraph into short lines, so the paragraph flows as normal sentences. "
+          + "Keep blank lines between paragraphs, keep each bullet or numbered list item on its own line, "
+          + "and never add new line breaks.",
+        "Preserve indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
+      ]
+    }
+    return [
+      "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons "
+        + "unless they already appear in the original text.",
+      "Keep the original quote and apostrophe style: straight quotes stay straight, curly quotes stay curly.",
+    ] + layoutRules + [
+      "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
+    ]
+  }
 
   // MARK: - Examples
 
@@ -120,9 +139,10 @@ enum CorrectionPromptBuilder {
   ]
 
   private static let clarifyExamples: [String] = [
-    "Example input: <user_text>i already send the file yesterday, can you check it and inform me "
-      + "if there is something wrong</user_text>",
-    "Example output: i already sent the file yesterday. can you check it and let me know if anything is wrong?",
+    "Example input: <user_text>i already check the report, the number in page 3 is not match with the sheet, "
+      + "can you revise and send back to me before end of day</user_text>",
+    "Example output: i've already checked the report. the number on page 3 doesn't match the sheet. "
+      + "can you revise it and send it back to me by end of day?",
     "Example input: <user_text>Thanks for the update. I'll review it today.</user_text>",
     "Example output: Thanks for the update. I'll review it today.",
   ]
