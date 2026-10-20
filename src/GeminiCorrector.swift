@@ -123,7 +123,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         extraInstruction: extraInstruction,
         style: style
       )
-      let output = try await generate(prompt: prompt, apiKey: apiKey)
+      let output = try await generate(prompt: prompt, apiKey: apiKey, style: style)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw GeminiError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
@@ -195,7 +195,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case tryNextVersion
   }
 
-  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String, style: CorrectionStyle) async throws -> String {
     let versionsToTry = ["v1beta"]
     var lastError: Error?
     var retryCount = 0
@@ -221,7 +221,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             ],
             generationConfig: GeminiRequestPolicy.generationConfig(
               model: model,
-              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
+              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
+              style: style
             )
           )
           request.httpBody = try JSONEncoder().encode(body)

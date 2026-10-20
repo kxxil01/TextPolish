@@ -34,6 +34,21 @@ final class ProviderRequestPolicyTests: XCTestCase {
     XCTAssertNil(config.temperature, "Gemini 3 should use its default temperature")
   }
 
+  func testClarifyGetsSmallThinkingAllowance() {
+    XCTAssertEqual(
+      GeminiRequestPolicy.thinkingConfig(model: "gemini-2.5-flash", style: .clarify),
+      .init(thinkingBudget: 1024, thinkingLevel: nil)
+    )
+    XCTAssertEqual(
+      GeminiRequestPolicy.thinkingConfig(model: "gemini-3-flash", style: .clarify),
+      .init(thinkingBudget: nil, thinkingLevel: "low")
+    )
+    XCTAssertEqual(
+      GeminiRequestPolicy.thinkingConfig(model: "gemini-2.5-flash", style: .minimal),
+      .init(thinkingBudget: 0, thinkingLevel: nil)
+    )
+  }
+
   func testGemini3ProUsesLowThinking() {
     let thinking = GeminiRequestPolicy.thinkingConfig(model: "gemini-3.1-pro-preview")
 

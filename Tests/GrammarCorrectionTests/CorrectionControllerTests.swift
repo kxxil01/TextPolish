@@ -20,6 +20,13 @@ final class CorrectionControllerTests: XCTestCase {
       onSuccess?()
     }
 
+    private(set) var rewriteSuccessCount = 0
+
+    func showRewriteSuccess() {
+      rewriteSuccessCount += 1
+      onSuccess?()
+    }
+
     func showInfo(_ message: String) {
       infoMessages.append(message)
       onInfo?(message)

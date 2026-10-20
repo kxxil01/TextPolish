@@ -3,8 +3,16 @@ import AppKit
 @MainActor
 protocol FeedbackPresenter {
   func showSuccess()
+  func showRewriteSuccess()
   func showInfo(_ message: String)
   func showError(_ message: String)
+}
+
+extension FeedbackPresenter {
+  /// Presenters without a distinct rewrite state show the regular success state.
+  func showRewriteSuccess() {
+    showSuccess()
+  }
 }
 
 @MainActor
@@ -44,6 +52,10 @@ final class StatusItemFeedback: FeedbackPresenter {
 
   func showSuccess() {
     flash(symbolName: "checkmark.circle", title: "✓", toolTip: "Corrected", seconds: 0.8)
+  }
+
+  func showRewriteSuccess() {
+    flash(symbolName: "wand.and.stars", title: "✓", toolTip: "Rewritten", seconds: 0.8)
   }
 
   func showInfo(_ message: String) {
