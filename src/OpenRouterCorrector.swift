@@ -19,7 +19,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
           return "OpenRouter unauthorized (401) — check API key"
         }
         if status == 402 {
-          return "OpenRouter payment required (402) — add credits or use a free model (Provider → Set OpenRouter Model… / Detect OpenRouter Model…)"
+          return "OpenRouter payment required (402) — add credits or use a free model "
+            + "(Provider → Set OpenRouter Model… / Detect OpenRouter Model…)"
         }
         if status == 404 {
           if let message, !message.isEmpty {
@@ -45,11 +46,6 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   // MARK: - TextProcessor Requirements
 
   let minSimilarity: Double
-
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
 
   private let baseURL: URL
   private let model: String
@@ -170,11 +166,12 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
   private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     var retryCount = 0
+    let incrementRetryCount = { retryCount += 1 }
     defer { lastRetryCount = retryCount }
 
     return try await retryPolicy.performWithBackoff(
       maxAttempts: retryPolicy.maxNetworkAttempts,
-      onRetry: { retryCount += 1 }
+      onRetry: incrementRetryCount
     ) { attempt, isLastAttempt in
       let url = try makeChatCompletionsURL()
       var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)

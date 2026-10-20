@@ -43,7 +43,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   let minSimilarity: Double
 
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String

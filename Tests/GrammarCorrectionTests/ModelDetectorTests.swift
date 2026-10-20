@@ -2,14 +2,6 @@ import XCTest
 @testable import GrammarCorrection
 
 final class ModelDetectorTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-    }
-
-    override func tearDown() {
-        super.tearDown()
-    }
-
     // MARK: - Gemini Model Detection Tests
 
     func testDetectGeminiModelThrowsWhenNoApiKey() async {
@@ -68,7 +60,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testGeminiModelsResponseDecoding() throws {
         // Given
-        let json = """
+        let json = Data("""
         {
           "models": [
             {
@@ -79,7 +71,7 @@ final class ModelDetectorTests: XCTestCase {
             }
           ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: json)
@@ -92,11 +84,11 @@ final class ModelDetectorTests: XCTestCase {
 
     func testGeminiModelsResponseDecodingWithEmpty() throws {
         // Given
-        let json = """
+        let json = Data("""
         {
           "models": []
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: json)
@@ -139,7 +131,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testOpenRouterModelsResponseDecoding() throws {
         // Given
-        let json = """
+        let json = Data("""
         {
           "data": [
             {
@@ -158,7 +150,7 @@ final class ModelDetectorTests: XCTestCase {
             }
           ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.OpenRouterModelsResponse.self, from: json)
@@ -171,7 +163,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testOpenRouterModelsResponseDecodingWithNilPricing() throws {
         // Given
-        let json = """
+        let json = Data("""
         {
           "data": [
             {
@@ -180,7 +172,7 @@ final class ModelDetectorTests: XCTestCase {
             }
           ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.OpenRouterModelsResponse.self, from: json)
@@ -206,7 +198,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testGeminiPreferredModelSelection() throws {
         // Given - simulates API response with preferred model
-        let json = """
+        let json = Data("""
         {
           "models": [
             {
@@ -220,7 +212,7 @@ final class ModelDetectorTests: XCTestCase {
             }
           ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: json)
@@ -265,7 +257,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testOpenRouterFreeModelSelection() throws {
         // Given - simulates API response with free model
-        let json = """
+        let json = Data("""
         {
           "data": [
             {
@@ -284,7 +276,7 @@ final class ModelDetectorTests: XCTestCase {
             }
           ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.OpenRouterModelsResponse.self, from: json)
@@ -297,11 +289,11 @@ final class ModelDetectorTests: XCTestCase {
 
     func testEmptyModelsResponse() throws {
         // Given
-        let json = """
+        let json = Data("""
         {
           "models": []
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         // When
         let response = try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: json)
@@ -312,7 +304,7 @@ final class ModelDetectorTests: XCTestCase {
 
     func testMalformedJSON() {
         // Given
-        let malformedJson = "{ invalid json }".data(using: .utf8)!
+        let malformedJson = Data("{ invalid json }".utf8)
 
         // When & Then
         XCTAssertThrowsError(try JSONDecoder().decode(ModelDetector.GeminiModelsResponse.self, from: malformedJson)) { error in

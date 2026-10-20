@@ -62,7 +62,7 @@ final class SettingsIntegrationTests: XCTestCase {
     func testProviderSelectionUpdatesSettings() {
         // Given
         settingsWindowViewController?.loadSettings()
-        let _ = settingsWindowViewController?.settings.provider
+        _ = settingsWindowViewController?.settings.provider
 
         // When — use providerTileClicked (the live production path)
         settingsWindowViewController?.providerTileClicked(settingsWindowViewController!.geminiProviderButton!)
@@ -172,30 +172,30 @@ final class SettingsIntegrationTests: XCTestCase {
     }
 
     func testSegmentSwitching() {
-        guard let vc = settingsWindowViewController else { XCTFail("No VC"); return }
+        guard let viewController = settingsWindowViewController else { XCTFail("No VC"); return }
 
         // Switch to Hotkeys (segment 1)
-        vc.segmentedControl.selectedSegment = 1
-        vc.segmentedControl.sendAction(vc.segmentedControl.action, to: vc.segmentedControl.target)
+        viewController.segmentedControl.selectedSegment = 1
+        viewController.segmentedControl.sendAction(viewController.segmentedControl.action, to: viewController.segmentedControl.target)
 
         // Content container should have exactly one child (the hotkeys section)
-        let contentContainer = vc.view.subviews.last
+        let contentContainer = viewController.view.subviews.last
         XCTAssertEqual(contentContainer?.subviews.count, 1, "Content container should have one section view")
 
         // Switch to Advanced (segment 2)
-        vc.segmentedControl.selectedSegment = 2
-        vc.segmentedControl.sendAction(vc.segmentedControl.action, to: vc.segmentedControl.target)
+        viewController.segmentedControl.selectedSegment = 2
+        viewController.segmentedControl.sendAction(viewController.segmentedControl.action, to: viewController.segmentedControl.target)
 
         XCTAssertEqual(contentContainer?.subviews.count, 1, "Content container should swap to advanced section")
     }
 
     func testAllSegmentsAreAccessible() {
         // Given
-        guard let sc = settingsWindowViewController?.segmentedControl else {
+        guard let segmentedControl = settingsWindowViewController?.segmentedControl else {
             XCTFail("Segmented control should exist")
             return
         }
-        let labels = (0..<sc.segmentCount).map { sc.label(forSegment: $0) ?? "" }
+        let labels = (0..<segmentedControl.segmentCount).map { segmentedControl.label(forSegment: $0) ?? "" }
 
         // Then
         XCTAssertTrue(labels.contains("Provider"), "Provider segment should exist")
@@ -244,7 +244,11 @@ final class SettingsIntegrationTests: XCTestCase {
         settingsWindowViewController?.saveSettings()
 
         // Then
-        XCTAssertEqual(settingsWindowViewController?.settings.geminiExtraInstruction, testInstruction, "Extra instruction should be updated")
+        XCTAssertEqual(
+            settingsWindowViewController?.settings.geminiExtraInstruction,
+            testInstruction,
+            "Extra instruction should be updated"
+        )
     }
 
     func testSettingsWindowWindowWillClose() {

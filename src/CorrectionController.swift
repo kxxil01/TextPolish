@@ -26,6 +26,8 @@ extension CorrectionController {
 #endif
 
 @MainActor
+// Legacy hotspot: split this up before removing the suppression.
+// swiftlint:disable:next type_body_length
 final class CorrectionController {
   typealias GlobalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Void) -> Any?
   typealias LocalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Bool) -> Any?
@@ -215,6 +217,8 @@ final class CorrectionController {
     case all
   }
 
+  // Legacy hotspot: split this up before removing the suppression.
+  // swiftlint:disable:next function_body_length cyclomatic_complexity
   private func run(mode: Mode, targetApplication: NSRunningApplication?, timingsOverride: Timings?) {
     guard !isRunning else {
       maybeShowBusyFeedback()

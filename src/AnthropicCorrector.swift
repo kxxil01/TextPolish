@@ -43,7 +43,6 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
   let minSimilarity: Double
 
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -242,7 +241,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
           continue
         }
 
-        if (http.statusCode == 529 || (500...599).contains(http.statusCode)), attempt < maxNetworkAttempts - 1 {
+        if http.statusCode == 529 || (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
           lastError = AnthropicError.requestFailed(http.statusCode, message)
           retryCount += 1
           try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))

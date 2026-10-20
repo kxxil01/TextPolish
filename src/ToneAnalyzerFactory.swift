@@ -2,6 +2,8 @@ import Foundation
 
 enum ToneAnalyzerFactory {
   @MainActor
+  // Legacy hotspot: split this up before removing the suppression.
+  // swiftlint:disable:next function_body_length
   static func make(settings: Settings) -> ToneAnalyzer {
     switch settings.provider {
     case .gemini:

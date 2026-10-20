@@ -20,7 +20,6 @@ struct RetryPolicy: Sendable {
     return min(max(1, sanitized), maxRateLimitBackoffSeconds)
   }
 
-
   func performWithBackoff<Result>(
     maxAttempts: Int? = nil,
     onRetry: (() -> Void)? = nil,

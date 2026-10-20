@@ -474,12 +474,12 @@ private final class MockURLProtocol: URLProtocol {
   static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
   static var requestObserver: ((URLRequest, Date) -> Void)?
 
-  override class func canInit(with request: URLRequest) -> Bool {
+  override static func canInit(with request: URLRequest) -> Bool {
     guard let host = request.url?.host else { return false }
     return host == "mock.local"
   }
 
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest {
     request
   }
 

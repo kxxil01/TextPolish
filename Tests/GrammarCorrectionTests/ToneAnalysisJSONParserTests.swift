@@ -3,7 +3,13 @@ import XCTest
 
 final class ToneAnalysisJSONParserTests: XCTestCase {
   func testParseStructuredResponse() throws {
-    let response = #"{"tone":"Friendly","plain_meaning":"The sender is checking your availability.","likely_intent":"Schedule a quick sync","sentiment":"positive","formality":"casual","key_phrases":[{"phrase":"quick sync","meaning":"A brief meeting to align on something"}],"misunderstanding_risk":{"level":"low","reason":"The request is direct."},"ambiguities":[],"suggested_replies":[]}"#
+    let response = """
+    {"tone":"Friendly","plain_meaning":"The sender is checking your availability.",
+    "likely_intent":"Schedule a quick sync","sentiment":"positive","formality":"casual",
+    "key_phrases":[{"phrase":"quick sync","meaning":"A brief meeting to align on something"}],
+    "misunderstanding_risk":{"level":"low","reason":"The request is direct."},
+    "ambiguities":[],"suggested_replies":[]}
+    """
 
     let result = try ToneAnalysisJSONParser.parseResponse(response)
 
@@ -72,7 +78,11 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
   }
 
   func testParseMissingRequiredFieldReportsSingleClearError() {
-    let invalid = #"{"tone":"Neutral","likely_intent":"Share information","misunderstanding_risk":{"level":"low","reason":"Clear wording."},"ambiguities":[],"suggested_replies":[]}"#
+    let invalid = """
+    {"tone":"Neutral","likely_intent":"Share information",
+    "misunderstanding_risk":{"level":"low","reason":"Clear wording."},
+    "ambiguities":[],"suggested_replies":[]}
+    """
 
     XCTAssertThrowsError(try ToneAnalysisJSONParser.parseResponse(invalid)) { error in
       guard case ToneAnalysisError.invalidResponse(let details) = error else {
@@ -84,7 +94,11 @@ final class ToneAnalysisJSONParserTests: XCTestCase {
   }
 
   func testParseMissingNewFieldsDefaultsGracefully() throws {
-    let response = #"{"tone":"Neutral","plain_meaning":"A simple statement.","likely_intent":"Inform","misunderstanding_risk":{"level":"low","reason":"Clear."},"ambiguities":[],"suggested_replies":[]}"#
+    let response = """
+    {"tone":"Neutral","plain_meaning":"A simple statement.","likely_intent":"Inform",
+    "misunderstanding_risk":{"level":"low","reason":"Clear."},
+    "ambiguities":[],"suggested_replies":[]}
+    """
 
     let result = try ToneAnalysisJSONParser.parseResponse(response)
 

@@ -103,6 +103,8 @@ final class ToneAnalysisController {
     return true
   }
 
+  // Legacy hotspot: split this up before removing the suppression.
+  // swiftlint:disable:next function_body_length
   func analyzeSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
     guard !isRunning else {
       maybeShowBusyFeedback()

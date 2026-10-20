@@ -21,10 +21,19 @@ struct ProtectedText {
 // MARK: - Default Implementation
 
 private enum TextProcessorRegexDefaults {
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
+  static let fencedCodeBlockRegex = makeRegex("```[\\s\\S]*?```")
+  static let inlineCodeRegex = makeRegex("`[^`\\n]*`")
+  static let discordTokenRegex = makeRegex("<[^>\\n]+>")
+  static let urlRegex = makeRegex("https?://[^\\s]+")
+
+  /// Patterns are compile-time constants, so a failure is a programming error.
+  private static func makeRegex(_ pattern: String) -> NSRegularExpression {
+    do {
+      return try NSRegularExpression(pattern: pattern, options: [])
+    } catch {
+      preconditionFailure("Invalid regex pattern \(pattern): \(error)")
+    }
+  }
 }
 
 extension TextProcessor {
@@ -112,8 +121,8 @@ extension TextProcessor {
 
   /// Verifies that all placeholders are present in the text
   func placeholdersAllPresent(in text: String, placeholders: [String: String]) -> Bool {
-    for token in placeholders.keys {
-      if !text.contains(token) { return false }
+    for token in placeholders.keys where !text.contains(token) {
+      return false
     }
     return true
   }
@@ -197,12 +206,12 @@ extension TextProcessor {
   }
 
   /// Calculates similarity between two strings using Levenshtein distance
-  func similarity(_ a: String, _ b: String) -> Double {
-    let aScalars = Array(a.unicodeScalars)
-    let bScalars = Array(b.unicodeScalars)
-    let maxLen = max(aScalars.count, bScalars.count)
+  func similarity(_ source: String, _ target: String) -> Double {
+    let sourceScalars = Array(source.unicodeScalars)
+    let targetScalars = Array(target.unicodeScalars)
+    let maxLen = max(sourceScalars.count, targetScalars.count)
     guard maxLen > 0 else { return 1.0 }
-    let distance = levenshteinDistance(aScalars, bScalars)
+    let distance = levenshteinDistance(sourceScalars, targetScalars)
     return 1.0 - (Double(distance) / Double(maxLen))
   }
 
@@ -234,15 +243,15 @@ extension TextProcessor {
   }
 
   /// Calculates Levenshtein distance with early exit when exceeding maxDistance
-  func boundedLevenshteinDistance(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar], maxDistance: Int) -> Int {
-    if a.isEmpty { return b.count }
-    if b.isEmpty { return a.count }
+  func boundedLevenshteinDistance(_ source: [Unicode.Scalar], _ target: [Unicode.Scalar], maxDistance: Int) -> Int {
+    if source.isEmpty { return target.count }
+    if target.isEmpty { return source.count }
 
-    let (longer, shorter) = a.count >= b.count ? (a, b) : (b, a)
-    let m = shorter.count
+    let (longer, shorter) = source.count >= target.count ? (source, target) : (target, source)
+    let shorterCount = shorter.count
 
-    var previous = Array(0...m)
-    var current = Array(repeating: 0, count: m + 1)
+    var previous = Array(0...shorterCount)
+    var current = Array(repeating: 0, count: shorterCount + 1)
 
     for (i, longerScalar) in longer.enumerated() {
       current[0] = i + 1
@@ -262,19 +271,19 @@ extension TextProcessor {
       swap(&previous, &current)
     }
 
-    return previous[m]
+    return previous[shorterCount]
   }
 
   /// Calculates Levenshtein distance between two string scalar arrays
-  func levenshteinDistance(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int {
-    if a.isEmpty { return b.count }
-    if b.isEmpty { return a.count }
+  func levenshteinDistance(_ source: [Unicode.Scalar], _ target: [Unicode.Scalar]) -> Int {
+    if source.isEmpty { return target.count }
+    if target.isEmpty { return source.count }
 
-    let (longer, shorter) = a.count >= b.count ? (a, b) : (b, a)
-    let m = shorter.count
+    let (longer, shorter) = source.count >= target.count ? (source, target) : (target, source)
+    let shorterCount = shorter.count
 
-    var previous = Array(0...m)
-    var current = Array(repeating: 0, count: m + 1)
+    var previous = Array(0...shorterCount)
+    var current = Array(repeating: 0, count: shorterCount + 1)
 
     for (i, longerScalar) in longer.enumerated() {
       current[0] = i + 1
@@ -289,6 +298,6 @@ extension TextProcessor {
       swap(&previous, &current)
     }
 
-    return previous[m]
+    return previous[shorterCount]
   }
 }

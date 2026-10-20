@@ -29,7 +29,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -69,7 +69,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -95,7 +95,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -140,7 +140,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}"#
+        body: Self.anthropicToneBody
       )
     }
 
@@ -235,7 +235,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
+        body: Self.geminiToneBody
       )
     }
 
@@ -261,7 +261,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
+        body: Self.geminiToneBody
       )
     }
 
@@ -289,7 +289,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_replies\":[]}"}]}}]}"#
+        body: Self.geminiToneBody
       )
     }
 
@@ -387,6 +387,15 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
     }
   }
+
+  /// Neutral tone JSON, escaped for embedding inside a provider response string.
+  private static let escapedToneJSON = #"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\","#
+    + #"\"likely_intent\":\"Share information\","#
+    + #"\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},"#
+    + #"\"ambiguities\":[],\"suggested_replies\":[]}"#
+  private static let openAIToneBody = #"{"choices":[{"message":{"content":""# + escapedToneJSON + #""}}]}"#
+  private static let anthropicToneBody = #"{"content":[{"type":"text","text":""# + escapedToneJSON + #""}]}"#
+  private static let geminiToneBody = #"{"candidates":[{"content":{"parts":[{"text":""# + escapedToneJSON + #""}]}}]}"#
 
   private static func requestBodyData(from request: URLRequest) -> Data? {
     if let body = request.httpBody {
@@ -487,11 +496,11 @@ private final class ToneMockURLProtocol: URLProtocol {
   static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
   static var requestObserver: ((URLRequest, Date) -> Void)?
 
-  override class func canInit(with request: URLRequest) -> Bool {
+  override static func canInit(with request: URLRequest) -> Bool {
     request.url?.host == "mock.local"
   }
 
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest {
     request
   }
 

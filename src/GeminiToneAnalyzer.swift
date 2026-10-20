@@ -117,6 +117,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     let versionsToTry = ["v1beta", "v1"]
     var lastError: Error?
     var retryCount = 0
+    let incrementRetryCount = { retryCount += 1 }
     defer { lastRetryCount = retryCount }
 
     enum GeminiVersionFallback: Error {
@@ -127,7 +128,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
       do {
         let response: String = try await retryPolicy.performWithBackoff(
           maxAttempts: retryPolicy.maxNetworkAttempts,
-          onRetry: { retryCount += 1 }
+          onRetry: incrementRetryCount
         ) { attempt, isLastAttempt in
           try Task.checkCancellation()
 

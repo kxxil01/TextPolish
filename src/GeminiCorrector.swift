@@ -43,11 +43,6 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   let minSimilarity: Double
 
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -198,13 +193,14 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let versionsToTry = ["v1beta"]
     var lastError: Error?
     var retryCount = 0
+    let incrementRetryCount = { retryCount += 1 }
     defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
       do {
         let response: String = try await retryPolicy.performWithBackoff(
           maxAttempts: retryPolicy.maxNetworkAttempts,
-          onRetry: { retryCount += 1 }
+          onRetry: incrementRetryCount
         ) { attempt, isLastAttempt in
           let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
           var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)

@@ -33,13 +33,13 @@ class SettingsWindowController: NSWindowController {
 
     func setupViewController(keychainServiceOverride: String? = nil) {
         guard viewController == nil else { return }
-        let vc = SettingsWindowViewController()
-        vc.keychainServiceOverride = keychainServiceOverride
-        viewController = vc
-        vc.settingsWindowController = self
+        let controller = SettingsWindowViewController()
+        controller.keychainServiceOverride = keychainServiceOverride
+        viewController = controller
+        controller.settingsWindowController = self
 
-        _ = vc.view
-        window?.contentView = vc.view
+        _ = controller.view
+        window?.contentView = controller.view
     }
 
     override func close() {

@@ -55,9 +55,9 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertNotNil(fallbackController.fallbackProvider, "Fallback provider should be set")
     }
 
-    func testProviderNameForGeminiCorrector() {
+    func testProviderNameForGeminiCorrector() throws {
         // Given
-        let geminiProvider = try! GeminiCorrector(settings: Settings.loadOrCreateDefault())
+        let geminiProvider = try GeminiCorrector(settings: Settings.loadOrCreateDefault())
 
         // When
         let name = fallbackController.providerName(for: geminiProvider)
@@ -66,11 +66,11 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertEqual(name, "Gemini", "Should return 'Gemini' for GeminiCorrector")
     }
 
-    func testProviderNameForOpenRouterCorrector() {
+    func testProviderNameForOpenRouterCorrector() throws {
         // Given
         var settings = Settings.loadOrCreateDefault()
         settings.provider = .openRouter
-        let openRouterProvider = try! OpenRouterCorrector(settings: settings)
+        let openRouterProvider = try OpenRouterCorrector(settings: settings)
 
         // When
         let name = fallbackController.providerName(for: openRouterProvider)
@@ -79,9 +79,9 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertEqual(name, "OpenRouter", "Should return 'OpenRouter' for OpenRouterCorrector")
     }
 
-    func testProviderNameForOpenAICorrector() {
+    func testProviderNameForOpenAICorrector() throws {
         // Given
-        let openAIProvider = try! OpenAICorrector(settings: Settings.loadOrCreateDefault())
+        let openAIProvider = try OpenAICorrector(settings: Settings.loadOrCreateDefault())
 
         // When
         let name = fallbackController.providerName(for: openAIProvider)
@@ -90,9 +90,9 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertEqual(name, "OpenAI", "Should return 'OpenAI' for OpenAICorrector")
     }
 
-    func testProviderNameForAnthropicCorrector() {
+    func testProviderNameForAnthropicCorrector() throws {
         // Given
-        let anthropicProvider = try! AnthropicCorrector(settings: Settings.loadOrCreateDefault())
+        let anthropicProvider = try AnthropicCorrector(settings: Settings.loadOrCreateDefault())
 
         // When
         let name = fallbackController.providerName(for: anthropicProvider)
@@ -173,13 +173,13 @@ final class FallbackControllerTests: XCTestCase {
         XCTAssertNoThrow(controller.showFallbackAlert(for: testError(), corrector: mockFallbackProvider, text: "test"))
     }
 
-    func testProviderNameDetection() {
+    func testProviderNameDetection() throws {
         // Test all provider types
         let providers: [(GrammarCorrector, String)] = [
-            (try! GeminiCorrector(settings: Settings.loadOrCreateDefault()), "Gemini"),
-            (try! OpenRouterCorrector(settings: Settings.loadOrCreateDefault()), "OpenRouter"),
-            (try! OpenAICorrector(settings: Settings.loadOrCreateDefault()), "OpenAI"),
-            (try! AnthropicCorrector(settings: Settings.loadOrCreateDefault()), "Anthropic"),
+            (try GeminiCorrector(settings: Settings.loadOrCreateDefault()), "Gemini"),
+            (try OpenRouterCorrector(settings: Settings.loadOrCreateDefault()), "OpenRouter"),
+            (try OpenAICorrector(settings: Settings.loadOrCreateDefault()), "OpenAI"),
+            (try AnthropicCorrector(settings: Settings.loadOrCreateDefault()), "Anthropic"),
             (MockGrammarCorrector(), "Provider")
         ]
 

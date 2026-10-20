@@ -91,7 +91,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegateSchedulesDailyResetAndRefreshesTimeoutsWhenFallbackToggles() {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
 
     let delegate = AppDelegate()
@@ -112,7 +112,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegateDebouncesRapidRegisteredHotKeys() {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     let delegate = AppDelegate()
     let start = ContinuousClock.now
 
@@ -124,7 +124,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegateSettingsChangeRefreshesMenuShortcutLabels() throws {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
     defer { try? Settings.save(Settings()) }
 
@@ -149,7 +149,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegatePartialSettingSavePreservesNewerDiskAnthropicModel() throws {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
     defer { try? Settings.save(Settings()) }
 
