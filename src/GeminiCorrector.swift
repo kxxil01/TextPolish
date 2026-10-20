@@ -115,22 +115,30 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw GeminiError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -138,6 +146,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw GeminiError.overRewrite
@@ -208,7 +217,10 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             contents: [
               .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
-            generationConfig: .init(temperature: 0.0, maxOutputTokens: 4096)
+            generationConfig: .init(
+              temperature: 0.0,
+              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
+            )
           )
           request.httpBody = try JSONEncoder().encode(body)
 

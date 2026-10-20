@@ -237,7 +237,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let body = try XCTUnwrap(capturedBody)
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertNil(json["temperature"], "GPT-5 requests should omit unsupported temperature parameters")
-    XCTAssertEqual(json["max_completion_tokens"] as? Int, 1024)
+    XCTAssertEqual(json["max_completion_tokens"] as? Int, 2048)
   }
 
   func testOpenAILegacyRequestIncludesTemperature() async throws {
@@ -266,7 +266,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let body = try XCTUnwrap(capturedBody)
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["temperature"] as? Double, 0.0)
-    XCTAssertEqual(json["max_tokens"] as? Int, 1024)
+    XCTAssertEqual(json["max_tokens"] as? Int, 2048)
   }
 
   func testOpenAIRequestContainsSystemMessage() async throws {

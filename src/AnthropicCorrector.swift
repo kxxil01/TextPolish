@@ -106,22 +106,30 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw AnthropicError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -129,6 +137,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw AnthropicError.overRewrite
@@ -193,7 +202,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
       let body = AnthropicMessagesRequest(
         model: model,
-        maxTokens: 1024,
+        maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
         system: prompt.system,
         messages: [
           .init(role: "user", content: prompt.user),
