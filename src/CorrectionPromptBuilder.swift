@@ -36,7 +36,7 @@ enum CorrectionPromptBuilder {
     style: CorrectionStyle = .minimal
   ) -> PromptPair {
     var instructions = style == .clarify ? clarifyRules : minimalRules
-    instructions.append(contentsOf: formattingRules)
+    instructions.append(contentsOf: formattingRules(for: style))
 
     if let retryReason {
       instructions.insert(retryReason.promptInstruction(for: style), at: 2)
@@ -103,14 +103,31 @@ enum CorrectionPromptBuilder {
     "If the text already reads naturally, return it unchanged.",
   ]
 
-  private static let formattingRules: [String] = [
-    "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons "
-      + "unless they already appear in the original text.",
-    "Keep the original quote and apostrophe style: straight quotes stay straight, curly quotes stay curly.",
-    "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
-      + "mentions (@user, #channel), links, and code blocks.",
-    "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
-  ]
+  private static func formattingRules(for style: CorrectionStyle) -> [String] {
+    let layoutRules: [String]
+    switch style {
+    case .minimal:
+      layoutRules = [
+        "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
+          + "mentions (@user, #channel), links, and code blocks.",
+      ]
+    case .clarify:
+      // AI-written text often puts every sentence on its own line; a person writes flowing paragraphs.
+      layoutRules = [
+        "Join line breaks that split one paragraph into short lines, so the paragraph flows as normal sentences. "
+          + "Keep blank lines between paragraphs, keep each bullet or numbered list item on its own line, "
+          + "and never add new line breaks.",
+        "Preserve indentation, Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
+      ]
+    }
+    return [
+      "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons "
+        + "unless they already appear in the original text.",
+      "Keep the original quote and apostrophe style: straight quotes stay straight, curly quotes stay curly.",
+    ] + layoutRules + [
+      "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
+    ]
+  }
 
   // MARK: - Examples
 
