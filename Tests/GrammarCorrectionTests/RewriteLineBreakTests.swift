@@ -71,6 +71,12 @@ final class RewriteLineBreakTests: XCTestCase {
     XCTAssertTrue(clarify.system.contains("Join line breaks that split one paragraph"))
     XCTAssertTrue(clarify.system.contains("never add new line breaks"))
     XCTAssertFalse(clarify.system.contains("whitespace, line breaks"))
+    // Text with nothing to reword must still get its lines joined.
+    XCTAssertFalse(clarify.system.contains("return it unchanged"))
+    XCTAssertTrue(clarify.system.contains("keep the words unchanged, but still join lines that split a paragraph"))
+    XCTAssertTrue(clarify.system.contains(
+      "Example output: Hi Sam,\n\nThe build is done. I uploaded it to the shared folder. Tell me if you need anything else."
+    ))
   }
 }
 

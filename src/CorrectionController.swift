@@ -401,7 +401,9 @@ final class CorrectionController {
           return
         }
 
-        TPLogger.log("Polish output: chars=\(corrected.count), pasting")
+        let newlinesIn = inputText.filter(\.isNewline).count
+        let newlinesOut = corrected.filter(\.isNewline).count
+        TPLogger.log("Polish output: chars=\(corrected.count) newlines=\(newlinesIn)->\(newlinesOut), pasting")
         try Task.checkCancellation()
         self.pasteboard.setString(corrected)
         ownedClipboardChangeCount = self.pasteboard.changeCount

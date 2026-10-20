@@ -100,7 +100,8 @@ enum CorrectionPromptBuilder {
     "Keep the tone and formality. Casual stays casual, and slang or abbreviations such as pls, tbh, or btw stay.",
     "Keep it concise and human: do not make it longer or more formal than needed, and do not translate.",
     "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
-    "If the text already reads naturally, return it unchanged.",
+    // Clean text still gets its paragraph lines joined; without this the model returned it untouched.
+    "If the wording already reads naturally, keep the words unchanged, but still join lines that split a paragraph.",
   ]
 
   private static func formattingRules(for style: CorrectionStyle) -> [String] {
@@ -143,6 +144,9 @@ enum CorrectionPromptBuilder {
       + "can you revise and send back to me before end of day</user_text>",
     "Example output: i've already checked the report. the number on page 3 doesn't match the sheet. "
       + "can you revise it and send it back to me by end of day?",
+    "Example input: <user_text>Hi Sam,\n\nThe build is done.\nI uploaded it to the shared folder.\n"
+      + "Tell me if you need anything else.</user_text>",
+    "Example output: Hi Sam,\n\nThe build is done. I uploaded it to the shared folder. Tell me if you need anything else.",
     "Example input: <user_text>Thanks for the update. I'll review it today.</user_text>",
     "Example output: Thanks for the update. I'll review it today.",
   ]
