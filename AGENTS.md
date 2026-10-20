@@ -316,7 +316,7 @@ The tone analysis feature provides feedback on text emotional impact:
 - **Error handling**: Show user-friendly errors via `FeedbackPresenter`
 - **Dependencies**: Apple frameworks only (no external SwiftPM deps in main target)
 - **File size**: Keep files small and single-purpose
-- **Logging**: Use `NSLog("[TextPolish] ...")` for debugging
+- **Logging**: Use `TPLogger.log(...)`. Lines are public in the system log, so never log the user's text or a secret. Read them with `log show --last 10m --predicate 'subsystem == "com.kxxil01.TextPolish"'`
 - **Testing**: Suppress UI dialogs in test environment using `NSClassFromString("XCTestCase")`
 - **Test environment**: Use `#if DEBUG` guards for test-specific behavior
 
@@ -395,7 +395,7 @@ UI dialogs are suppressed in test environment to prevent CI/CD blocking:
 ```swift
 #if DEBUG
 if NSClassFromString("XCTestCase") != nil {
-    NSLog("[TextPolish] Error suppressed in test environment: \(error)")
+    TPLogger.log("Error suppressed in test environment: \(error)")
     return
 }
 #endif
