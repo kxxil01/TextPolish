@@ -267,7 +267,8 @@ final class CorrectionControllerTests: XCTestCase {
     let keyboard = StubKeyboard(isTrusted: true)
     let pasteboard = StubPasteboard(waitResults: [.success("hello")])
     let controller = CorrectionController(
-      corrector: SlowCorrector(delay: .milliseconds(200)),
+      // Long enough that only cancellation ends it, so a slow runner cannot finish it first.
+      corrector: SlowCorrector(delay: .seconds(30)),
       feedback: feedback,
       settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
@@ -301,7 +302,8 @@ final class CorrectionControllerTests: XCTestCase {
     var removedMonitors: [String] = []
 
     let controller = CorrectionController(
-      corrector: SlowCorrector(delay: .milliseconds(200)),
+      // Long enough that only cancellation ends it, so a slow runner cannot finish it first.
+      corrector: SlowCorrector(delay: .seconds(30)),
       feedback: feedback,
       settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
