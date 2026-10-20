@@ -36,6 +36,13 @@ enum OpenAITokenPolicy {
     return nil
   }
 
+  /// Models known to accept `response_format: json_object`. Others rely on the prompt asking for JSON.
+  static func supportsJSONMode(model: String) -> Bool {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let jsonModePrefixes = ["gpt-4o", "gpt-4.1", "gpt-4-turbo", "gpt-5", "o3", "o4"]
+    return jsonModePrefixes.contains { normalized.hasPrefix($0) }
+  }
+
   static func isTokenParameterError(message: String?) -> Bool {
     let lowered = message?.lowercased() ?? ""
     guard !lowered.isEmpty else { return false }

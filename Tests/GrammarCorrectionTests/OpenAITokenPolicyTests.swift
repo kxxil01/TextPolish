@@ -37,6 +37,17 @@ final class OpenAITokenPolicyTests: XCTestCase {
     XCTAssertNil(OpenAITokenPolicy.reasoningEffort(model: "gpt-4.1-mini"))
   }
 
+  func testSupportsJSONModeOnlyForKnownModels() {
+    XCTAssertTrue(OpenAITokenPolicy.supportsJSONMode(model: "gpt-5-nano"))
+    XCTAssertTrue(OpenAITokenPolicy.supportsJSONMode(model: "gpt-4o-mini"))
+    XCTAssertTrue(OpenAITokenPolicy.supportsJSONMode(model: "gpt-4.1"))
+    XCTAssertTrue(OpenAITokenPolicy.supportsJSONMode(model: "o3-mini"))
+
+    XCTAssertFalse(OpenAITokenPolicy.supportsJSONMode(model: "gpt-4"))
+    XCTAssertFalse(OpenAITokenPolicy.supportsJSONMode(model: "o1-mini"))
+    XCTAssertFalse(OpenAITokenPolicy.supportsJSONMode(model: "llama3"))
+  }
+
   func testModelNormalization() {
     XCTAssertTrue(OpenAITokenPolicy.usesMaxCompletionTokens(model: "  GPT-4.1  "))
   }

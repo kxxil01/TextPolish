@@ -83,9 +83,9 @@ enum CorrectionPromptBuilder {
     return PromptPair(system: system, user: user)
   }
 
-  /// Output token budget sized to the input so long text is never truncated.
-  /// Roughly 2 characters per token plus headroom covers non-English text and placeholders.
+  /// Output token budget sized to the input. The 4096 floor leaves room for models that still spend
+  /// output tokens on reasoning. About 2 characters per token fits Latin-script text; CJK text can need more.
   static func maxOutputTokens(for text: String) -> Int {
-    max(2048, text.count / 2 + 1024)
+    max(4096, text.count / 2 + 1024)
   }
 }

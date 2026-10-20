@@ -32,11 +32,14 @@ enum GeminiRequestPolicy {
     isGemini3(normalize(model)) ? nil : 0.0
   }
 
-  /// Keeps thinking as low as each model allows. Gemini 2.5 Pro cannot disable thinking, so it keeps its default.
+  /// Keeps thinking as low as each model allows. Gemini 2.5 Pro cannot disable thinking; 128 is its minimum budget.
   static func thinkingConfig(model: String) -> GeminiGenerationConfig.ThinkingConfig? {
     let normalized = normalize(model)
     if normalized.hasPrefix("gemini-2.5-flash") {
       return .init(thinkingBudget: 0, thinkingLevel: nil)
+    }
+    if normalized.hasPrefix("gemini-2.5-pro") {
+      return .init(thinkingBudget: 128, thinkingLevel: nil)
     }
     if isGemini3(normalized) {
       let level = normalized.contains("pro") ? "low" : "minimal"

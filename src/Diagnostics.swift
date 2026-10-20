@@ -220,7 +220,7 @@ final class DiagnosticsStore {
   private func formatLatency(_ seconds: Double) -> String {
     if seconds < 1.0 {
       let milliseconds = Int(seconds * 1000.0)
-      return "\(milliseconds) milliseconds"
+      return "\(milliseconds) ms"
     }
     return String(format: "%.2f s", seconds)
   }

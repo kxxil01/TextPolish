@@ -19,8 +19,11 @@ final class ProviderRequestPolicyTests: XCTestCase {
     XCTAssertEqual(thinking, .init(thinkingBudget: 0, thinkingLevel: nil))
   }
 
-  func testGemini25ProKeepsDefaultThinking() {
-    XCTAssertNil(GeminiRequestPolicy.thinkingConfig(model: "gemini-2.5-pro"))
+  func testGemini25ProUsesMinimumThinkingBudget() {
+    XCTAssertEqual(
+      GeminiRequestPolicy.thinkingConfig(model: "gemini-2.5-pro"),
+      .init(thinkingBudget: 128, thinkingLevel: nil)
+    )
     XCTAssertEqual(GeminiRequestPolicy.temperature(model: "gemini-2.5-pro"), 0.0)
   }
 

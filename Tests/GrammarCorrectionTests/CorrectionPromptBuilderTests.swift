@@ -154,7 +154,7 @@ final class CorrectionPromptBuilderTests: XCTestCase {
   }
 
   func testMaxOutputTokensHasFloorForShortText() {
-    XCTAssertEqual(CorrectionPromptBuilder.maxOutputTokens(for: "hello"), 2048)
+    XCTAssertEqual(CorrectionPromptBuilder.maxOutputTokens(for: "hello"), 4096)
   }
 
   func testMaxOutputTokensScalesForLongestAllowedInput() {
