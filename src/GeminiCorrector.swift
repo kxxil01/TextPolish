@@ -217,8 +217,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             contents: [
               .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
-            generationConfig: .init(
-              temperature: 0.0,
+            generationConfig: GeminiRequestPolicy.generationConfig(
+              model: model,
               maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
             )
           )
@@ -362,14 +362,9 @@ private struct GeminiGenerateContentRequest: Encodable {
     let parts: [Part]
   }
 
-  struct GenerationConfig: Encodable {
-    let temperature: Double
-    let maxOutputTokens: Int
-  }
-
   let systemInstruction: SystemInstruction?
   let contents: [Content]
-  let generationConfig: GenerationConfig
+  let generationConfig: GeminiGenerationConfig
 }
 
 private struct GeminiGenerateContentResponse: Decodable {

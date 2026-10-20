@@ -142,7 +142,11 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
             contents: [
               .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
-            generationConfig: .init(temperature: 0.0, maxOutputTokens: config.maxOutputTokens)
+            generationConfig: GeminiRequestPolicy.generationConfig(
+              model: model,
+              maxOutputTokens: config.maxOutputTokens,
+              responseMimeType: "application/json"
+            )
           )
           request.httpBody = try JSONEncoder().encode(body)
 
@@ -266,14 +270,9 @@ private struct GeminiToneRequest: Encodable {
     let parts: [Part]
   }
 
-  struct GenerationConfig: Encodable {
-    let temperature: Double
-    let maxOutputTokens: Int
-  }
-
   let systemInstruction: SystemInstruction?
   let contents: [Content]
-  let generationConfig: GenerationConfig
+  let generationConfig: GeminiGenerationConfig
 }
 
 private struct GeminiToneResponse: Decodable {

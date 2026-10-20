@@ -113,6 +113,9 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertNil(json["temperature"], "GPT-5 tone requests should omit unsupported temperature parameters")
     XCTAssertEqual(json["max_completion_tokens"] as? Int, ToneAnalysisConfig.default.maxOutputTokens)
+    XCTAssertEqual(json["reasoning_effort"] as? String, "minimal")
+    let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
+    XCTAssertEqual(responseFormat["type"] as? String, "json_object")
   }
 
   func testAnthropicToneAnalyzerRetriesOnRateLimit() async throws {

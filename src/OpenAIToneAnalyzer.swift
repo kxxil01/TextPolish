@@ -248,11 +248,17 @@ private struct OpenAIToneRequest: Encodable {
     let content: String
   }
 
+  struct ResponseFormat: Encodable {
+    let type: String
+  }
+
   let model: String
   let messages: [Message]
   let temperature: Double?
   let maxTokens: Int
   let useMaxCompletionTokens: Bool
+  let reasoningEffort: String?
+  let responseFormat = ResponseFormat(type: "json_object")
 
   init(
     model: String,
@@ -266,6 +272,7 @@ private struct OpenAIToneRequest: Encodable {
     self.temperature = OpenAITokenPolicy.omitsTemperature(model: model) ? nil : temperature
     self.maxTokens = maxTokens
     self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -273,6 +280,8 @@ private struct OpenAIToneRequest: Encodable {
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
     try container.encodeIfPresent(temperature, forKey: .temperature)
+    try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
+    try container.encode(responseFormat, forKey: .responseFormat)
     if useMaxCompletionTokens {
       try container.encode(maxTokens, forKey: .maxCompletionTokens)
     } else {
@@ -286,6 +295,8 @@ private struct OpenAIToneRequest: Encodable {
     case temperature
     case maxTokens = "max_tokens"
     case maxCompletionTokens = "max_completion_tokens"
+    case reasoningEffort = "reasoning_effort"
+    case responseFormat = "response_format"
   }
 }
 

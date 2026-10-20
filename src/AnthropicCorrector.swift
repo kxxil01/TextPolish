@@ -307,11 +307,18 @@ private struct AnthropicMessagesRequest: Encodable {
   let system: String?
   let messages: [Message]
 
+  var temperature: Double? { AnthropicRequestPolicy.temperature(model: model) }
+  var outputConfig: AnthropicOutputConfig? {
+    AnthropicRequestPolicy.effort(model: model).map { AnthropicOutputConfig(effort: $0) }
+  }
+
   enum CodingKeys: String, CodingKey {
     case model
     case maxTokens = "max_tokens"
     case system
     case messages
+    case temperature
+    case outputConfig = "output_config"
   }
 
   func encode(to encoder: Encoder) throws {
@@ -320,6 +327,8 @@ private struct AnthropicMessagesRequest: Encodable {
     try container.encode(maxTokens, forKey: .maxTokens)
     try container.encodeIfPresent(system, forKey: .system)
     try container.encode(messages, forKey: .messages)
+    try container.encodeIfPresent(temperature, forKey: .temperature)
+    try container.encodeIfPresent(outputConfig, forKey: .outputConfig)
   }
 }
 

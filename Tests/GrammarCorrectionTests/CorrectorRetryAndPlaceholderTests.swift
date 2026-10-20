@@ -238,6 +238,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertNil(json["temperature"], "GPT-5 requests should omit unsupported temperature parameters")
     XCTAssertEqual(json["max_completion_tokens"] as? Int, 2048)
+    XCTAssertEqual(json["reasoning_effort"] as? String, "minimal")
   }
 
   func testOpenAILegacyRequestIncludesTemperature() async throws {
@@ -267,6 +268,81 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["temperature"] as? Double, 0.0)
     XCTAssertEqual(json["max_tokens"] as? Int, 2048)
+    XCTAssertNil(json["reasoning_effort"])
+  }
+
+  func testGeminiFlashRequestDisablesThinking() async throws {
+    var capturedBody: Data?
+
+    MockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test-key",
+      geminiBaseURL: "https://mock.local",
+      geminiMaxAttempts: 1
+    )
+    let corrector = try GeminiCorrector(settings: settings, session: Self.makeMockSession())
+    _ = try await corrector.correct("Hello")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+    let thinking = try XCTUnwrap(config["thinkingConfig"] as? [String: Any])
+    XCTAssertEqual(thinking["thinkingBudget"] as? Int, 0)
+    XCTAssertEqual(config["temperature"] as? Double, 0.0)
+    XCTAssertEqual(config["maxOutputTokens"] as? Int, 2048)
+  }
+
+  func testAnthropicHaiku45RequestSetsZeroTemperature() async throws {
+    let json = try await Self.captureAnthropicRequest(model: "claude-haiku-4-5")
+
+    XCTAssertEqual(json["temperature"] as? Double, 0.0)
+    XCTAssertNil(json["output_config"])
+    XCTAssertEqual(json["max_tokens"] as? Int, 2048)
+  }
+
+  func testAnthropicHaiku55RequestUsesLowEffortWithoutTemperature() async throws {
+    let json = try await Self.captureAnthropicRequest(model: "claude-haiku-5-5")
+
+    XCTAssertNil(json["temperature"], "Haiku 5.5 rejects non-default temperature")
+    let outputConfig = try XCTUnwrap(json["output_config"] as? [String: Any])
+    XCTAssertEqual(outputConfig["effort"] as? String, "low")
+  }
+
+  private static func captureAnthropicRequest(model: String) async throws -> [String: Any] {
+    var capturedBody: Data?
+
+    MockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: #"{"content":[{"type":"text","text":"Hello"}]}"#
+      )
+    }
+
+    let settings = Settings(
+      provider: .anthropic,
+      requestTimeoutSeconds: 1,
+      anthropicApiKey: "test-key",
+      anthropicModel: model,
+      anthropicBaseURL: "https://mock.local",
+      anthropicMaxAttempts: 1
+    )
+    let corrector = try AnthropicCorrector(settings: settings, session: Self.makeMockSession())
+    _ = try await corrector.correct("Hello")
+
+    let body = try XCTUnwrap(capturedBody)
+    return try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
   }
 
   func testOpenAIRequestContainsSystemMessage() async throws {
