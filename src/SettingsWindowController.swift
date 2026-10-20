@@ -49,6 +49,7 @@ class SettingsWindowController: NSWindowController {
 
 extension SettingsWindowController: NSWindowDelegate {
     func windowWillClose(_: Notification) {
-        // Settings are saved live; nothing to do on close.
+        // Settings save live on end-editing, so finish any edit still in progress.
+        viewController?.commitPendingEdits()
     }
 }

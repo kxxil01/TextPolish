@@ -16,6 +16,9 @@ class KeyComboField: NSView {
     private var isRecording = false
     private var keyDownMonitor: Any?
 
+    /// Only one field records at a time; starting another stops the previous one.
+    private static weak var activeRecorder: KeyComboField?
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupUI()
@@ -56,6 +59,10 @@ class KeyComboField: NSView {
     }
 
     private func startRecording() {
+        if let other = Self.activeRecorder, other !== self {
+            other.stopRecording()
+        }
+        Self.activeRecorder = self
         removeKeyMonitorIfNeeded()
         isRecording = true
         textField.stringValue = "Press keys..."
@@ -77,6 +84,9 @@ class KeyComboField: NSView {
     }
 
     private func stopRecording() {
+        if Self.activeRecorder === self {
+            Self.activeRecorder = nil
+        }
         isRecording = false
         removeKeyMonitorIfNeeded()
         layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
@@ -112,6 +122,14 @@ class KeyComboField: NSView {
 
         textField.stringValue = hotKey.displayString
         textField.textColor = .labelColor
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Leaving the window (tab switch, window close) must not leave a key monitor running.
+        if window == nil, isRecording {
+            stopRecording()
+        }
     }
 
     var hasActiveKeyDownMonitor: Bool {

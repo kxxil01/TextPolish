@@ -341,7 +341,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     @objc private func segmentChanged(_ sender: NSSegmentedControl) {
+        commitPendingEdits()
         showSection(sender.selectedSegment)
+    }
+
+    /// Ends any in-progress text edit so its end-editing save runs before the UI changes underneath it.
+    func commitPendingEdits() {
+        view.window?.makeFirstResponder(nil)
     }
 
     private func showSection(_ index: Int) {
@@ -950,6 +956,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let tone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
 
         if let error = validateHotKeys(selection: selection, all: all, tone: tone, current: settings) {
+            correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
+            correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
+            analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
             showErrorAlertIfNeeded(title: "Invalid hotkey", message: error)
             return
         }
@@ -1050,6 +1059,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     @objc func providerTileClicked(_ sender: NSButton) {
         let providers: [Settings.Provider] = [.gemini, .openRouter, .openAI, .anthropic]
         guard sender.tag >= 0, sender.tag < providers.count else { return }
+        commitPendingEdits()
         settings.provider = providers[sender.tag]
         liveSave()
         refreshProviderDetail()
@@ -1390,11 +1400,6 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detect: @escaping (String, String) async throws -> String,
         applyModel: @escaping (String) -> Void
     ) {
-        backingButton.isEnabled = false
-        backingButton.title = "Detecting..."
-        detectModelButton.isEnabled = false
-        detectModelButton.title = "Detecting..."
-
         var apiKey = providerApiKeyField.stringValue
         if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             apiKey = backingKeyField.stringValue
@@ -1402,6 +1407,18 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             apiKey = keychainKey(account: account) ?? ""
         }
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showErrorAlertIfNeeded(
+                title: "API key needed",
+                message: "Enter an API key for \(provider.displayName) before detecting a model."
+            )
+            return
+        }
+
+        backingButton.isEnabled = false
+        backingButton.title = "Detecting..."
+        detectModelButton.isEnabled = false
+        detectModelButton.title = "Detecting..."
 
         let baseURL = providerBaseURLField.stringValue.isEmpty
             ? fallbackBaseURL : providerBaseURLField.stringValue

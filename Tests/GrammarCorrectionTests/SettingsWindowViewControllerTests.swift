@@ -191,9 +191,10 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     func testSaveSettingsRejectsDuplicateHotkeys() {
         viewController.loadSettings()
 
+        // loadFromHotKey skips live validation, which would otherwise revert the field before save runs.
         let duplicate = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
-        viewController.correctSelectionField.hotKey = duplicate
-        viewController.correctAllField.hotKey = duplicate
+        viewController.correctSelectionField.loadFromHotKey(duplicate)
+        viewController.correctAllField.loadFromHotKey(duplicate)
 
         let saved = viewController.saveSettings()
 
@@ -203,7 +204,8 @@ final class SettingsWindowViewControllerTests: XCTestCase {
     func testSaveSettingsRejectsHotkeyWithoutModifier() {
         viewController.loadSettings()
 
-        viewController.analyzeToneField.hotKey = Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: 0)
+        // loadFromHotKey skips live validation, which would otherwise revert the field before save runs.
+        viewController.analyzeToneField.loadFromHotKey(Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: 0))
 
         let saved = viewController.saveSettings()
 
