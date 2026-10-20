@@ -12,11 +12,12 @@ final class SettingsHotKeyTests: XCTestCase {
     let command = "\u{2318}"
     let shift = "\u{21E7}"
 
-    let selectionExpected = control + option + command + "G"
-    let allExpected = shift + control + option + command + "G"
+    let polishExpected = control + option + command + "G"
+    let toneExpected = control + option + command + "T"
 
-    XCTAssertEqual(Settings.HotKey.correctSelectionDefault.displayString, selectionExpected)
-    XCTAssertEqual(Settings.HotKey.correctAllDefault.displayString, allExpected)
+    XCTAssertEqual(Settings.HotKey.polishDefault.displayString, polishExpected)
+    XCTAssertEqual(Settings.HotKey.analyzeToneDefault.displayString, toneExpected)
+    XCTAssertFalse(Settings.HotKey.polishDefault.displayString.contains(shift))
   }
 
   func testDisplayStringOrdersModifiers() {
@@ -39,7 +40,7 @@ final class SettingsHotKeyTests: XCTestCase {
   }
 
   func testKeyEquivalentStringDefaultKey() {
-    let keyCode = Settings.HotKey.correctSelectionDefault.keyCode
+    let keyCode = Settings.HotKey.polishDefault.keyCode
     XCTAssertEqual(Settings.HotKey.keyEquivalentString(keyCode: keyCode), "g")
   }
 
@@ -54,7 +55,7 @@ final class SettingsHotKeyTests: XCTestCase {
   }
 
   func testModifierMaskMapping() {
-    let modifiers = Settings.HotKey.correctSelectionDefault.modifiers
+    let modifiers = Settings.HotKey.polishDefault.modifiers
     let mask = Settings.HotKey.modifierMask(modifiers: modifiers)
 
     XCTAssertTrue(mask.contains(.control))
@@ -79,15 +80,15 @@ final class SettingsHotKeyTests: XCTestCase {
   }
 
   func testCodableRoundTripPreservesHotKeys() throws {
-    let selection = Settings.HotKey(keyCode: 12, modifiers: 34)
-    let all = Settings.HotKey(keyCode: 56, modifiers: 78)
-    let settings = Settings(hotKeyCorrectSelection: selection, hotKeyCorrectAll: all)
+    let polish = Settings.HotKey(keyCode: 12, modifiers: 34)
+    let tone = Settings.HotKey(keyCode: 56, modifiers: 78)
+    let settings = Settings(hotKeyPolish: polish, hotKeyAnalyzeTone: tone)
 
     let data = try JSONEncoder().encode(settings)
     let decoded = try JSONDecoder().decode(Settings.self, from: data)
 
-    XCTAssertEqual(decoded.hotKeyCorrectSelection, selection)
-    XCTAssertEqual(decoded.hotKeyCorrectAll, all)
+    XCTAssertEqual(decoded.hotKeyPolish, polish)
+    XCTAssertEqual(decoded.hotKeyAnalyzeTone, tone)
   }
 
   func testDecodeDefaultsWhenMissingHotKeys() throws {
@@ -100,8 +101,8 @@ final class SettingsHotKeyTests: XCTestCase {
     let data = Data(json.utf8)
     let decoded = try JSONDecoder().decode(Settings.self, from: data)
 
-    XCTAssertEqual(decoded.hotKeyCorrectSelection, Settings.HotKey.correctSelectionDefault)
-    XCTAssertEqual(decoded.hotKeyCorrectAll, Settings.HotKey.correctAllDefault)
+    XCTAssertEqual(decoded.hotKeyPolish, Settings.HotKey.polishDefault)
+    XCTAssertEqual(decoded.hotKeyAnalyzeTone, Settings.HotKey.analyzeToneDefault)
   }
 
   func testDecodeDefaultsWhenJsonEmpty() throws {
@@ -121,8 +122,8 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(decoded.correctionLanguage, .auto)
     XCTAssertEqual(decoded.geminiModel, "gemini-2.5-flash")
     XCTAssertEqual(decoded.openRouterModel, "google/gemma-3n-e4b-it:free")
-    XCTAssertEqual(decoded.hotKeyCorrectSelection, .correctSelectionDefault)
-    XCTAssertEqual(decoded.hotKeyCorrectAll, .correctAllDefault)
+    XCTAssertEqual(decoded.hotKeyPolish, .polishDefault)
+    XCTAssertEqual(decoded.polishStyle, .natural)
   }
 
   func testDecodeLegacyFallbackKeyStillWorks() throws {
@@ -263,8 +264,8 @@ final class SettingsHotKeyTests: XCTestCase {
     XCTAssertEqual(defaults.correctionLanguage, .auto)
     XCTAssertEqual(defaults.geminiModel, "gemini-2.5-flash")
     XCTAssertEqual(defaults.openRouterModel, "google/gemma-3n-e4b-it:free")
-    XCTAssertEqual(defaults.hotKeyCorrectSelection, .correctSelectionDefault)
-    XCTAssertEqual(defaults.hotKeyCorrectAll, .correctAllDefault)
+    XCTAssertEqual(defaults.hotKeyPolish, .polishDefault)
+    XCTAssertEqual(defaults.polishStyle, .natural)
   }
 
   func testDecodeTimingProfiles() throws {

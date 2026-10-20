@@ -208,34 +208,14 @@ final class CorrectionController {
     return true
   }
 
-  func correctSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selection, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  func correctAll(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .all, style: .minimal, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  /// Like Correct Selection, but lightly rephrases unclear wording so it reads naturally.
-  func rewriteSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selection, style: .clarify, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
   /// Polishes the selection, or the whole field when nothing is selected.
   func polish(style: CorrectionStyle, targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(mode: .selectionOrAll, style: style, targetApplication: targetApplication, timingsOverride: timingsOverride)
-  }
-
-  private enum Mode {
-    case selection
-    case all
-    case selectionOrAll
+    run(style: style, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
   // Legacy hotspot: split this up before removing the suppression.
   // swiftlint:disable:next function_body_length cyclomatic_complexity
   private func run(
-    mode: Mode,
     style: CorrectionStyle,
     targetApplication: NSRunningApplication?,
     timingsOverride: Timings?
@@ -316,8 +296,8 @@ final class CorrectionController {
           }
         }
 
-        let selection: SelectionState = mode == .selectionOrAll ? self.selectionStateProvider(targetPID) : .unknown
-        if mode == .all || selection == .nothingSelected {
+        let selection = self.selectionStateProvider(targetPID)
+        if selection == .nothingSelected {
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
         }
@@ -329,7 +309,7 @@ final class CorrectionController {
             deadline: deadline,
             updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
           )
-        } catch where mode == .selectionOrAll && selection == .unknown && self.shouldRetryCopy(error) {
+        } catch where selection == .unknown && self.shouldRetryCopy(error) {
           // Nothing could be copied and Accessibility could not tell why, so polish the whole field.
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
@@ -738,8 +718,8 @@ final class CorrectionController {
       postPasteDelayMilliseconds: settings.postPasteDelayMilliseconds,
       timingProfiles: settings.timingProfiles,
       correctionLanguage: settings.correctionLanguage,
-      hotKeyCorrectSelection: settings.hotKeyCorrectSelection,
-      hotKeyCorrectAll: settings.hotKeyCorrectAll,
+      polishStyle: settings.polishStyle,
+      hotKeyPolish: settings.hotKeyPolish,
       hotKeyAnalyzeTone: settings.hotKeyAnalyzeTone,
       enableGeminiOpenRouterFallback: settings.enableGeminiOpenRouterFallback,
       geminiApiKey: settings.geminiApiKey,

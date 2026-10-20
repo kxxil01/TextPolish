@@ -35,10 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         userDriverDelegate: nil
     )
 
-    private var selectionItem: NSMenuItem?
-    private var allItem: NSMenuItem?
+    private var polishItem: NSMenuItem?
+    private var polishStyleItems: [NSMenuItem] = []
     private var analyzeToneItem: NSMenuItem?
-    private var rewriteItem: NSMenuItem?
     private var cancelCorrectionItem: NSMenuItem?
     private var checkForUpdatesItem: NSMenuItem?
     private var updateStatusItem: NSMenuItem?
@@ -119,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self else { return false }
                 return self.shouldAttemptFallback(for: error)
             },
+            selectionStateProvider: { SelectionProbe.state(forProcess: $0) },
             onSuccess: { [weak self] in
                 self?.incrementCorrectionCount()
             }
@@ -255,27 +255,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
 
         // Actions
-        let selectionItem = NSMenuItem(
-            title: "Correct Selection",
-            action: #selector(correctSelection),
+        let polishItem = NSMenuItem(
+            title: "Polish",
+            action: #selector(polish),
             keyEquivalent: ""
         )
-        selectionItem.target = self
+        polishItem.target = self
+        polishItem.toolTip = "Polishes the selected text, or the whole field if nothing is selected"
 
-        let rewriteItem = NSMenuItem(
-            title: "Rewrite Selection",
-            action: #selector(rewriteSelection),
-            keyEquivalent: ""
-        )
-        rewriteItem.target = self
-        rewriteItem.toolTip = "Fix grammar and lightly rephrase unclear wording, keeping the meaning"
-
-        let allItem = NSMenuItem(
-            title: "Correct All",
-            action: #selector(correctAll),
-            keyEquivalent: ""
-        )
-        allItem.target = self
+        let polishStyleItem = NSMenuItem(title: "Polish Style", action: nil, keyEquivalent: "")
+        let polishStyleMenu = NSMenu()
+        polishStyleItems = Settings.PolishStyle.allCases.enumerated().map { index, style in
+            let item = NSMenuItem(title: style.displayName, action: #selector(selectPolishStyle(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            polishStyleMenu.addItem(item)
+            return item
+        }
+        polishStyleItem.submenu = polishStyleMenu
 
         let analyzeToneItem = NSMenuItem(
             title: "Analyze Tone",
@@ -284,14 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         analyzeToneItem.target = self
 
-        self.selectionItem = selectionItem
-        self.allItem = allItem
+        self.polishItem = polishItem
         self.analyzeToneItem = analyzeToneItem
-        self.rewriteItem = rewriteItem
 
-        menu.addItem(selectionItem)
-        menu.addItem(rewriteItem)
-        menu.addItem(allItem)
+        menu.addItem(polishItem)
+        menu.addItem(polishStyleItem)
         menu.addItem(analyzeToneItem)
 
         let cancelItem = NSMenuItem(
@@ -832,18 +826,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         do {
             try hotKeyManager.registerHotKeys(
-                correctSelection: settings.hotKeyCorrectSelection,
-                correctAll: settings.hotKeyCorrectAll,
-                analyzeTone: settings.hotKeyAnalyzeTone,
-                rewriteSelection: settings.hotKeyRewriteSelection
+                polish: settings.hotKeyPolish,
+                analyzeTone: settings.hotKeyAnalyzeTone
             )
         } catch {
             TPLogger.log("Failed to register hotkeys: \(error)")
             let configured = [
-                "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
-                "Correct All \(settings.hotKeyCorrectAll.displayString)",
+                "Polish \(settings.hotKeyPolish.displayString)",
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
-                "Rewrite Selection \(settings.hotKeyRewriteSelection.displayString)",
             ].joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
@@ -865,14 +855,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let toneTimings = toneTimingsOverride(for: target)
 
         switch id {
-        case HotKeyManager.HotKeyID.correctSelection.rawValue:
-            correctionController?.correctSelection(targetApplication: target, timingsOverride: correctionTimings)
-        case HotKeyManager.HotKeyID.correctAll.rawValue:
-            correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
+        case HotKeyManager.HotKeyID.polish.rawValue:
+            correctionController?.polish(
+                style: settings.polishStyle.correctionStyle,
+                targetApplication: target,
+                timingsOverride: correctionTimings
+            )
         case HotKeyManager.HotKeyID.analyzeTone.rawValue:
             toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
-        case HotKeyManager.HotKeyID.rewriteSelection.rawValue:
-            correctionController?.rewriteSelection(targetApplication: target, timingsOverride: correctionTimings)
         default:
             return false
         }
@@ -880,31 +870,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return true
     }
 
-    @objc private func correctSelection() {
+    @objc private func polish() {
         runAfterMenuDismissed { [weak self] in
             guard let self else { return }
             let target = self.lastTargetApplication
             let timings = self.timingsOverride(for: target)
-            self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
+            self.correctionController?.polish(
+                style: self.settings.polishStyle.correctionStyle,
+                targetApplication: target,
+                timingsOverride: timings
+            )
         }
     }
 
-    @objc private func rewriteSelection() {
-        runAfterMenuDismissed { [weak self] in
-            guard let self else { return }
-            let target = self.lastTargetApplication
-            let timings = self.timingsOverride(for: target)
-            self.correctionController?.rewriteSelection(targetApplication: target, timingsOverride: timings)
-        }
-    }
-
-    @objc private func correctAll() {
-        runAfterMenuDismissed { [weak self] in
-            guard let self else { return }
-            let target = self.lastTargetApplication
-            let timings = self.timingsOverride(for: target)
-            self.correctionController?.correctAll(targetApplication: target, timingsOverride: timings)
-        }
+    @objc private func selectPolishStyle(_ sender: NSMenuItem) {
+        let styles = Settings.PolishStyle.allCases
+        guard styles.indices.contains(sender.tag) else { return }
+        applySettingsMutation { $0.polishStyle = styles[sender.tag] }
+        syncHotKeyMenuItems()
     }
 
     @objc private func cancelActiveOperation() {
@@ -1629,9 +1612,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "2) Set an API key: Provider → Set Gemini API Key… or Set OpenRouter API Key…",
             "",
             "Shortcuts:",
-            "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
-            "• Rewrite Selection: \(settings.hotKeyRewriteSelection.displayString)",
-            "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
+            "• Polish (selection, or the whole field): \(settings.hotKeyPolish.displayString)",
+            "• Analyze Tone: \(settings.hotKeyAnalyzeTone.displayString)",
         ].joined(separator: "\n")
 
         alert.addButton(withTitle: "Open Accessibility Settings")
@@ -2246,22 +2228,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func syncHotKeyMenuItems() {
-        let selectionHotKey = settings.hotKeyCorrectSelection
-        let allHotKey = settings.hotKeyCorrectAll
+        let polishHotKey = settings.hotKeyPolish
         let analyzeToneHotKey = settings.hotKeyAnalyzeTone
-        let rewriteHotKey = settings.hotKeyRewriteSelection
 
-        rewriteItem?.title = "Rewrite Selection"
-        rewriteItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: rewriteHotKey.keyCode)
-        rewriteItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: rewriteHotKey.modifiers)
+        polishItem?.title = "Polish"
+        polishItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: polishHotKey.keyCode)
+        polishItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: polishHotKey.modifiers)
 
-        selectionItem?.title = "Correct Selection"
-        selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)
-        selectionItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: selectionHotKey.modifiers)
-
-        allItem?.title = "Correct All"
-        allItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: allHotKey.keyCode)
-        allItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: allHotKey.modifiers)
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() where polishStyleItems.indices.contains(index) {
+            polishStyleItems[index].state = settings.polishStyle == style ? .on : .off
+        }
 
         analyzeToneItem?.title = "Analyze Tone"
         analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
@@ -2326,9 +2302,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem.button?.title
         }
 
-        var debugCorrectSelectionMenuShortcut: (String, NSEvent.ModifierFlags)? {
-            guard let selectionItem else { return nil }
-            return (selectionItem.keyEquivalent, selectionItem.keyEquivalentModifierMask)
+        var debugPolishMenuShortcut: (String, NSEvent.ModifierFlags)? {
+            guard let polishItem else { return nil }
+            return (polishItem.keyEquivalent, polishItem.keyEquivalentModifierMask)
+        }
+
+        var debugSelectedPolishStyleTitle: String? {
+            polishStyleItems.first { $0.state == .on }?.title
         }
 
         @discardableResult

@@ -61,15 +61,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     // MARK: - Hotkey Fields
 
-    var correctSelectionField: KeyComboField!
-    var correctAllField: KeyComboField!
+    var polishField: KeyComboField!
     var analyzeToneField: KeyComboField!
-    var rewriteSelectionField: KeyComboField!
 
     // MARK: - Advanced Fields
 
     var requestTimeoutField: NSTextField!
     var languagePopup: NSPopUpButton!
+    var polishStylePopup: NSPopUpButton!
     var extraInstructionField: NSTextField!
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
@@ -191,15 +190,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detectAnthropicModelButton = NSButton(title: "Detect Model", target: self, action: #selector(detectAnthropicModel(_:)))
 
         // Hotkeys
-        correctSelectionField = KeyComboField(frame: .zero)
-        correctAllField = KeyComboField(frame: .zero)
+        polishField = KeyComboField(frame: .zero)
         analyzeToneField = KeyComboField(frame: .zero)
-        rewriteSelectionField = KeyComboField(frame: .zero)
 
-        correctSelectionField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
-        correctAllField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        polishField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
-        rewriteSelectionField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
 
         // Advanced
         requestTimeoutField = NSTextField()
@@ -210,6 +205,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         languagePopup.addItems(withTitles: ["Auto", "English (US)", "Indonesian"])
         languagePopup.target = self
         languagePopup.action = #selector(languageChanged(_:))
+
+        polishStylePopup = NSPopUpButton()
+        polishStylePopup.addItems(withTitles: Settings.PolishStyle.allCases.map(Self.polishStyleTitle))
+        polishStylePopup.target = self
+        polishStylePopup.action = #selector(polishStyleChanged(_:))
 
         // Keep the default bezeled cell so the field reads as editable; just let it wrap.
         extraInstructionField = NSTextField()
@@ -573,9 +573,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         y -= 24
 
         let rows: [(String, KeyComboField)] = [
-            ("Correct Selection", correctSelectionField),
-            ("Rewrite Selection", rewriteSelectionField),
-            ("Correct All", correctAllField),
+            ("Polish", polishField),
             ("Analyze Tone", analyzeToneField),
         ]
         let rowPitch: CGFloat = 44
@@ -618,10 +616,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 62 + 24
+        let generalHeight: CGFloat = 98 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
+        addRow(to: general, label: "Polish Style", y: 72, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 67)
         addRow(to: general, label: "Request Timeout", y: 36, control: requestTimeoutField, controlWidth: 80, hint: "seconds, 1 to 120")
         addSeparator(to: general, y: 31)
         addRow(to: general, label: "Correction Language", y: 0, control: languagePopup, controlWidth: nil)
@@ -697,8 +697,16 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         parent.addSubview(separator)
     }
 
+    private static func polishStyleTitle(_ style: Settings.PolishStyle) -> String {
+        switch style {
+        case .natural: return "Natural: improve wording and flow"
+        case .minimal: return "Minimal: fix errors only"
+        }
+    }
+
     private func loadAdvancedFields() {
         requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
+        polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
 
         switch settings.correctionLanguage {
         case .auto: languagePopup.selectItem(at: 0)
@@ -987,17 +995,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     private func loadHotKeyFields(from settings: Settings) {
-        correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
-        rewriteSelectionField.loadFromHotKey(settings.hotKeyRewriteSelection)
-        correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
+        polishField.loadFromHotKey(settings.hotKeyPolish)
         analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
     }
 
     /// Copies the hotkey fields into `settings`; an empty field keeps the existing value.
     private func applyHotKeyFields(to settings: inout Settings) {
-        settings.hotKeyCorrectSelection = correctSelectionField.hotKey ?? settings.hotKeyCorrectSelection
-        settings.hotKeyRewriteSelection = rewriteSelectionField.hotKey ?? settings.hotKeyRewriteSelection
-        settings.hotKeyCorrectAll = correctAllField.hotKey ?? settings.hotKeyCorrectAll
+        settings.hotKeyPolish = polishField.hotKey ?? settings.hotKeyPolish
         settings.hotKeyAnalyzeTone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
     }
 
@@ -1109,6 +1113,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     @objc func fallbackChanged(_ sender: NSButton) {
         guard settings != nil else { return }
         settings.enableGeminiOpenRouterFallback = sender.state == .on
+        liveSave()
+    }
+
+    @objc func polishStyleChanged(_ sender: NSPopUpButton) {
+        guard settings != nil, Settings.PolishStyle.allCases.indices.contains(sender.indexOfSelectedItem) else { return }
+        settings.polishStyle = Settings.PolishStyle.allCases[sender.indexOfSelectedItem]
         liveSave()
     }
 
@@ -1240,6 +1250,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         // Advanced
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
+        if Settings.PolishStyle.allCases.indices.contains(polishStylePopup.indexOfSelectedItem) {
+            newSettings.polishStyle = Settings.PolishStyle.allCases[polishStylePopup.indexOfSelectedItem]
+        }
 
         switch languagePopup.indexOfSelectedItem {
         case 0: newSettings.correctionLanguage = .auto
@@ -1289,9 +1302,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     private static func namedHotKeys(in settings: Settings) -> [(name: String, value: Settings.HotKey)] {
         [
-            ("Correct Selection", settings.hotKeyCorrectSelection),
-            ("Rewrite Selection", settings.hotKeyRewriteSelection),
-            ("Correct All", settings.hotKeyCorrectAll),
+            ("Polish", settings.hotKeyPolish),
             ("Analyze Tone", settings.hotKeyAnalyzeTone),
         ]
     }

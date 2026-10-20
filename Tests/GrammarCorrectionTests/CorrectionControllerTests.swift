@@ -195,9 +195,9 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: StubPasteboard()
     )
 
-    controller.correctSelection()
-    controller.correctSelection()
-    controller.correctSelection()
+    controller.polish(style: .minimal)
+    controller.polish(style: .minimal)
+    controller.polish(style: .minimal)
 
     XCTAssertEqual(feedback.infoMessages, ["Correction in progress"])
     await Task.yield()
@@ -224,7 +224,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandCCount, 2)
@@ -253,7 +253,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandCCount, 2)
@@ -283,7 +283,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
     try? await Task.sleep(for: .milliseconds(20))
     XCTAssertTrue(controller.cancelCurrentCorrection())
 
@@ -329,7 +329,7 @@ final class CorrectionControllerTests: XCTestCase {
       }
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [monitorInstalled], timeout: 1.0)
     globalHandler?(UInt16(kVK_Escape), [])
@@ -369,7 +369,7 @@ final class CorrectionControllerTests: XCTestCase {
       removeEventMonitor: { _ in }
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [monitorInstalled], timeout: 1.0)
     globalHandler?(UInt16(kVK_Escape), [.command])
@@ -401,7 +401,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0, "Paste should not happen when operation times out")
@@ -434,7 +434,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 1, "Text should still be pasted")
@@ -472,7 +472,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandCCount, 0, "Should not issue copy command when deadline is already too close")
@@ -497,7 +497,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(pasteboard.restoreCallCount, 1)
@@ -525,7 +525,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     let callCount = await tracker.value()
@@ -571,7 +571,7 @@ final class CorrectionControllerTests: XCTestCase {
       pasteboard: pasteboard
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0)
@@ -607,7 +607,7 @@ final class CorrectionControllerTests: XCTestCase {
       applicationResolver: { _ in nil }
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 0)
@@ -647,7 +647,7 @@ final class CorrectionControllerTests: XCTestCase {
       fallbackCorrectorFactory: { AppendCorrector() }
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(keyboard.commandVCount, 1)
@@ -681,7 +681,7 @@ final class CorrectionControllerTests: XCTestCase {
       fallbackCorrectorFactory: { ThrowingCorrector(error: TestError()) }
     )
 
-    controller.correctSelection()
+    controller.polish(style: .minimal)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(recovererCallCount, 1)
@@ -763,7 +763,7 @@ final class CorrectionControllerTests: XCTestCase {
       postPasteDelay: .zero
     )
 
-    controller.correctSelection(timingsOverride: overrideTimings)
+    controller.polish(style: .minimal, timingsOverride: overrideTimings)
 
     await fulfillment(of: [completion], timeout: 1.0)
     XCTAssertEqual(pasteboard.lastTimeout, .milliseconds(321))

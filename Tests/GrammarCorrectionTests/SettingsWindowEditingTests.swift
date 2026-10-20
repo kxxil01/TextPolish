@@ -39,32 +39,32 @@ final class SettingsWindowEditingTests: XCTestCase {
     let (_, viewController, _) = try makeSettingsWindow()
     let saved = Settings.loadOrCreateDefault()
 
-    viewController.correctAllField.hotKey = saved.hotKeyCorrectSelection
+    viewController.analyzeToneField.hotKey = saved.hotKeyPolish
 
-    XCTAssertEqual(viewController.correctAllField.hotKey, saved.hotKeyCorrectAll)
-    XCTAssertEqual(viewController.correctAllField.textField.stringValue, saved.hotKeyCorrectAll.displayString)
-    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyCorrectAll, saved.hotKeyCorrectAll)
+    XCTAssertEqual(viewController.analyzeToneField.hotKey, saved.hotKeyAnalyzeTone)
+    XCTAssertEqual(viewController.analyzeToneField.textField.stringValue, saved.hotKeyAnalyzeTone.displayString)
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyAnalyzeTone, saved.hotKeyAnalyzeTone)
   }
 
   @MainActor
-  func testRewriteHotkeyFieldSavesLive() throws {
+  func testPolishHotkeyFieldSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
     let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
 
-    viewController.rewriteSelectionField.hotKey = custom
+    viewController.polishField.hotKey = custom
 
-    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyRewriteSelection, custom)
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyPolish, custom)
   }
 
   @MainActor
-  func testRewriteHotkeyMatchingAnotherActionIsRejected() throws {
+  func testPolishStylePickerSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
-    let saved = Settings.loadOrCreateDefault()
+    let minimalIndex = try XCTUnwrap(Settings.PolishStyle.allCases.firstIndex(of: .minimal))
 
-    viewController.rewriteSelectionField.hotKey = saved.hotKeyAnalyzeTone
+    viewController.polishStylePopup.selectItem(at: minimalIndex)
+    viewController.polishStyleChanged(viewController.polishStylePopup)
 
-    XCTAssertEqual(viewController.rewriteSelectionField.hotKey, saved.hotKeyRewriteSelection)
-    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyRewriteSelection, saved.hotKeyRewriteSelection)
+    XCTAssertEqual(Settings.loadOrCreateDefault().polishStyle, .minimal)
   }
 
   @MainActor

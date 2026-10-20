@@ -13,11 +13,11 @@ final class HotKeyManagerTests: XCTestCase {
 
     var calls: [RegisterCall] = []
     var active: [Int: Settings.HotKey] = [:]
-    var failAllKeyCode: UInt32?
+    var failToneKeyCode: UInt32?
 
     let registerHandler: HotKeyManager.RegisterHandler = { id, keyCode, modifiers in
       calls.append(RegisterCall(id: id, keyCode: keyCode, modifiers: modifiers))
-      if id == HotKeyManager.HotKeyID.correctAll.rawValue, keyCode == failAllKeyCode {
+      if id == HotKeyManager.HotKeyID.analyzeTone.rawValue, keyCode == failToneKeyCode {
         throw HotKeyManager.HotKeyManagerError.couldNotRegisterHotKey(-1)
       }
       active[id] = Settings.HotKey(keyCode: keyCode, modifiers: modifiers)
@@ -38,38 +38,20 @@ final class HotKeyManagerTests: XCTestCase {
       installHandler: installHandler
     )
 
-    let oldSelection = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey))
-    let oldAll = Settings.HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey))
+    let oldPolish = Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey))
     let oldAnalyzeTone = Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey))
-    let oldRewrite = Settings.HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey))
 
-    XCTAssertNoThrow(try manager.registerHotKeys(
-      correctSelection: oldSelection,
-      correctAll: oldAll,
-      analyzeTone: oldAnalyzeTone,
-      rewriteSelection: oldRewrite
-    ))
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], oldSelection)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
+    XCTAssertNoThrow(try manager.registerHotKeys(polish: oldPolish, analyzeTone: oldAnalyzeTone))
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.polish.rawValue], oldPolish)
     XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], oldAnalyzeTone)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.rewriteSelection.rawValue], oldRewrite)
 
-    let newSelection = Settings.HotKey(keyCode: UInt32(kVK_ANSI_J), modifiers: UInt32(cmdKey))
-    let newAll = Settings.HotKey(keyCode: UInt32(kVK_ANSI_K), modifiers: UInt32(cmdKey))
+    let newPolish = Settings.HotKey(keyCode: UInt32(kVK_ANSI_J), modifiers: UInt32(cmdKey))
     let newAnalyzeTone = Settings.HotKey(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey))
-    failAllKeyCode = newAll.keyCode
+    failToneKeyCode = newAnalyzeTone.keyCode
 
-    let newRewrite = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(cmdKey))
-    XCTAssertThrowsError(try manager.registerHotKeys(
-      correctSelection: newSelection,
-      correctAll: newAll,
-      analyzeTone: newAnalyzeTone,
-      rewriteSelection: newRewrite
-    ))
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctSelection.rawValue], newSelection)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.correctAll.rawValue], oldAll)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], newAnalyzeTone)
-    XCTAssertEqual(active[HotKeyManager.HotKeyID.rewriteSelection.rawValue], newRewrite)
+    XCTAssertThrowsError(try manager.registerHotKeys(polish: newPolish, analyzeTone: newAnalyzeTone))
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.polish.rawValue], newPolish)
+    XCTAssertEqual(active[HotKeyManager.HotKeyID.analyzeTone.rawValue], oldAnalyzeTone)
   }
 
   func testRegisterHotKeysKeepsAvailableHotKeysWhenOneIsUnavailable() {
@@ -100,17 +82,13 @@ final class HotKeyManagerTests: XCTestCase {
 
     XCTAssertThrowsError(
       try manager.registerHotKeys(
-        correctSelection: Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey)),
-        correctAll: Settings.HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey)),
-        analyzeTone: Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey)),
-        rewriteSelection: Settings.HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey))
+        polish: Settings.HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey)),
+        analyzeTone: Settings.HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey))
       )
     )
 
-    XCTAssertNotNil(active[HotKeyManager.HotKeyID.correctSelection.rawValue])
-    XCTAssertNotNil(active[HotKeyManager.HotKeyID.correctAll.rawValue])
+    XCTAssertNotNil(active[HotKeyManager.HotKeyID.polish.rawValue])
     XCTAssertNil(active[HotKeyManager.HotKeyID.analyzeTone.rawValue])
-    XCTAssertNotNil(active[HotKeyManager.HotKeyID.rewriteSelection.rawValue])
   }
 
   func testIsHotKeyInUseIgnoresCurrentHotKeys() {

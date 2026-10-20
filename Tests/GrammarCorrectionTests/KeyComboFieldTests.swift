@@ -168,11 +168,10 @@ final class KeyComboFieldTests: XCTestCase {
     func testDefaultHotKeys() {
         // Test that default hotkeys are properly formatted
         XCTAssertEqual(
-            Settings.HotKey.correctSelectionDefault.displayString.count > 0,
+            Settings.HotKey.polishDefault.displayString.count > 0,
             true,
             "Default selection hotkey should have display string"
         )
-        XCTAssertEqual(Settings.HotKey.correctAllDefault.displayString.count > 0, true, "Default all hotkey should have display string")
         XCTAssertEqual(Settings.HotKey.analyzeToneDefault.displayString.count > 0, true, "Default tone hotkey should have display string")
     }
 
