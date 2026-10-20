@@ -64,6 +64,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var correctSelectionField: KeyComboField!
     var correctAllField: KeyComboField!
     var analyzeToneField: KeyComboField!
+    var rewriteSelectionField: KeyComboField!
 
     // MARK: - Advanced Fields
 
@@ -193,10 +194,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         correctSelectionField = KeyComboField(frame: .zero)
         correctAllField = KeyComboField(frame: .zero)
         analyzeToneField = KeyComboField(frame: .zero)
+        rewriteSelectionField = KeyComboField(frame: .zero)
 
         correctSelectionField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         correctAllField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        rewriteSelectionField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
 
         // Advanced
         requestTimeoutField = NSTextField()
@@ -571,6 +574,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         let rows: [(String, KeyComboField)] = [
             ("Correct Selection", correctSelectionField),
+            ("Rewrite Selection", rewriteSelectionField),
             ("Correct All", correctAllField),
             ("Analyze Tone", analyzeToneField),
         ]
@@ -592,9 +596,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
 
         if settings != nil {
-            correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
-            correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
-            analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+            loadHotKeyFields(from: settings)
         }
 
         return container
@@ -866,9 +868,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     private func reloadFromSettings() {
         refreshProviderDetail()
-        correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
-        correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
-        analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+        loadHotKeyFields(from: settings)
         loadAdvancedFields()
         syncBackingFieldsFromSettings()
     }
@@ -973,23 +973,32 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     private func hotkeyDidChange() {
-        guard settings != nil else { return }
-        let selection = correctSelectionField.hotKey ?? settings.hotKeyCorrectSelection
-        let all = correctAllField.hotKey ?? settings.hotKeyCorrectAll
-        let tone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
+        guard var updated = settings else { return }
+        applyHotKeyFields(to: &updated)
 
-        if let error = validateHotKeys(selection: selection, all: all, tone: tone, current: settings) {
-            correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
-            correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
-            analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+        if let error = validateHotKeys(in: updated, current: settings) {
+            loadHotKeyFields(from: settings)
             showErrorAlertIfNeeded(title: "Invalid hotkey", message: error)
             return
         }
 
-        settings.hotKeyCorrectSelection = selection
-        settings.hotKeyCorrectAll = all
-        settings.hotKeyAnalyzeTone = tone
+        settings = updated
         liveSave()
+    }
+
+    private func loadHotKeyFields(from settings: Settings) {
+        correctSelectionField.loadFromHotKey(settings.hotKeyCorrectSelection)
+        rewriteSelectionField.loadFromHotKey(settings.hotKeyRewriteSelection)
+        correctAllField.loadFromHotKey(settings.hotKeyCorrectAll)
+        analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+    }
+
+    /// Copies the hotkey fields into `settings`; an empty field keeps the existing value.
+    private func applyHotKeyFields(to settings: inout Settings) {
+        settings.hotKeyCorrectSelection = correctSelectionField.hotKey ?? settings.hotKeyCorrectSelection
+        settings.hotKeyRewriteSelection = rewriteSelectionField.hotKey ?? settings.hotKeyRewriteSelection
+        settings.hotKeyCorrectAll = correctAllField.hotKey ?? settings.hotKeyCorrectAll
+        settings.hotKeyAnalyzeTone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
     }
 
     private func saveCurrentProviderApiKey() {
@@ -1222,21 +1231,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
 
         // Hotkeys
-        let selectionHotKey = correctSelectionField.hotKey ?? newSettings.hotKeyCorrectSelection
-        let allHotKey = correctAllField.hotKey ?? newSettings.hotKeyCorrectAll
-        let toneHotKey = analyzeToneField.hotKey ?? newSettings.hotKeyAnalyzeTone
-        if let hotKeyValidationError = validateHotKeys(
-            selection: selectionHotKey,
-            all: allHotKey,
-            tone: toneHotKey,
-            current: newSettings
-        ) {
+        let currentHotKeys = newSettings
+        applyHotKeyFields(to: &newSettings)
+        if let hotKeyValidationError = validateHotKeys(in: newSettings, current: currentHotKeys) {
             showErrorAlertIfNeeded(title: "Invalid hotkeys", message: hotKeyValidationError)
             return false
         }
-        newSettings.hotKeyCorrectSelection = selectionHotKey
-        newSettings.hotKeyCorrectAll = allHotKey
-        newSettings.hotKeyAnalyzeTone = toneHotKey
 
         // Advanced
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
@@ -1287,31 +1287,29 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     // MARK: - Hotkey Validation
 
-    private func validateHotKeys(
-        selection: Settings.HotKey,
-        all: Settings.HotKey,
-        tone: Settings.HotKey,
-        current: Settings
-    ) -> String? {
-        let hotKeys: [(name: String, value: Settings.HotKey)] = [
-            ("Correct Selection", selection),
-            ("Correct All", all),
-            ("Analyze Tone", tone),
+    private static func namedHotKeys(in settings: Settings) -> [(name: String, value: Settings.HotKey)] {
+        [
+            ("Correct Selection", settings.hotKeyCorrectSelection),
+            ("Rewrite Selection", settings.hotKeyRewriteSelection),
+            ("Correct All", settings.hotKeyCorrectAll),
+            ("Analyze Tone", settings.hotKeyAnalyzeTone),
         ]
+    }
+
+    private func validateHotKeys(in candidate: Settings, current: Settings) -> String? {
+        let hotKeys = Self.namedHotKeys(in: candidate)
 
         for hotKey in hotKeys where hotKey.value.modifiers == 0 {
             return "\(hotKey.name) must include at least one modifier key (Control, Option, Command, or Shift)."
         }
 
-        if selection == all || selection == tone || all == tone {
-            return "Hotkeys must be unique across Correct Selection, Correct All, and Analyze Tone."
+        for (index, hotKey) in hotKeys.enumerated() {
+            if let other = hotKeys[(index + 1)...].first(where: { $0.value == hotKey.value }) {
+                return "\(hotKey.name) and \(other.name) both use \(hotKey.value.displayString). Hotkeys must be unique."
+            }
         }
 
-        let ignoredCurrent = [
-            current.hotKeyCorrectSelection,
-            current.hotKeyCorrectAll,
-            current.hotKeyAnalyzeTone,
-        ]
+        let ignoredCurrent = Self.namedHotKeys(in: current).map(\.value)
 
         for hotKey in hotKeys {
             let inUse = HotKeyManager.isHotKeyInUse(hotKey: hotKey.value, ignoring: ignoredCurrent)

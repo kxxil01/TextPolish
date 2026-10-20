@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import XCTest
 
 @testable import GrammarCorrection
@@ -43,6 +44,27 @@ final class SettingsWindowEditingTests: XCTestCase {
     XCTAssertEqual(viewController.correctAllField.hotKey, saved.hotKeyCorrectAll)
     XCTAssertEqual(viewController.correctAllField.textField.stringValue, saved.hotKeyCorrectAll.displayString)
     XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyCorrectAll, saved.hotKeyCorrectAll)
+  }
+
+  @MainActor
+  func testRewriteHotkeyFieldSavesLive() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
+
+    viewController.rewriteSelectionField.hotKey = custom
+
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyRewriteSelection, custom)
+  }
+
+  @MainActor
+  func testRewriteHotkeyMatchingAnotherActionIsRejected() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let saved = Settings.loadOrCreateDefault()
+
+    viewController.rewriteSelectionField.hotKey = saved.hotKeyAnalyzeTone
+
+    XCTAssertEqual(viewController.rewriteSelectionField.hotKey, saved.hotKeyRewriteSelection)
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyRewriteSelection, saved.hotKeyRewriteSelection)
   }
 
   @MainActor
