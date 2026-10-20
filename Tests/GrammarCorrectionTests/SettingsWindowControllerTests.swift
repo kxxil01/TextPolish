@@ -3,12 +3,13 @@ import AppKit
 @testable import GrammarCorrection
 
 final class SettingsWindowControllerTests: XCTestCase {
+    static let testKeychainService = "com.kxxil01.TextPolish.Tests"
     var controller: SettingsWindowController!
     var mockViewController: MockSettingsWindowViewController!
 
     override func setUp() {
         super.setUp()
-        controller = SettingsWindowController()
+        controller = SettingsWindowController(keychainServiceOverride: Self.testKeychainService)
         mockViewController = MockSettingsWindowViewController()
     }
 

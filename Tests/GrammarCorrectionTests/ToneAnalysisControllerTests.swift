@@ -119,6 +119,9 @@ final class ToneAnalysisControllerTests: XCTestCase {
         tone: .neutral,
         plainMeaning: "ok",
         likelyIntent: "ok",
+        sentiment: .neutral,
+        formality: .neutral,
+        keyPhrases: [],
         misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
         ambiguities: [],
         suggestedReplies: []
@@ -132,6 +135,9 @@ final class ToneAnalysisControllerTests: XCTestCase {
         tone: .neutral,
         plainMeaning: "ok",
         likelyIntent: "ok",
+        sentiment: .neutral,
+        formality: .neutral,
+        keyPhrases: [],
         misunderstandingRisk: MisunderstandingRisk(level: .low, reason: "clear"),
         ambiguities: [],
         suggestedReplies: []

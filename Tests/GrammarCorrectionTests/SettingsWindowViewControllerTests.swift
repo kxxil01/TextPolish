@@ -47,6 +47,13 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         XCTAssertTrue(segmentLabels.contains("About"), "About segment should exist")
     }
 
+    func testPastableSecureTextFieldOnlyHandlesPasteAndSelectAllShortcuts() {
+        XCTAssertTrue(PastableSecureTextField.handlesCommandKeyEquivalent("v"))
+        XCTAssertTrue(PastableSecureTextField.handlesCommandKeyEquivalent("a"))
+        XCTAssertFalse(PastableSecureTextField.handlesCommandKeyEquivalent("c"), "Secure fields should not explicitly copy API keys")
+        XCTAssertFalse(PastableSecureTextField.handlesCommandKeyEquivalent("x"), "Secure fields should not explicitly cut API keys")
+    }
+
     func testProviderTabElements() {
         XCTAssertNotNil(viewController.geminiProviderButton, "Gemini provider button should exist")
         XCTAssertNotNil(viewController.openRouterProviderButton, "OpenRouter provider button should exist")
