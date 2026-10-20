@@ -40,6 +40,8 @@ class SettingsWindowController: NSWindowController {
 
         _ = controller.view
         window?.contentView = controller.view
+        controller.fitWindowToSection(animated: false)
+        window?.center()
     }
 
     override func close() {
