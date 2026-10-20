@@ -1,0 +1,49 @@
+# CI runs `swiftlint lint --strict`, so warnings fail the build.
+included:
+  - src
+  - Tests
+excluded:
+  - .build
+  - build
+
+disabled_rules:
+  # Multi-line collection literals end with a trailing comma by convention.
+  - trailing_comma
+
+opening_brace:
+  # `{` goes on its own line after a wrapped `if`/`guard` condition or signature.
+  ignore_multiline_statement_conditions: true
+  ignore_multiline_function_signatures: true
+  ignore_multiline_type_headers: true
+
+nesting:
+  # Codable request/response types mirror the nested provider JSON.
+  type_level: 3
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_urls: true
+  # Prompt text and JSON fixtures live in multi-line string literals.
+  ignores_multiline_strings: true
+
+identifier_name:
+  excluded: [i, j, k, x, y, w, h, id, ok]
+
+large_tuple:
+  warning: 3
+
+function_body_length:
+  warning: 100
+type_body_length:
+  warning: 400
+file_length:
+  warning: 800
+  ignore_comment_only_lines: true
+cyclomatic_complexity:
+  warning: 20
+  ignores_case_statements: true
+
+function_parameter_count:
+  # Diagnostics and settings helpers take labeled arguments that mirror their records.
+  warning: 8

@@ -349,7 +349,10 @@ final class SettingsHotKeyTests: XCTestCase {
     let path = url.path
 
     XCTAssertTrue(path.contains("TextPolishTests-"), "Test runs must use isolated settings path")
-    XCTAssertFalse(path.contains("/Library/Application Support/TextPolish/settings.json"), "Test runs must never use production settings path")
+    XCTAssertFalse(
+      path.contains("/Library/Application Support/TextPolish/settings.json"),
+      "Test runs must never use production settings path"
+    )
   }
 
   func testLegacySettingsFileURLUsesTestSandboxDuringTests() {
@@ -357,6 +360,9 @@ final class SettingsHotKeyTests: XCTestCase {
     let path = url.path
 
     XCTAssertTrue(path.contains("TextPolishTests-"), "Test runs must use isolated legacy settings path")
-    XCTAssertFalse(path.contains("/Library/Application Support/GrammarCorrection/settings.json"), "Test runs must never use production legacy settings path")
+    XCTAssertFalse(
+      path.contains("/Library/Application Support/GrammarCorrection/settings.json"),
+      "Test runs must never use production legacy settings path"
+    )
   }
 }

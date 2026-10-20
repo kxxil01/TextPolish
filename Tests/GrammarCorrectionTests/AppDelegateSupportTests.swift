@@ -91,7 +91,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegateSchedulesDailyResetAndRefreshesTimeoutsWhenFallbackToggles() {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
 
     let delegate = AppDelegate()
@@ -112,7 +112,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegateDebouncesRapidRegisteredHotKeys() {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     let delegate = AppDelegate()
     let start = ContinuousClock.now
 
@@ -123,8 +123,8 @@ final class AppDelegateSupportTests: XCTestCase {
   }
 
   @MainActor
-  func testAppDelegateSettingsChangeRefreshesMenuShortcutLabels() throws {
-    let _ = NSApplication.shared
+  func testAppDelegateSettingsChangeRefreshesMenuShortcutLabels() async throws {
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
     defer { try? Settings.save(Settings()) }
 
@@ -138,7 +138,8 @@ final class AppDelegateSupportTests: XCTestCase {
       modifiers: UInt32(controlKey | optionKey | cmdKey)
     )
     NotificationCenter.default.post(name: .settingsDidChange, object: updated)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    // The observer applies settings in a main-actor Task, so wait for it instead of a fixed delay.
+    try await waitUntil { delegate.debugCorrectSelectionMenuShortcut?.0 == "p" }
 
     let shortcut = try XCTUnwrap(delegate.debugCorrectSelectionMenuShortcut)
     XCTAssertEqual(shortcut.0, "p")
@@ -149,7 +150,7 @@ final class AppDelegateSupportTests: XCTestCase {
 
   @MainActor
   func testAppDelegatePartialSettingSavePreservesNewerDiskAnthropicModel() throws {
-    let _ = NSApplication.shared
+    _ = NSApplication.shared
     UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
     defer { try? Settings.save(Settings()) }
 
@@ -170,5 +171,18 @@ final class AppDelegateSupportTests: XCTestCase {
     let persisted = Settings.loadOrCreateDefault()
     XCTAssertEqual(persisted.anthropicModel, "claude-haiku-4-5")
     XCTAssertTrue(persisted.enableGeminiOpenRouterFallback)
+  }
+
+  /// Suspends between checks so queued main-actor work can run. Returns at the deadline either way;
+  /// the caller's assertions report the failure.
+  @MainActor
+  private func waitUntil(
+    timeout: Duration = .seconds(2),
+    _ condition: () -> Bool
+  ) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition(), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(10))
+    }
   }
 }

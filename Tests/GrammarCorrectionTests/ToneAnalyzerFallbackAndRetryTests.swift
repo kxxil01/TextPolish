@@ -29,7 +29,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -69,7 +69,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -95,7 +95,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"choices":[{"message":{"content":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}}]}"#
+        body: Self.openAIToneBody
       )
     }
 
@@ -113,6 +113,9 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertNil(json["temperature"], "GPT-5 tone requests should omit unsupported temperature parameters")
     XCTAssertEqual(json["max_completion_tokens"] as? Int, ToneAnalysisConfig.default.maxOutputTokens)
+    XCTAssertEqual(json["reasoning_effort"] as? String, "minimal")
+    let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
+    XCTAssertEqual(responseFormat["type"] as? String, "json_object")
   }
 
   func testAnthropicToneAnalyzerRetriesOnRateLimit() async throws {
@@ -137,7 +140,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"content":[{"type":"text","text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}"#
+        body: Self.anthropicToneBody
       )
     }
 
@@ -232,7 +235,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
+        body: Self.geminiToneBody
       )
     }
 
@@ -258,7 +261,7 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       return Self.httpResponse(
         for: request,
         statusCode: 200,
-        body: #"{"candidates":[{"content":{"parts":[{"text":"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\",\"likely_intent\":\"Share information\",\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},\"ambiguities\":[],\"suggested_reply\":[]}"}]}}]}"#
+        body: Self.geminiToneBody
       )
     }
 
@@ -276,6 +279,36 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       "/custom-prefix/v1beta/models/gemini-2.5-flash:generateContent",
       "Gemini tone endpoint should not duplicate version segments from configured base URL"
     )
+  }
+
+  func testGeminiToneRequestAsksForJSONWithoutThinking() async throws {
+    var capturedBody: Data?
+
+    ToneMockURLProtocol.handler = { request in
+      capturedBody = Self.requestBodyData(from: request)
+      return Self.httpResponse(
+        for: request,
+        statusCode: 200,
+        body: Self.geminiToneBody
+      )
+    }
+
+    let settings = Settings(
+      provider: .gemini,
+      requestTimeoutSeconds: 1,
+      geminiApiKey: "test",
+      geminiBaseURL: "https://mock.local"
+    )
+    let analyzer = try GeminiToneAnalyzer(settings: settings, session: Self.makeMockSession())
+    _ = try await analyzer.analyze("This text is long enough.")
+
+    let body = try XCTUnwrap(capturedBody)
+    let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+    XCTAssertEqual(config["responseMimeType"] as? String, "application/json")
+    XCTAssertEqual(config["maxOutputTokens"] as? Int, ToneAnalysisConfig.default.maxOutputTokens)
+    let thinking = try XCTUnwrap(config["thinkingConfig"] as? [String: Any])
+    XCTAssertEqual(thinking["thinkingBudget"] as? Int, 0)
   }
 
   func testGeminiToneAnalyzerRejectsWhitespaceOnlyTextBeforeCredentialLookup() async throws {
@@ -354,6 +387,15 @@ final class ToneAnalyzerFallbackAndRetryTests: XCTestCase {
       XCTAssertFalse(enabledWithoutCredentialsAnalyzer is FallbackToneAnalyzer)
     }
   }
+
+  /// Neutral tone JSON, escaped for embedding inside a provider response string.
+  private static let escapedToneJSON = #"{\"tone\":\"neutral\",\"plain_meaning\":\"The message is neutral.\","#
+    + #"\"likely_intent\":\"Share information\","#
+    + #"\"misunderstanding_risk\":{\"level\":\"low\",\"reason\":\"The wording is straightforward.\"},"#
+    + #"\"ambiguities\":[],\"suggested_replies\":[]}"#
+  private static let openAIToneBody = #"{"choices":[{"message":{"content":""# + escapedToneJSON + #""}}]}"#
+  private static let anthropicToneBody = #"{"content":[{"type":"text","text":""# + escapedToneJSON + #""}]}"#
+  private static let geminiToneBody = #"{"candidates":[{"content":{"parts":[{"text":""# + escapedToneJSON + #""}]}}]}"#
 
   private static func requestBodyData(from request: URLRequest) -> Data? {
     if let body = request.httpBody {
@@ -454,11 +496,11 @@ private final class ToneMockURLProtocol: URLProtocol {
   static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
   static var requestObserver: ((URLRequest, Date) -> Void)?
 
-  override class func canInit(with request: URLRequest) -> Bool {
+  override static func canInit(with request: URLRequest) -> Bool {
     request.url?.host == "mock.local"
   }
 
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest {
     request
   }
 

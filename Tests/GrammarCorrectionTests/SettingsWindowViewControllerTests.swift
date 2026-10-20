@@ -15,7 +15,7 @@ final class SettingsWindowViewControllerTests: XCTestCase {
         mockDelegate = MockSettingsDelegate()
         viewController.delegate = mockDelegate
 
-        let _ = viewController.view
+        _ = viewController.view
     }
 
     override func tearDown() {

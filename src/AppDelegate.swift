@@ -3,10 +3,16 @@ import Carbon
 import ServiceManagement
 import Sparkle
 
+// Legacy hotspot: split this up before removing the suppression.
+// swiftlint:disable file_length
+
 @MainActor
+// swiftlint:disable:next type_body_length
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let hotKeyManager = HotKeyManager()
+    private static let apiKeyPromptMessage = "Stored securely in Keychain. Key is visible while editing; "
+        + "it is stored securely. Leave blank and click Clear to remove."
 
     private var baseImage: NSImage?
     private var settings = Settings.loadOrCreateDefault()
@@ -904,7 +910,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             let result = self.promptForApiKey(
                 title: "Gemini API Key",
-                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+                message: Self.apiKeyPromptMessage
             )
             TPLogger.log("Gemini key prompt result=\(self.apiKeyPromptResultKind(result))")
 
@@ -942,7 +948,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             let result = self.promptForApiKey(
                 title: "OpenRouter API Key",
-                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+                message: Self.apiKeyPromptMessage
             )
             TPLogger.log("OpenRouter key prompt result=\(self.apiKeyPromptResultKind(result))")
 
@@ -980,7 +986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             let result = self.promptForApiKey(
                 title: "OpenAI API Key",
-                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+                message: Self.apiKeyPromptMessage
             )
             TPLogger.log("OpenAI key prompt completed")
 
@@ -1018,7 +1024,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             let result = self.promptForApiKey(
                 title: "Anthropic API Key",
-                message: "Stored securely in Keychain. Key is visible while editing; it is stored securely. Leave blank and click Clear to remove."
+                message: Self.apiKeyPromptMessage
             )
             TPLogger.log("Anthropic key prompt completed")
 
@@ -1827,7 +1833,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let message = ErrorLogSanitizer.sanitize(parsedMessage)
         TPLogger.log("OpenRouter probe HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
         if http.statusCode == 401 {
-            throw NSError(domain: "TextPolish", code: 401, userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"])
+            throw NSError(
+                domain: "TextPolish",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "OpenRouter unauthorized (401) — check API key"]
+            )
         }
         return false
     }
@@ -2010,7 +2020,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let error = NSError(
                 domain: "TextPolish",
                 code: http.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : "HTTP \(http.statusCode): \(text.prefix(240))"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: text.isEmpty
+                        ? "HTTP \(http.statusCode)"
+                        : "HTTP \(http.statusCode): \(text.prefix(240))",
+                ]
             )
 
             if http.statusCode == 404, index < versionsToTry.count - 1 {
@@ -2050,6 +2064,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .0
     }
 
+    // Legacy hotspot: split this up before removing the suppression.
+    // swiftlint:disable:next cyclomatic_complexity
     private func openRouterScore(_ id: String) -> Int {
         let lower = id.lowercased()
         var value = 0

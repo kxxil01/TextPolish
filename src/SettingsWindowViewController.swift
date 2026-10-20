@@ -1,9 +1,13 @@
 import AppKit
 
+// Legacy hotspot: split this up before removing the suppression.
+// swiftlint:disable file_length
+
 protocol SettingsWindowViewControllerDelegate: AnyObject {
     func settingsDidChange(_ settings: Settings)
 }
 
+// swiftlint:disable:next type_body_length
 class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - Segment Control
 
@@ -265,7 +269,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             case 100: sub.frame = NSRect(x: (w - 24) / 2, y: h - 34, width: 24, height: 24)
             case 101: sub.frame = NSRect(x: 0, y: h - 52, width: w, height: 16)
             case 102:
-                let badge = sub as! NSTextField
+                guard let badge = sub as? NSTextField else { break }
                 let badgeWidth = max(badge.attributedStringValue.size().width + 10, 12)
                 badge.frame = NSRect(x: w - badgeWidth - 6, y: h - 16, width: badgeWidth, height: 14)
             default: break
@@ -385,53 +389,53 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detailBox.autoresizingMask = [.width]
         container.addSubview(detailBox)
 
-        let dc = detailBox.contentView!
-        let dw = dc.frame.width
+        let detailContent = detailBox.contentView!
+        let detailWidth = detailContent.frame.width
         let labelWidth: CGFloat = 80
         let fieldX = labelWidth + 8
-        let fieldWidth = dw - fieldX - 8
+        let fieldWidth = detailWidth - fieldX - 8
 
-        var y = dc.frame.height - 32
+        var y = detailContent.frame.height - 32
 
         let apiKeyLabel = createLabel("API Key", fontSize: 12, weight: .medium)
         apiKeyLabel.textColor = .secondaryLabelColor
         apiKeyLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
-        dc.addSubview(apiKeyLabel)
+        detailContent.addSubview(apiKeyLabel)
 
         providerApiKeyField.frame = NSRect(x: fieldX, y: y, width: fieldWidth, height: 26)
         providerApiKeyField.autoresizingMask = [.width]
-        dc.addSubview(providerApiKeyField)
+        detailContent.addSubview(providerApiKeyField)
         y -= 36
 
         let modelLabel = createLabel("Model", fontSize: 12, weight: .medium)
         modelLabel.textColor = .secondaryLabelColor
         modelLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
-        dc.addSubview(modelLabel)
+        detailContent.addSubview(modelLabel)
 
         let detectWidth: CGFloat = 72
         providerModelField.frame = NSRect(x: fieldX, y: y, width: fieldWidth - detectWidth - 8, height: 26)
         providerModelField.autoresizingMask = [.width]
-        dc.addSubview(providerModelField)
+        detailContent.addSubview(providerModelField)
 
         detectModelButton.bezelStyle = .rounded
         detectModelButton.frame = NSRect(x: fieldX + fieldWidth - detectWidth, y: y, width: detectWidth, height: 26)
         detectModelButton.autoresizingMask = [.minXMargin]
-        dc.addSubview(detectModelButton)
+        detailContent.addSubview(detectModelButton)
         y -= 36
 
         let baseURLLabel = createLabel("Base URL", fontSize: 12, weight: .medium)
         baseURLLabel.textColor = .secondaryLabelColor
         baseURLLabel.frame = NSRect(x: 0, y: y + 3, width: labelWidth, height: 20)
-        dc.addSubview(baseURLLabel)
+        detailContent.addSubview(baseURLLabel)
 
         providerBaseURLField.frame = NSRect(x: fieldX, y: y, width: fieldWidth, height: 26)
         providerBaseURLField.autoresizingMask = [.width]
-        dc.addSubview(providerBaseURLField)
+        detailContent.addSubview(providerBaseURLField)
         y -= 36
 
-        fallbackCheckbox.frame = NSRect(x: 0, y: y + 4, width: dw, height: 20)
+        fallbackCheckbox.frame = NSRect(x: 0, y: y + 4, width: detailWidth, height: 20)
         fallbackCheckbox.autoresizingMask = [.width]
-        dc.addSubview(fallbackCheckbox)
+        detailContent.addSubview(fallbackCheckbox)
 
         updateProviderButtons()
         refreshProviderDetail()
@@ -454,9 +458,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             (openAIProviderButton, .openAI, "openAIApiKey"),
             (anthropicProviderButton, .anthropic, "anthropicApiKey"),
         ]
-        for (button, p, account) in providerButtons {
+        for (button, buttonProvider, account) in providerButtons {
             guard let button else { continue }
-            styleProviderTile(button, isActive: provider == p, hasKey: hasKeychainKey(account: account))
+            styleProviderTile(button, isActive: provider == buttonProvider, hasKey: hasKeychainKey(account: account))
         }
 
         detectModelButton?.isHidden = false
@@ -530,13 +534,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         card.autoresizingMask = [.width, .minYMargin]
         container.addSubview(card)
 
-        let dc = card.contentView!
-        let dw = dc.frame.width
+        let cardContent = card.contentView!
+        let cardWidth = cardContent.frame.width
         let labelWidth: CGFloat = 140
         let fieldX = labelWidth + 8
-        let fieldWidth = dw - fieldX - 8
+        let fieldWidth = cardWidth - fieldX - 8
 
-        var rowY = dc.frame.height - 36
+        var rowY = cardContent.frame.height - 36
 
         let rows: [(String, KeyComboField)] = [
             ("Correct Selection", correctSelectionField),
@@ -548,7 +552,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             let label = createLabel(name, fontSize: 12, weight: .medium)
             label.textColor = .secondaryLabelColor
             label.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-            dc.addSubview(label)
+            cardContent.addSubview(label)
 
             field.frame = NSRect(x: fieldX, y: rowY, width: fieldWidth, height: 26)
             field.wantsLayer = true
@@ -556,14 +560,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             field.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
             field.layer?.cornerRadius = 6
             field.autoresizingMask = [.width]
-            dc.addSubview(field)
+            cardContent.addSubview(field)
             rowY -= 44
 
             if i < rows.count - 1 {
-                let sep = NSBox(frame: NSRect(x: 0, y: rowY + 38, width: dw, height: 1))
+                let sep = NSBox(frame: NSRect(x: 0, y: rowY + 38, width: cardWidth, height: 1))
                 sep.boxType = .separator
                 sep.autoresizingMask = [.width]
-                dc.addSubview(sep)
+                cardContent.addSubview(sep)
             }
         }
 
@@ -614,70 +618,70 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         card.autoresizingMask = [.width, .minYMargin]
         container.addSubview(card)
 
-        let dc = card.contentView!
-        let dw = dc.frame.width
+        let cardContent = card.contentView!
+        let cardWidth = cardContent.frame.width
         let labelWidth: CGFloat = 140
         let fieldX = labelWidth + 8
 
-        var rowY = dc.frame.height - 32
+        var rowY = cardContent.frame.height - 32
 
         let timeoutLabel = createLabel("Request Timeout (s)", fontSize: 12, weight: .medium)
         timeoutLabel.textColor = .secondaryLabelColor
         timeoutLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-        dc.addSubview(timeoutLabel)
+        cardContent.addSubview(timeoutLabel)
 
         requestTimeoutField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
-        dc.addSubview(requestTimeoutField)
+        cardContent.addSubview(requestTimeoutField)
         rowY -= 36
 
-        let sep1 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
-        sep1.boxType = .separator; sep1.autoresizingMask = [.width]; dc.addSubview(sep1)
+        let sep1 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: cardWidth, height: 1))
+        sep1.boxType = .separator; sep1.autoresizingMask = [.width]; cardContent.addSubview(sep1)
 
         let langLabel = createLabel("Correction Language", fontSize: 12, weight: .medium)
         langLabel.textColor = .secondaryLabelColor
         langLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-        dc.addSubview(langLabel)
+        cardContent.addSubview(langLabel)
 
-        languagePopup.frame = NSRect(x: fieldX, y: rowY, width: dw - fieldX - 8, height: 26)
+        languagePopup.frame = NSRect(x: fieldX, y: rowY, width: cardWidth - fieldX - 8, height: 26)
         languagePopup.autoresizingMask = [.width]
-        dc.addSubview(languagePopup)
+        cardContent.addSubview(languagePopup)
         rowY -= 36
 
-        let sep2 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
-        sep2.boxType = .separator; sep2.autoresizingMask = [.width]; dc.addSubview(sep2)
+        let sep2 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: cardWidth, height: 1))
+        sep2.boxType = .separator; sep2.autoresizingMask = [.width]; cardContent.addSubview(sep2)
 
         let extraLabel = createLabel("Extra Instruction", fontSize: 12, weight: .medium)
         extraLabel.textColor = .secondaryLabelColor
         extraLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-        dc.addSubview(extraLabel)
+        cardContent.addSubview(extraLabel)
 
-        extraInstructionField.frame = NSRect(x: fieldX, y: rowY - 44, width: dw - fieldX - 8, height: 70)
+        extraInstructionField.frame = NSRect(x: fieldX, y: rowY - 44, width: cardWidth - fieldX - 8, height: 70)
         extraInstructionField.autoresizingMask = [.width]
-        dc.addSubview(extraInstructionField)
+        cardContent.addSubview(extraInstructionField)
         rowY -= 82
 
-        let sep3 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
-        sep3.boxType = .separator; sep3.autoresizingMask = [.width]; dc.addSubview(sep3)
+        let sep3 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: cardWidth, height: 1))
+        sep3.boxType = .separator; sep3.autoresizingMask = [.width]; cardContent.addSubview(sep3)
 
         let simLabel = createLabel("Min Similarity", fontSize: 12, weight: .medium)
         simLabel.textColor = .secondaryLabelColor
         simLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-        dc.addSubview(simLabel)
+        cardContent.addSubview(simLabel)
 
         activeSimField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
-        dc.addSubview(activeSimField)
+        cardContent.addSubview(activeSimField)
         rowY -= 36
 
-        let sep4 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: dw, height: 1))
-        sep4.boxType = .separator; sep4.autoresizingMask = [.width]; dc.addSubview(sep4)
+        let sep4 = NSBox(frame: NSRect(x: 0, y: rowY + 30, width: cardWidth, height: 1))
+        sep4.boxType = .separator; sep4.autoresizingMask = [.width]; cardContent.addSubview(sep4)
 
         let attLabel = createLabel("Max Attempts", fontSize: 12, weight: .medium)
         attLabel.textColor = .secondaryLabelColor
         attLabel.frame = NSRect(x: 0, y: rowY + 3, width: labelWidth, height: 20)
-        dc.addSubview(attLabel)
+        cardContent.addSubview(attLabel)
 
         activeAttField.frame = NSRect(x: fieldX, y: rowY, width: 80, height: 26)
-        dc.addSubview(activeAttField)
+        cardContent.addSubview(activeAttField)
 
         if settings != nil {
             loadAdvancedFields()
@@ -1100,6 +1104,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     @discardableResult
+    // Legacy hotspot: split this up before removing the suppression.
+    // swiftlint:disable:next function_body_length
     func saveSettings() -> Bool {
         guard var newSettings = settings else { return false }
 
@@ -1260,10 +1266,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ("Analyze Tone", tone),
         ]
 
-        for hotKey in hotKeys {
-            if hotKey.value.modifiers == 0 {
-                return "\(hotKey.name) must include at least one modifier key (Control, Option, Command, or Shift)."
-            }
+        for hotKey in hotKeys where hotKey.value.modifiers == 0 {
+            return "\(hotKey.name) must include at least one modifier key (Control, Option, Command, or Shift)."
         }
 
         if selection == all || selection == tone || all == tone {

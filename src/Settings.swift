@@ -2,6 +2,8 @@ import Foundation
 import Carbon
 import AppKit
 
+// Legacy hotspot: split this up before removing the suppression.
+// swiftlint:disable:next type_body_length
 struct Settings: Codable {
   private static let appSupportFolderName = "TextPolish"
   private static let legacyAppSupportFolderName = "GrammarCorrection"
@@ -208,8 +210,6 @@ struct Settings: Codable {
         self = .englishUS
       case "id-id", "id_id", "indonesian", "bahasa", "bahasa-indonesia", "bahasa_indonesia", "id":
         self = .indonesian
-      case "auto":
-        fallthrough
       default:
         self = .auto
       }

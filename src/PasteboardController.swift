@@ -25,8 +25,8 @@ final class PasteboardController {
   }
 
   func snapshot() -> Snapshot {
-    let pb = NSPasteboard.general
-    let items = pb.pasteboardItems ?? []
+    let pasteboard = NSPasteboard.general
+    let items = pasteboard.pasteboardItems ?? []
 
     let stored = items.map { item -> [NSPasteboard.PasteboardType: Data] in
       var dict: [NSPasteboard.PasteboardType: Data] = [:]
@@ -42,8 +42,8 @@ final class PasteboardController {
   }
 
   func restore(_ snapshot: Snapshot) {
-    let pb = NSPasteboard.general
-    pb.clearContents()
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
 
     let items: [NSPasteboardItem] = snapshot.items.map { dict in
       let item = NSPasteboardItem()
@@ -53,13 +53,13 @@ final class PasteboardController {
       return item
     }
 
-    _ = pb.writeObjects(items)
+    _ = pasteboard.writeObjects(items)
   }
 
   func setString(_ string: String) {
-    let pb = NSPasteboard.general
-    pb.clearContents()
-    pb.setString(string, forType: .string)
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.setString(string, forType: .string)
   }
 
   func waitForCopiedString(after previousChangeCount: Int, excluding excluded: String?, timeout: Duration) async throws -> String {

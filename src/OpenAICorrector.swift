@@ -43,7 +43,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   let minSimilarity: Double
 
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -107,22 +106,30 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw OpenAIError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -130,6 +137,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw OpenAIError.overRewrite
@@ -265,7 +273,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         .init(role: "user", content: prompt.user),
       ],
       temperature: 0.0,
-      maxTokens: 1024,
+      maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
       useMaxCompletionTokens: useMaxCompletionTokens
     )
     request.httpBody = try JSONEncoder().encode(body)
@@ -329,6 +337,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
   let temperature: Double?
   let maxTokens: Int
   let useMaxCompletionTokens: Bool
+  let reasoningEffort: String?
 
   init(
     model: String,
@@ -342,6 +351,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     self.temperature = OpenAITokenPolicy.omitsTemperature(model: model) ? nil : temperature
     self.maxTokens = maxTokens
     self.useMaxCompletionTokens = useMaxCompletionTokens ?? OpenAITokenPolicy.usesMaxCompletionTokens(model: model)
+    self.reasoningEffort = OpenAITokenPolicy.reasoningEffort(model: model)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -349,6 +359,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     try container.encode(model, forKey: .model)
     try container.encode(messages, forKey: .messages)
     try container.encodeIfPresent(temperature, forKey: .temperature)
+    try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
     if useMaxCompletionTokens {
       try container.encode(maxTokens, forKey: .maxCompletionTokens)
     } else {
@@ -362,6 +373,7 @@ private struct OpenAIChatCompletionsRequest: Encodable {
     case temperature
     case maxTokens = "max_tokens"
     case maxCompletionTokens = "max_completion_tokens"
+    case reasoningEffort = "reasoning_effort"
   }
 }
 

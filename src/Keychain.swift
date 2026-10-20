@@ -66,7 +66,7 @@ enum Keychain {
     if status != errSecItemNotFound { throw KeychainError.unexpectedStatus(status) }
 
     var addQuery = query
-    for (k, v) in attributes { addQuery[k] = v }
+    for (key, value) in attributes { addQuery[key] = value }
     let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
     guard addStatus == errSecSuccess else { throw KeychainError.unexpectedStatus(addStatus) }
   }

@@ -219,8 +219,8 @@ final class DiagnosticsStore {
 
   private func formatLatency(_ seconds: Double) -> String {
     if seconds < 1.0 {
-      let ms = Int(seconds * 1000.0)
-      return "\(ms) ms"
+      let milliseconds = Int(seconds * 1000.0)
+      return "\(milliseconds) ms"
     }
     return String(format: "%.2f s", seconds)
   }
@@ -238,6 +238,8 @@ final class DiagnosticsStore {
     }
   }
 
+  // Legacy hotspot: split this up before removing the suppression.
+  // swiftlint:disable:next function_body_length
   private func providerHealthStatus(for error: Error) -> ProviderHealthStatus? {
     let now = Date()
 

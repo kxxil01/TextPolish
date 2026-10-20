@@ -3,6 +3,8 @@ import XCTest
 
 @testable import GrammarCorrection
 
+// Legacy hotspot: split this up before removing the suppression.
+// swiftlint:disable:next type_body_length
 final class CorrectionControllerTests: XCTestCase {
   @MainActor
   private final class StubFeedback: FeedbackPresenter {

@@ -19,7 +19,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
           return "OpenRouter unauthorized (401) — check API key"
         }
         if status == 402 {
-          return "OpenRouter payment required (402) — add credits or use a free model (Provider → Set OpenRouter Model… / Detect OpenRouter Model…)"
+          return "OpenRouter payment required (402) — add credits or use a free model "
+            + "(Provider → Set OpenRouter Model… / Detect OpenRouter Model…)"
         }
         if status == 404 {
           if let message, !message.isEmpty {
@@ -45,11 +46,6 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   // MARK: - TextProcessor Requirements
 
   let minSimilarity: Double
-
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
 
   private let baseURL: URL
   private let model: String
@@ -102,22 +98,30 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw OpenRouterError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -125,6 +129,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw OpenRouterError.overRewrite
@@ -161,11 +166,12 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
   private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
     var retryCount = 0
+    let incrementRetryCount = { retryCount += 1 }
     defer { lastRetryCount = retryCount }
 
     return try await retryPolicy.performWithBackoff(
       maxAttempts: retryPolicy.maxNetworkAttempts,
-      onRetry: { retryCount += 1 }
+      onRetry: incrementRetryCount
     ) { attempt, isLastAttempt in
       let url = try makeChatCompletionsURL()
       var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
@@ -183,7 +189,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
           .init(role: "user", content: prompt.user),
         ],
         temperature: 0.0,
-        maxTokens: 1024
+        maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
       )
       request.httpBody = try JSONEncoder().encode(body)
 

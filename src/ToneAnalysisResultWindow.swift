@@ -259,8 +259,8 @@ final class ToneAnalysisResultWindow: NSPanel, ToneAnalysisResultPresenter {
       keyPhrasesStack.addArrangedSubview(none)
       return
     }
-    for kp in phrases {
-      let row = NSTextField(wrappingLabelWithString: "\"\(kp.phrase)\" — \(kp.meaning)")
+    for keyPhrase in phrases {
+      let row = NSTextField(wrappingLabelWithString: "\"\(keyPhrase.phrase)\" — \(keyPhrase.meaning)")
       row.font = NSFont.systemFont(ofSize: 12)
       row.textColor = .labelColor
       row.preferredMaxLayoutWidth = 340

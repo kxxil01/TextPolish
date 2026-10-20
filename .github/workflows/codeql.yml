@@ -1,0 +1,45 @@
+name: CodeQL
+
+# Swift extraction is slow, so scan what lands on main plus a weekly sweep instead of every PR.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "landing/**"
+      - "assets/**"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@c43362b91a940600cde2ebae39ec7a35ad66bdc0
+        with:
+          languages: swift
+          build-mode: manual
+      # Debug build: extraction sees the same source, without whole-module optimization.
+      - name: Build
+        run: swift build
+      - name: Analyze
+        uses: github/codeql-action/analyze@c43362b91a940600cde2ebae39ec7a35ad66bdc0
+        with:
+          category: /language:swift

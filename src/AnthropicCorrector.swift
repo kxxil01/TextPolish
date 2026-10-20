@@ -43,7 +43,6 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
   let minSimilarity: Double
 
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -106,22 +105,30 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw AnthropicError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -129,6 +136,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw AnthropicError.overRewrite
@@ -193,7 +201,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
       let body = AnthropicMessagesRequest(
         model: model,
-        maxTokens: 1024,
+        maxTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user),
         system: prompt.system,
         messages: [
           .init(role: "user", content: prompt.user),
@@ -233,7 +241,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
           continue
         }
 
-        if (http.statusCode == 529 || (500...599).contains(http.statusCode)), attempt < maxNetworkAttempts - 1 {
+        if http.statusCode == 529 || (500...599).contains(http.statusCode), attempt < maxNetworkAttempts - 1 {
           lastError = AnthropicError.requestFailed(http.statusCode, message)
           retryCount += 1
           try await Task.sleep(for: .seconds(retryPolicy.retryDelaySeconds(attempt: attempt)))
@@ -298,11 +306,18 @@ private struct AnthropicMessagesRequest: Encodable {
   let system: String?
   let messages: [Message]
 
+  var temperature: Double? { AnthropicRequestPolicy.temperature(model: model) }
+  var outputConfig: AnthropicOutputConfig? {
+    AnthropicRequestPolicy.effort(model: model).map { AnthropicOutputConfig(effort: $0) }
+  }
+
   enum CodingKeys: String, CodingKey {
     case model
     case maxTokens = "max_tokens"
     case system
     case messages
+    case temperature
+    case outputConfig = "output_config"
   }
 
   func encode(to encoder: Encoder) throws {
@@ -311,6 +326,8 @@ private struct AnthropicMessagesRequest: Encodable {
     try container.encode(maxTokens, forKey: .maxTokens)
     try container.encodeIfPresent(system, forKey: .system)
     try container.encode(messages, forKey: .messages)
+    try container.encodeIfPresent(temperature, forKey: .temperature)
+    try container.encodeIfPresent(outputConfig, forKey: .outputConfig)
   }
 }
 

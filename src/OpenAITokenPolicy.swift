@@ -25,6 +25,24 @@ enum OpenAITokenPolicy {
       || normalized.hasPrefix("o4")
   }
 
+  /// Lowest reasoning effort for the GPT-5 models documented to accept "minimal".
+  /// Other reasoning models keep their default because accepted values differ per model.
+  static func reasoningEffort(model: String) -> String? {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let minimalEffortModels = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+    for name in minimalEffortModels where normalized == name || normalized.hasPrefix(name + "-20") {
+      return "minimal"
+    }
+    return nil
+  }
+
+  /// Models known to accept `response_format: json_object`. Others rely on the prompt asking for JSON.
+  static func supportsJSONMode(model: String) -> Bool {
+    let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let jsonModePrefixes = ["gpt-4o", "gpt-4.1", "gpt-4-turbo", "gpt-5", "o3", "o4"]
+    return jsonModePrefixes.contains { normalized.hasPrefix($0) }
+  }
+
   static func isTokenParameterError(message: String?) -> Bool {
     let lowered = message?.lowercased() ?? ""
     guard !lowered.isEmpty else { return false }

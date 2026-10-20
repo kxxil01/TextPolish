@@ -237,7 +237,8 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let body = try XCTUnwrap(capturedBody)
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertNil(json["temperature"], "GPT-5 requests should omit unsupported temperature parameters")
-    XCTAssertEqual(json["max_completion_tokens"] as? Int, 1024)
+    XCTAssertEqual(json["max_completion_tokens"] as? Int, 4096)
+    XCTAssertEqual(json["reasoning_effort"] as? String, "minimal")
   }
 
   func testOpenAILegacyRequestIncludesTemperature() async throws {
@@ -266,7 +267,8 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     let body = try XCTUnwrap(capturedBody)
     let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["temperature"] as? Double, 0.0)
-    XCTAssertEqual(json["max_tokens"] as? Int, 1024)
+    XCTAssertEqual(json["max_tokens"] as? Int, 4096)
+    XCTAssertNil(json["reasoning_effort"])
   }
 
   func testOpenAIRequestContainsSystemMessage() async throws {
@@ -309,7 +311,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     XCTAssertTrue(userContent.contains("Hello wrold"))
   }
 
-  private static func extractPrompt(from request: URLRequest) throws -> String {
+  static func extractPrompt(from request: URLRequest) throws -> String {
     guard let body = requestBodyData(from: request) else { return "" }
     let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
     let messages = json?["messages"] as? [[String: Any]]
@@ -317,7 +319,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     return messages?.last?["content"] as? String ?? ""
   }
 
-  private static func requestBodyData(from request: URLRequest) -> Data? {
+  static func requestBodyData(from request: URLRequest) -> Data? {
     if let body = request.httpBody {
       return body
     }
@@ -347,7 +349,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     return data.isEmpty ? nil : data
   }
 
-  private static func extractProtectedText(from prompt: String) -> String {
+  static func extractProtectedText(from prompt: String) -> String {
     if let startRange = prompt.range(of: "<user_text>\n"),
        let endRange = prompt.range(of: "\n</user_text>")
     {
@@ -362,13 +364,13 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     return prompt
   }
 
-  private static func jsonString(_ value: String) -> String {
+  static func jsonString(_ value: String) -> String {
     let data = try? JSONEncoder().encode(value)
     let encoded = data.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
     return encoded
   }
 
-  private static func makeMockSession() -> URLSession {
+  static func makeMockSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [MockURLProtocol.self]
     configuration.waitsForConnectivity = false
@@ -377,7 +379,7 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
     return URLSession(configuration: configuration)
   }
 
-  private static func httpResponse(
+  static func httpResponse(
     for request: URLRequest,
     statusCode: Int,
     body: String,
@@ -394,16 +396,16 @@ final class CorrectorRetryAndPlaceholderTests: XCTestCase {
   }
 }
 
-private final class MockURLProtocol: URLProtocol {
+final class MockURLProtocol: URLProtocol {
   static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
   static var requestObserver: ((URLRequest, Date) -> Void)?
 
-  override class func canInit(with request: URLRequest) -> Bool {
+  override static func canInit(with request: URLRequest) -> Bool {
     guard let host = request.url?.host else { return false }
     return host == "mock.local"
   }
 
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest {
     request
   }
 

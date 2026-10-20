@@ -43,11 +43,6 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   let minSimilarity: Double
 
-  static let fencedCodeBlockRegex = try! NSRegularExpression(pattern: "```[\\s\\S]*?```", options: [])
-  static let inlineCodeRegex = try! NSRegularExpression(pattern: "`[^`\\n]*`", options: [])
-  static let discordTokenRegex = try! NSRegularExpression(pattern: "<[^>\\n]+>", options: [])
-  static let urlRegex = try! NSRegularExpression(pattern: "https?://[^\\s]+", options: [])
-
   private let baseURL: URL
   private let model: String
   private let keychainService: String
@@ -115,22 +110,30 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let apiKey = try resolveApiKey()
     let protected = protect(text)
 
-    for attempt in 1...maxAttempts {
+    var retryReason: CorrectionRetryReason?
+    for _ in 1...maxAttempts {
       let prompt = CorrectionPromptBuilder.makePrompt(
         text: protected.text,
-        attempt: attempt,
+        retryReason: retryReason,
         correctionLanguage: correctionLanguage,
         extraInstruction: extraInstruction
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
       guard !cleaned.isEmpty else { throw GeminiError.emptyResponse }
-      if PromptGuardrails.detectRefusal(cleaned) { continue }
-      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) { continue }
+      if PromptGuardrails.detectRefusal(cleaned) {
+        retryReason = .refusal
+        continue
+      }
+      if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
+        retryReason = .outputTooLong
+        continue
+      }
 
       if !protected.placeholders.isEmpty,
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
+        retryReason = .placeholdersMissing
         continue
       }
 
@@ -138,6 +141,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       if isAcceptable(original: text, candidate: restored) {
         return restored
       }
+      retryReason = .overRewrite
     }
 
     throw GeminiError.overRewrite
@@ -189,13 +193,14 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let versionsToTry = ["v1beta"]
     var lastError: Error?
     var retryCount = 0
+    let incrementRetryCount = { retryCount += 1 }
     defer { lastRetryCount = retryCount }
 
     for (index, version) in versionsToTry.enumerated() {
       do {
         let response: String = try await retryPolicy.performWithBackoff(
           maxAttempts: retryPolicy.maxNetworkAttempts,
-          onRetry: { retryCount += 1 }
+          onRetry: incrementRetryCount
         ) { attempt, isLastAttempt in
           let url = try makeGenerateContentURL(apiVersion: version, apiKey: apiKey)
           var request = URLRequest(url: url, timeoutInterval: timeoutSeconds)
@@ -208,7 +213,10 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
             contents: [
               .init(role: "user", parts: [.init(text: prompt.user)]),
             ],
-            generationConfig: .init(temperature: 0.0, maxOutputTokens: 4096)
+            generationConfig: GeminiRequestPolicy.generationConfig(
+              model: model,
+              maxOutputTokens: CorrectionPromptBuilder.maxOutputTokens(for: prompt.user)
+            )
           )
           request.httpBody = try JSONEncoder().encode(body)
 
@@ -350,14 +358,9 @@ private struct GeminiGenerateContentRequest: Encodable {
     let parts: [Part]
   }
 
-  struct GenerationConfig: Encodable {
-    let temperature: Double
-    let maxOutputTokens: Int
-  }
-
   let systemInstruction: SystemInstruction?
   let contents: [Content]
-  let generationConfig: GenerationConfig
+  let generationConfig: GeminiGenerationConfig
 }
 
 private struct GeminiGenerateContentResponse: Decodable {
