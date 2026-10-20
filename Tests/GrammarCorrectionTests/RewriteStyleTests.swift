@@ -42,7 +42,7 @@ extension CorrectorRetryAndPlaceholderTests {
     XCTAssertTrue(systems[1].contains("drifted from its meaning"))
   }
 
-  func testClarifyRequestAsksForLowReasoningOnGPT5Nano() async throws {
+  func testBothStylesAskForMinimalReasoningOnGPT5Nano() async throws {
     var bodies: [[String: Any]] = []
     MockURLProtocol.handler = { request in
       let body = try XCTUnwrap(Self.requestBodyData(from: request))
@@ -56,7 +56,7 @@ extension CorrectorRetryAndPlaceholderTests {
     _ = try await corrector.correct("Hello", style: .clarify)
     _ = try await corrector.correct("Hello")
 
-    XCTAssertEqual(bodies.map { $0["reasoning_effort"] as? String }, ["low", "minimal"])
+    XCTAssertEqual(bodies.map { $0["reasoning_effort"] as? String }, ["minimal", "minimal"])
   }
 
   // MARK: - Helpers
