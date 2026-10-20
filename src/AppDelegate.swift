@@ -692,16 +692,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard settings.enableGeminiOpenRouterFallback else { return false }
         guard shouldFallbackFromError(error) else { return false }
 
+        // Runs on the main thread mid-Polish, so it must not read the secret: a keychain
+        // prompt here froze the app with the prompt holding keyboard focus.
+        let fallbackProvider: Settings.Provider
         switch settings.provider {
         case .gemini:
-            return currentOpenRouterApiKey() != nil
+            fallbackProvider = .openRouter
         case .openRouter:
-            return currentGeminiApiKey() != nil
+            fallbackProvider = .gemini
         case .openAI:
-            return currentAnthropicApiKey() != nil
+            fallbackProvider = .anthropic
         case .anthropic:
-            return currentOpenAIApiKey() != nil
+            fallbackProvider = .openAI
         }
+        return ProviderCredentials.isConfigured(for: fallbackProvider, settings: settings)
     }
 
     private func shouldFallbackFromError(_ error: Error) -> Bool {

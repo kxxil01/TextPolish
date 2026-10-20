@@ -116,51 +116,14 @@ enum ToneAnalyzerFactory {
   private static func hasFallbackCredentials(for primary: Settings.Provider, settings: Settings) -> Bool {
     switch primary {
     case .openAI:
-      return hasCredentials(for: .anthropic, settings: settings)
+      return ProviderCredentials.isConfigured(for: .anthropic, settings: settings)
     case .anthropic:
-      return hasCredentials(for: .openAI, settings: settings)
+      return ProviderCredentials.isConfigured(for: .openAI, settings: settings)
     case .gemini:
-      return hasCredentials(for: .openRouter, settings: settings)
+      return ProviderCredentials.isConfigured(for: .openRouter, settings: settings)
     case .openRouter:
-      return hasCredentials(for: .gemini, settings: settings)
+      return ProviderCredentials.isConfigured(for: .gemini, settings: settings)
     }
-  }
-
-  private static func hasCredentials(for provider: Settings.Provider, settings: Settings) -> Bool {
-    let keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
-
-    let credentialSource: (account: String, envKeys: [String], settingsValue: String?)
-    switch provider {
-    case .gemini:
-      credentialSource = ("geminiApiKey", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], settings.geminiApiKey)
-    case .openRouter:
-      credentialSource = ("openRouterApiKey", ["OPENROUTER_API_KEY"], settings.openRouterApiKey)
-    case .openAI:
-      credentialSource = ("openAIApiKey", ["OPENAI_API_KEY"], settings.openAIApiKey)
-    case .anthropic:
-      credentialSource = ("anthropicApiKey", ["ANTHROPIC_API_KEY"], settings.anthropicApiKey)
-    }
-
-    if Keychain.hasConfiguredPassword(
-      primaryService: keychainService,
-      account: credentialSource.account
-    ) {
-      return true
-    }
-
-    if let settingsValue = credentialSource.settingsValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-       !settingsValue.isEmpty {
-      return true
-    }
-
-    for envKey in credentialSource.envKeys {
-      let envValue = ProcessInfo.processInfo.environment[envKey]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      if !envValue.isEmpty {
-        return true
-      }
-    }
-
-    return false
   }
 }
 
