@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var selectionItem: NSMenuItem?
     private var allItem: NSMenuItem?
     private var analyzeToneItem: NSMenuItem?
+    private var rewriteItem: NSMenuItem?
     private var cancelCorrectionItem: NSMenuItem?
     private var checkForUpdatesItem: NSMenuItem?
     private var updateStatusItem: NSMenuItem?
@@ -261,6 +262,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         selectionItem.target = self
 
+        let rewriteItem = NSMenuItem(
+            title: "Rewrite Selection",
+            action: #selector(rewriteSelection),
+            keyEquivalent: ""
+        )
+        rewriteItem.target = self
+        rewriteItem.toolTip = "Fix grammar and lightly rephrase unclear wording, keeping the meaning"
+
         let allItem = NSMenuItem(
             title: "Correct All",
             action: #selector(correctAll),
@@ -278,8 +287,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.selectionItem = selectionItem
         self.allItem = allItem
         self.analyzeToneItem = analyzeToneItem
+        self.rewriteItem = rewriteItem
 
         menu.addItem(selectionItem)
+        menu.addItem(rewriteItem)
         menu.addItem(allItem)
         menu.addItem(analyzeToneItem)
 
@@ -823,7 +834,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try hotKeyManager.registerHotKeys(
                 correctSelection: settings.hotKeyCorrectSelection,
                 correctAll: settings.hotKeyCorrectAll,
-                analyzeTone: settings.hotKeyAnalyzeTone
+                analyzeTone: settings.hotKeyAnalyzeTone,
+                rewriteSelection: settings.hotKeyRewriteSelection
             )
         } catch {
             TPLogger.log("Failed to register hotkeys: \(error)")
@@ -831,6 +843,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "Correct Selection \(settings.hotKeyCorrectSelection.displayString)",
                 "Correct All \(settings.hotKeyCorrectAll.displayString)",
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
+                "Rewrite Selection \(settings.hotKeyRewriteSelection.displayString)",
             ].joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
@@ -858,6 +871,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             correctionController?.correctAll(targetApplication: target, timingsOverride: correctionTimings)
         case HotKeyManager.HotKeyID.analyzeTone.rawValue:
             toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
+        case HotKeyManager.HotKeyID.rewriteSelection.rawValue:
+            correctionController?.rewriteSelection(targetApplication: target, timingsOverride: correctionTimings)
         default:
             return false
         }
@@ -871,6 +886,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let target = self.lastTargetApplication
             let timings = self.timingsOverride(for: target)
             self.correctionController?.correctSelection(targetApplication: target, timingsOverride: timings)
+        }
+    }
+
+    @objc private func rewriteSelection() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            let timings = self.timingsOverride(for: target)
+            self.correctionController?.rewriteSelection(targetApplication: target, timingsOverride: timings)
         }
     }
 
@@ -1606,6 +1630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "",
             "Shortcuts:",
             "• Correct Selection: \(settings.hotKeyCorrectSelection.displayString)",
+            "• Rewrite Selection: \(settings.hotKeyRewriteSelection.displayString)",
             "• Correct All: \(settings.hotKeyCorrectAll.displayString)",
         ].joined(separator: "\n")
 
@@ -2224,6 +2249,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let selectionHotKey = settings.hotKeyCorrectSelection
         let allHotKey = settings.hotKeyCorrectAll
         let analyzeToneHotKey = settings.hotKeyAnalyzeTone
+        let rewriteHotKey = settings.hotKeyRewriteSelection
+
+        rewriteItem?.title = "Rewrite Selection"
+        rewriteItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: rewriteHotKey.keyCode)
+        rewriteItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: rewriteHotKey.modifiers)
 
         selectionItem?.title = "Correct Selection"
         selectionItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: selectionHotKey.keyCode)

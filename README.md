@@ -26,6 +26,7 @@ It currently supports two workflows:
 - Global hotkeys that work across apps
 - Clipboard-safe operations (snapshot + guaranteed restore)
 - Minimal-edit correction policy (preserve voice and formatting)
+- Rewrite Selection: lightly rephrases unclear wording so it reads naturally, keeping meaning and tone
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens
 - Retry logic and timeout bounds for provider requests
 - Provider diagnostics and health status in the menu
@@ -35,6 +36,7 @@ It currently supports two workflows:
 ## Default Hotkeys
 
 - Correct Selection: `Ctrl+Option+Command+G` (`⌃⌥⌘G`)
+- Rewrite Selection: `Ctrl+Option+Command+R` (`⌃⌥⌘R`)
 - Correct All: `Ctrl+Option+Command+Shift+G` (`⌃⌥⌘⇧G`)
 - Analyze Tone: `Ctrl+Option+Command+T` (`⌃⌥⌘T`)
 

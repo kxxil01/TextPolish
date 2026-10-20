@@ -98,6 +98,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   func correct(_ text: String) async throws -> String {
+    try await correct(text, style: .minimal)
+  }
+
+  func correct(_ text: String, style: CorrectionStyle) async throws -> String {
     lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
@@ -112,7 +116,8 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         text: protected.text,
         retryReason: retryReason,
         correctionLanguage: correctionLanguage,
-        extraInstruction: extraInstruction
+        extraInstruction: extraInstruction,
+        style: style
       )
       let output = try await generate(prompt: prompt, apiKey: apiKey)
       let cleaned = cleanup(output, original: text)
@@ -134,7 +139,8 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       }
 
       let restored = restore(cleaned, placeholders: protected.placeholders)
-      if isAcceptable(original: text, candidate: restored) {
+      let minimum = style.minimumSimilarity(configured: minSimilarity)
+      if isAcceptable(original: text, candidate: restored, minimum: minimum) {
         return restored
       }
       retryReason = .overRewrite
@@ -319,10 +325,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return nil
   }
 
-  private func isAcceptable(original: String, candidate: String) -> Bool {
+  private func isAcceptable(original: String, candidate: String, minimum: Double) -> Bool {
     guard candidate != original else { return true }
     guard newlineCount(in: candidate) == newlineCount(in: original) else { return false }
-    return isSimilarEnough(original: original, candidate: candidate, minimum: minSimilarity)
+    return isSimilarEnough(original: original, candidate: candidate, minimum: minimum)
   }
 }
 

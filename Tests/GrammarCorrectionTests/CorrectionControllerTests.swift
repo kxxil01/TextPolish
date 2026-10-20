@@ -7,7 +7,7 @@ import XCTest
 // swiftlint:disable:next type_body_length
 final class CorrectionControllerTests: XCTestCase {
   @MainActor
-  private final class StubFeedback: FeedbackPresenter {
+  final class StubFeedback: FeedbackPresenter {
     private(set) var infoMessages: [String] = []
     private(set) var errorMessages: [String] = []
     private(set) var successCount = 0
@@ -32,7 +32,7 @@ final class CorrectionControllerTests: XCTestCase {
   }
 
   @MainActor
-  private final class StubKeyboard: KeyboardControlling {
+  final class StubKeyboard: KeyboardControlling {
     var isTrusted: Bool
     private(set) var commandACount = 0
     private(set) var commandCCount = 0
@@ -60,7 +60,7 @@ final class CorrectionControllerTests: XCTestCase {
   }
 
   @MainActor
-  private final class StubPasteboard: PasteboardControlling {
+  final class StubPasteboard: PasteboardControlling {
     private var waitResults: [Result<String, Error>]
     private(set) var setStringCalls: [String] = []
     private(set) var waitCallCount = 0
@@ -167,7 +167,7 @@ final class CorrectionControllerTests: XCTestCase {
     }
   }
 
-  private static let fastTimings = CorrectionController.Timings(
+  static let fastTimings = CorrectionController.Timings(
     activationDelay: .zero,
     selectAllDelay: .zero,
     copySettleDelay: .zero,
