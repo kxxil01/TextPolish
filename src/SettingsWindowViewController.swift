@@ -1342,8 +1342,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         Keychain.hasConfiguredPassword(primaryService: keychainService, account: account)
     }
 
-    private func keychainKey(account: String) -> String? {
-        guard let key = try? Keychain.getConfiguredPassword(
+    private func keychainKey(account: String) async -> String? {
+        guard let key = await Keychain.loadConfiguredPassword(
             primaryService: keychainService,
             account: account
         ) else { return nil }
@@ -1432,14 +1432,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         detect: @escaping (String, String) async throws -> String,
         applyModel: @escaping (String) -> Void
     ) {
-        var apiKey = providerApiKeyField.stringValue
-        if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            apiKey = backingKeyField.stringValue
+        var typedKey = providerApiKeyField.stringValue
+        if typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            typedKey = backingKeyField.stringValue
         }
-        if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            apiKey = keychainKey(account: account) ?? ""
-        }
-        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasKeychainKey(account: account) else {
             showErrorAlertIfNeeded(
                 title: "API key needed",
                 message: "Enter an API key for \(provider.displayName) before detecting a model."
@@ -1456,6 +1453,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ? fallbackBaseURL : providerBaseURLField.stringValue
 
         Task {
+            var apiKey = typedKey
+            if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                apiKey = await self.keychainKey(account: account) ?? ""
+            }
+            guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                backingButton.title = "Detect Model"
+                backingButton.isEnabled = true
+                self.detectModelButton.title = "Detect"
+                self.detectModelButton.isEnabled = true
+                self.showErrorAlertIfNeeded(
+                    title: "API key needed",
+                    message: "Enter an API key for \(provider.displayName) before detecting a model."
+                )
+                return
+            }
             do {
                 let detectedModel = try await detect(apiKey, baseURL)
 

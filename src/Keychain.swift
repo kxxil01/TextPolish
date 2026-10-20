@@ -84,6 +84,7 @@ enum Keychain {
   }
 
   static func getConfiguredPassword(primaryService: String, account: String) throws -> String? {
+    assert(!Thread.isMainThread, "Reading a secret can show a keychain prompt; use loadConfiguredPassword")
     for service in configuredServices(primaryService: primaryService) {
       let password = trim(try getPassword(service: service, account: account))
       if !password.isEmpty {
@@ -91,6 +92,14 @@ enum Keychain {
       }
     }
     return nil
+  }
+
+  /// Reads the secret on a background thread. Reading can show a keychain prompt that blocks the
+  /// calling thread until the user answers it; on the main thread that froze the whole app.
+  static func loadConfiguredPassword(primaryService: String, account: String) async -> String? {
+    await Task.detached {
+      try? Keychain.getConfiguredPassword(primaryService: primaryService, account: account)
+    }.value
   }
 
   /// Checks for a stored key by its attributes only. Reading the secret asks the user for keychain access

@@ -640,7 +640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .gemini:
             guard let geminiError = error as? GeminiCorrector.GeminiError else { return nil }
             if case let .requestFailed(status, _) = geminiError, status == 404 {
-                guard let apiKey = currentGeminiApiKey() else { return nil }
+                guard let apiKey = await currentGeminiApiKey() else { return nil }
                 do {
                     let models = try await fetchGeminiModels(apiKey: apiKey)
                     guard let chosenRaw = chooseGeminiModel(from: models) else { return nil }
@@ -662,7 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             guard case let .requestFailed(status, _) = openRouterError else { return nil }
             guard status == 404 || status == 402 else { return nil }
-            guard let apiKey = currentOpenRouterApiKey() else { return nil }
+            guard let apiKey = await currentOpenRouterApiKey() else { return nil }
 
             do {
                 let current = settings.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1139,7 +1139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func diagnoseGemini() async -> [String] {
         var lines: [String] = []
         var hasFailure = false
-        guard let apiKey = currentGeminiApiKey(), !apiKey.isEmpty else {
+        guard let apiKey = await currentGeminiApiKey(), !apiKey.isEmpty else {
             lines.append("API Key: ✗ Not configured")
             lines.append("")
             lines.append("Set your Gemini API key in Settings or Keychain.")
@@ -1201,7 +1201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func diagnoseOpenRouter() async -> [String] {
         var lines: [String] = []
         var hasFailure = false
-        guard let apiKey = currentOpenRouterApiKey(), !apiKey.isEmpty else {
+        guard let apiKey = await currentOpenRouterApiKey(), !apiKey.isEmpty else {
             lines.append("API Key: ✗ Not configured")
             lines.append("")
             lines.append("Set your OpenRouter API key in Settings or Keychain.")
@@ -1266,7 +1266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func diagnoseOpenAI() async -> [String] {
         var lines: [String] = []
         var hasFailure = false
-        guard let apiKey = currentOpenAIApiKey(), !apiKey.isEmpty else {
+        guard let apiKey = await currentOpenAIApiKey(), !apiKey.isEmpty else {
             lines.append("API Key: ✗ Not configured")
             lines.append("")
             lines.append("Set your OpenAI API key in Settings or Keychain.")
@@ -1331,7 +1331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func diagnoseAnthropic() async -> [String] {
         var lines: [String] = []
         var hasFailure = false
-        guard let apiKey = currentAnthropicApiKey(), !apiKey.isEmpty else {
+        guard let apiKey = await currentAnthropicApiKey(), !apiKey.isEmpty else {
             lines.append("API Key: ✗ Not configured")
             lines.append("")
             lines.append("Set your Anthropic API key in Settings or Keychain.")
@@ -1643,8 +1643,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func currentGeminiApiKey() -> String? {
-        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+    private func currentGeminiApiKey() async -> String? {
+        if let keyFromKeychain = await Keychain.loadConfiguredPassword(
             primaryService: keychainService,
             account: keychainAccountGemini
         ), !keyFromKeychain.isEmpty {
@@ -1662,8 +1662,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return keyFromEnv.isEmpty ? nil : keyFromEnv
     }
 
-    private func currentOpenRouterApiKey() -> String? {
-        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+    private func currentOpenRouterApiKey() async -> String? {
+        if let keyFromKeychain = await Keychain.loadConfiguredPassword(
             primaryService: keychainService,
             account: keychainAccountOpenRouter
         ), !keyFromKeychain.isEmpty {
@@ -1678,8 +1678,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return keyFromEnv.isEmpty ? nil : keyFromEnv
     }
 
-    private func currentOpenAIApiKey() -> String? {
-        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+    private func currentOpenAIApiKey() async -> String? {
+        if let keyFromKeychain = await Keychain.loadConfiguredPassword(
             primaryService: keychainService,
             account: keychainAccountOpenAI
         ), !keyFromKeychain.isEmpty {
@@ -1694,8 +1694,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return keyFromEnv.isEmpty ? nil : keyFromEnv
     }
 
-    private func currentAnthropicApiKey() -> String? {
-        if let keyFromKeychain = try? Keychain.getConfiguredPassword(
+    private func currentAnthropicApiKey() async -> String? {
+        if let keyFromKeychain = await Keychain.loadConfiguredPassword(
             primaryService: keychainService,
             account: keychainAccountAnthropic
         ), !keyFromKeychain.isEmpty {
