@@ -82,6 +82,7 @@ final class DiagnosticsStore {
       message: note
     )
     lastSnapshot = snapshot
+    TPLogger.log(Self.logLine(for: snapshot))
     healthStatus = ProviderHealthStatus(state: .ok, message: "OK", updatedAt: Date())
     NotificationCenter.default.post(name: .diagnosticsUpdated, object: self)
   }
@@ -108,6 +109,7 @@ final class DiagnosticsStore {
       message: message
     )
     lastSnapshot = snapshot
+    TPLogger.log(Self.logLine(for: snapshot))
     if updateHealth {
       healthStatus = ProviderHealthStatus(state: .ok, message: "OK", updatedAt: Date())
     }
@@ -137,10 +139,29 @@ final class DiagnosticsStore {
     )
     lastSnapshot = snapshot
     lastFailureSnapshot = snapshot
+    TPLogger.log(Self.logLine(for: snapshot))
     if let error, let status = providerHealthStatus(for: error) {
       healthStatus = status
     }
     NotificationCenter.default.post(name: .diagnosticsUpdated, object: self)
+  }
+
+  /// One system-log line per finished operation. Never includes the user's text.
+  nonisolated static func logLine(for snapshot: DiagnosticsSnapshot) -> String {
+    var parts = [
+      "\(snapshot.operation.rawValue): \(snapshot.status.rawValue)",
+      "provider=\(snapshot.provider.rawValue)",
+      "model=\(snapshot.model)",
+    ]
+    if let latency = snapshot.latencySeconds {
+      parts.append(String(format: "latency=%.2fs", latency))
+    }
+    parts.append("retries=\(snapshot.retryCount)")
+    parts.append("fallbacks=\(snapshot.fallbackCount)")
+    if let message = snapshot.message, !message.isEmpty {
+      parts.append("message=\(message)")
+    }
+    return parts.joined(separator: " ")
   }
 
   func formattedSnapshot() -> String {

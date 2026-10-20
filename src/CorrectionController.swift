@@ -297,6 +297,7 @@ final class CorrectionController {
         }
 
         let selection = self.selectionStateProvider(targetPID)
+        var selectedWholeField = selection == .nothingSelected
         if selection == .nothingSelected {
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
@@ -311,6 +312,7 @@ final class CorrectionController {
           )
         } catch where selection == .unknown && self.shouldRetryCopy(error) {
           // Nothing could be copied and Accessibility could not tell why, so polish the whole field.
+          selectedWholeField = true
           self.keyboard.sendCommandA()
           try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
           inputText = try await self.attemptCopy(
@@ -336,6 +338,10 @@ final class CorrectionController {
           )
           return
         }
+        TPLogger.log(
+          "Polish input: app=\(appToActivate?.bundleIdentifier ?? "unknown") style=\(style) "
+            + "selection=\(selection) wholeField=\(selectedWholeField) chars=\(inputText.count)"
+        )
 
         var corrected: String?
         do {
@@ -395,6 +401,7 @@ final class CorrectionController {
           return
         }
 
+        TPLogger.log("Polish output: chars=\(corrected.count), pasting")
         try Task.checkCancellation()
         self.pasteboard.setString(corrected)
         ownedClipboardChangeCount = self.pasteboard.changeCount
