@@ -223,6 +223,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
 
         if (200..<300).contains(http.statusCode) {
           let decoded = try JSONDecoder().decode(OpenRouterChatCompletionsResponse.self, from: data)
+          UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
           let content = decoded.choices?.first?.message?.content ?? ""
           return .success(content)
         }

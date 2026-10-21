@@ -242,6 +242,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
         if (200..<300).contains(http.statusCode) {
           let decoded = try JSONDecoder().decode(AnthropicMessagesResponse.self, from: data)
+          UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
           let content = decoded.content.first(where: { $0.type == "text" })?.text ?? ""
           return content
         }
