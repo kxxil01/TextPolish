@@ -8,6 +8,9 @@ struct GrammarCorrectionMain {
     if runCLIModeIfRequested() {
       return
     }
+    if let status = CommandLinePolish.runIfRequested(Array(ProcessInfo.processInfo.arguments.dropFirst())) {
+      exit(status)
+    }
 
     let app = NSApplication.shared
     let delegate = AppDelegate()
