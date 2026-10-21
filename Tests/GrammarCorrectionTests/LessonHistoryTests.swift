@@ -6,9 +6,64 @@ import XCTest
 /// Learn mode explanations are kept so they can be reviewed later from Recent Lessons.
 final class LessonHistoryTests: XCTestCase {
   private func temporaryFile() -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("lessons-\(UUID().uuidString).json")
-    addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+    let name = "lessons-\(UUID().uuidString)"
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).json")
+    let mistakes = FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-mistakes.json")
+    addTeardownBlock {
+      try? FileManager.default.removeItem(at: url)
+      try? FileManager.default.removeItem(at: mistakes)
+    }
     return url
+  }
+
+  @MainActor
+  func testRepeatedChangesAreCountedAcrossLessonsAndSurviveRelaunch() {
+    let file = temporaryFile()
+    let history = LessonHistory(fileURL: file)
+
+    history.add(["needsed → needed: spelling", "status progress → progress status: adjective first"], at: Date(timeIntervalSince1970: 1))
+    history.add(["\"Needsed\" → \"needed\": spelling mistake"], at: Date(timeIntervalSince1970: 2))
+    history.add(["needsed → needed: typo", "pls → please: spell out"], at: Date(timeIntervalSince1970: 3))
+    history.add(["pls → please: spell it out"], at: Date(timeIntervalSince1970: 4))
+    history.add(["pls → please"], at: Date(timeIntervalSince1970: 5))
+
+    let repeated = history.repeatedMistakes()
+    XCTAssertEqual(repeated.map(\.line), ["pls → please: spell it out (3 times)", "needsed → needed: typo (3 times)"])
+    XCTAssertEqual(LessonHistory(fileURL: file).repeatedMistakes(), repeated, "Counts survive a relaunch")
+  }
+
+  @MainActor
+  func testClearForgetsRepeatedMistakesToo() {
+    let file = temporaryFile()
+    let history = LessonHistory(fileURL: file)
+    history.add(["teh → the: spelling"])
+    history.add(["teh → the: spelling"])
+    XCTAssertEqual(history.repeatedMistakes().count, 1)
+
+    history.clear()
+
+    XCTAssertTrue(history.repeatedMistakes().isEmpty)
+    XCTAssertTrue(LessonHistory(fileURL: file).repeatedMistakes().isEmpty)
+  }
+
+  func testMistakeLinesWithoutAnArrowOrPhraseAreIgnored() {
+    XCTAssertNil(RepeatedMistake(line: "Good job overall", at: Date()))
+    XCTAssertNil(RepeatedMistake(line: " → after: why", at: Date()))
+    XCTAssertEqual(RepeatedMistake(line: "a → b", at: Date())?.reason, nil)
+  }
+
+  @MainActor
+  func testWindowShowsRepeatedMistakesFirst() {
+    let mistake = RepeatedMistake(line: "needsed → needed: spelling", at: Date())
+    var repeated = try? XCTUnwrap(mistake)
+    repeated?.count = 3
+    let text = LessonsWindow.formatted(
+      [Lesson(date: Date(), lines: ["pls → please: spell out"])], repeated: repeated.map { [$0] } ?? []
+    ).string
+
+    // Learn panel colors put each reason on its own line.
+    XCTAssertTrue(text.hasPrefix("Watch Out For\nneedsed → needed\nspelling (3 times)\n"), text)
+    XCTAssertTrue(text.contains("pls → please\nspell out"), text)
   }
 
   @MainActor

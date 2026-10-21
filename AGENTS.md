@@ -34,7 +34,7 @@ Optional extras: a style per app, a shortcut per style, Never Change words, Prev
 4. `GrammarCorrector.correct(_:style:)`: protect code, links, Discord tokens and Never Change terms as placeholders, build the prompt (`CorrectionPromptBuilder`), call the provider, validate, retry with the specific failed check, restore placeholders.
 5. If Preview is on, `PolishReviewPanel` shows the diff (`WordDiff`, or the plain text for a translation) and waits for Paste, Cancel, or another try (Try Again, or another style), which polishes the original again while the panel stays up.
 6. Paste with ⌘V (re-activating the target app if needed), restore the clipboard, show feedback.
-7. If Learn is on, ask the provider to explain the main changes (`ChangeExplaining`), show `LearnPanel`, save to `LessonHistory`.
+7. If Learn is on, ask the provider to explain the main changes (`ChangeExplaining`), show `LearnPanel`, save to `LessonHistory`, which also counts each explained change (`RepeatedMistake`) so Recent Lessons can list repeated ones under Watch Out For.
 
 ### Services (`ServicesProvider`)
 
