@@ -20,7 +20,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
   init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
     keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
-    keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     guard let baseURL = URL(string: settings.openRouterBaseURL) else {
       throw ToneAnalysisError.invalidBaseURL
     }

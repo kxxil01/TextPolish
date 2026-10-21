@@ -191,6 +191,10 @@ final class LivePromptChecks: XCTestCase {
 
   private static func makeCorrector(environment: [String: String]) throws -> GrammarCorrector {
     let provider = (environment["TEXTPOLISH_LIVE_PROVIDER"] ?? "openai").lowercased()
+    // Providers check the keychain before the key passed here; clear any test-run keys so the real one is used.
+    for account in ["openAIApiKey", "geminiApiKey", "anthropicApiKey", "openRouterApiKey"] {
+      try? Keychain.deleteConfiguredPassword(primaryService: Keychain.testPrimaryService, account: account)
+    }
     let model = environment["TEXTPOLISH_LIVE_MODEL"]
     var settings = Settings(requestTimeoutSeconds: 60)
     switch provider {

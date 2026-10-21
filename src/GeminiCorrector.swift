@@ -67,7 +67,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     keyFromEnv =
       ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ??
       ProcessInfo.processInfo.environment["GOOGLE_API_KEY"]
-    keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     guard let baseURL = URL(string: settings.geminiBaseURL) else { throw GeminiError.invalidBaseURL }
 
     self.baseURL = baseURL
