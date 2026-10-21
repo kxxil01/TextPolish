@@ -8,7 +8,7 @@ Technical documentation for contributors and AI coding agents.
 
 **TextPolish** is a macOS menu bar app that improves text in any application with a global shortcut. It sends the text to the user's AI provider (OpenAI, Gemini, Anthropic, or OpenRouter, with their own API key) and pastes the result back.
 
-1. **Polish** (`⌃⌥⌘G`): polishes the selection, or the whole field when nothing is selected, in one of five styles: Natural (default), Minimal, Shorter, Formal, Friendly.
+1. **Polish** (`⌃⌥⌘G`): polishes the selection, or the whole field when nothing is selected, in one of five styles: Natural (default), Minimal, Shorter, Formal, Friendly, plus an optional Custom style the user describes.
 2. **Analyze Tone** (`⌃⌥⌘T`): explains how the selected text comes across, in a result window.
 
 Optional extras: a style per app, a shortcut per style, Never Change words, Preview before paste, and Learn mode with Recent Lessons.
@@ -133,7 +133,9 @@ File: `~/Library/Application Support/TextPolish/settings.json` (lessons are save
 | `geminiModel` | `gemini-2.5-flash` | |
 | `anthropicModel` | `claude-haiku-4-5` | |
 | `openRouterModel` | `google/gemma-3n-e4b-it:free` | |
-| `polishStyle` | `natural` | `natural`, `minimal`, `shorter`, `formal`, `friendly` |
+| `polishStyle` | `natural` | `natural`, `minimal`, `shorter`, `formal`, `friendly`, `custom` |
+| `customStyleName` | `Custom` | The Custom style's name in menus, up to 30 characters |
+| `customStyleInstruction` | none | How the Custom style sounds, up to 500 characters; Custom is hidden until it is set |
 | `appPolishStyles` | `{}` | Style per app, keyed by bundle ID |
 | `styleHotKeys` | `{}` | Optional shortcut per style, keyed by style |
 | `protectedTerms` | `[]` | Never Change words |
@@ -171,7 +173,7 @@ The original clipboard is snapshotted before copying and restored afterwards, in
 
 ### Validation and retries
 
-A candidate is rejected when it is a refusal, much longer than the input, drops a placeholder, changes line structure (Minimal keeps every line; other styles may join lines inside a paragraph but must keep blank lines and list items, and add no lines), or falls below the similarity floor (configured value for Minimal, at most 0.4 for Natural, 0.3 for Shorter, Formal and Friendly). The retry prompt names the check that failed. After `maxAttempts`, the paired provider may be tried if fallback is on.
+A candidate is rejected when it is a refusal, much longer than the input, drops a placeholder, changes line structure (Minimal keeps every line; other styles may join lines inside a paragraph but must keep blank lines and list items, and add no lines; Custom may change the layout), changes a number, or falls below the similarity floor (configured value for Minimal, at most 0.4 for Natural, 0.3 for Shorter, Formal, Friendly and Custom). The retry prompt names the check that failed. After `maxAttempts`, the paired provider may be tried if fallback is on.
 
 ### Keychain and the main thread
 

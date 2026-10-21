@@ -290,7 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let polishStyleItem = NSMenuItem(title: "Polish Style", action: nil, keyEquivalent: "")
         let polishStyleMenu = NSMenu()
         polishStyleItems = Settings.PolishStyle.allCases.enumerated().map { index, style in
-            let item = NSMenuItem(title: style.displayName, action: #selector(selectPolishStyle(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: settings.displayName(for: style), action: #selector(selectPolishStyle(_:)), keyEquivalent: "")
             item.target = self
             item.tag = index
             polishStyleMenu.addItem(item)
@@ -680,7 +680,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             TPLogger.log("Failed to register hotkeys: \(error)")
             let styleShortcuts = Settings.PolishStyle.allCases.compactMap { style in
-                settings.styleHotKey(for: style).map { "Polish as \(style.displayName) \($0.displayString)" }
+                settings.styleHotKey(for: style).map { "Polish as \(settings.displayName(for: style)) \($0.displayString)" }
             }
             let configured = ([
                 "Polish \(settings.hotKeyPolish.displayString)",
@@ -718,7 +718,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch id {
         case HotKeyManager.HotKeyID.polish.rawValue:
             correctionController?.polish(
-                style: settings.polishStyle(forApp: target?.bundleIdentifier).correctionStyle,
+                style: settings.correctionStyle(for: settings.polishStyle(forApp: target?.bundleIdentifier)),
                 targetApplication: target,
                 timingsOverride: correctionTimings
             )
@@ -731,7 +731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return false
             }
             correctionController?.polish(
-                style: styles[index].correctionStyle,
+                style: settings.correctionStyle(for: styles[index]),
                 targetApplication: target,
                 timingsOverride: correctionTimings
             )
@@ -746,7 +746,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let target = self.lastTargetApplication
             let timings = self.timingsOverride(for: target)
             self.correctionController?.polish(
-                style: self.settings.polishStyle(forApp: target?.bundleIdentifier).correctionStyle,
+                style: self.settings.correctionStyle(for: self.settings.polishStyle(forApp: target?.bundleIdentifier)),
                 targetApplication: target,
                 timingsOverride: timings
             )
@@ -808,15 +808,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let header = NSMenuItem(title: "In \(target.name)", action: nil, keyEquivalent: "")
         let defaultStyle = settings.defaultPolishStyle(forApp: target.bundleID)
         let useDefault = NSMenuItem(
-            title: "Default (\(defaultStyle.displayName))",
+            title: "Default (\(settings.displayName(for: defaultStyle)))",
             action: #selector(selectAppPolishStyle(_:)),
             keyEquivalent: ""
         )
         useDefault.tag = -1
         useDefault.state = chosen == nil ? .on : .off
         var choices = [useDefault]
-        for (index, style) in Settings.PolishStyle.allCases.enumerated() {
-            let item = NSMenuItem(title: style.displayName, action: #selector(selectAppPolishStyle(_:)), keyEquivalent: "")
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() where settings.availablePolishStyles.contains(style) {
+            let item = NSMenuItem(
+                title: settings.displayName(for: style),
+                action: #selector(selectAppPolishStyle(_:)),
+                keyEquivalent: ""
+            )
             item.tag = index
             item.state = chosen == style ? .on : .off
             choices.append(item)
@@ -969,6 +973,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where polishStyleItems.indices.contains(index) {
             polishStyleItems[index].state = settings.polishStyle == style ? .on : .off
+            polishStyleItems[index].title = settings.displayName(for: style)
+            polishStyleItems[index].isHidden = !settings.availablePolishStyles.contains(style)
         }
         rebuildAppPolishStyleItems()
 
@@ -1042,6 +1048,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugSelectedPolishStyleTitle: String? {
             polishStyleItems.first { $0.state == .on }?.title
+        }
+
+        var debugVisiblePolishStyleTitles: [String] {
+            polishStyleItems.filter { !$0.isHidden }.map(\.title)
         }
 
         var debugUndoEnabled: Bool {

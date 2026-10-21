@@ -196,45 +196,6 @@ struct Settings: Codable {
     }
   }
 
-  /// How far Polish may change text.
-  enum PolishStyle: String, Codable, Sendable, CaseIterable {
-    /// Improve wording so it reads naturally, and join choppy line breaks.
-    case natural
-    /// Fix typos, grammar, and clear punctuation mistakes only.
-    case minimal
-    /// Cut filler and repetition, keeping every fact and request.
-    case shorter
-    /// Polite and professional, for work email or clients.
-    case formal
-    /// Warm and casual, for chat with coworkers.
-    case friendly
-
-    init(from decoder: Decoder) throws {
-      let container = try decoder.singleValueContainer()
-      self = PolishStyle(rawValue: try container.decode(String.self)) ?? .natural
-    }
-
-    var correctionStyle: CorrectionStyle {
-      switch self {
-      case .natural: return .clarify
-      case .minimal: return .minimal
-      case .shorter: return .shorten
-      case .formal: return .formal
-      case .friendly: return .friendly
-      }
-    }
-
-    var displayName: String {
-      switch self {
-      case .natural: return "Natural"
-      case .minimal: return "Minimal"
-      case .shorter: return "Shorter"
-      case .formal: return "Formal"
-      case .friendly: return "Friendly"
-      }
-    }
-  }
-
   enum CorrectionLanguage: String, Codable, Sendable {
     case auto = "auto"
     case englishUS = "en-US"
@@ -331,6 +292,10 @@ struct Settings: Codable {
   var hotKeyAnalyzeTone: HotKey
   /// Optional shortcuts that Polish in one style, keyed by `PolishStyle` raw value. None by default.
   var styleHotKeys: [String: HotKey]
+  /// The Custom style's name in menus.
+  var customStyleName: String
+  /// How the Custom style should sound, in the writer's words. Custom is hidden until this is set.
+  var customStyleInstruction: String?
   var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
@@ -367,6 +332,7 @@ struct Settings: Codable {
     static let openAIBaseURL = "https://api.openai.com/v1"
     static let anthropicModel = "claude-haiku-4-5"
     static let anthropicBaseURL = "https://api.anthropic.com"
+    static let customStyleName = "Custom"
   }
 
   init(
@@ -388,6 +354,8 @@ struct Settings: Codable {
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     styleHotKeys: [String: HotKey] = [:],
+    customStyleName: String = "Custom",
+    customStyleInstruction: String? = nil,
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.5-flash",
@@ -432,6 +400,8 @@ struct Settings: Codable {
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.styleHotKeys = styleHotKeys
+    self.customStyleName = customStyleName
+    self.customStyleInstruction = customStyleInstruction
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
@@ -478,6 +448,8 @@ struct Settings: Codable {
     previewBeforePaste = (try? container.decodeIfPresent(Bool.self, forKey: .previewBeforePaste)) ?? false
     learnMode = (try? container.decodeIfPresent(Bool.self, forKey: .learnMode)) ?? false
     styleHotKeys = (try? container.decodeIfPresent([String: HotKey].self, forKey: .styleHotKeys)) ?? [:]
+    customStyleName = (try? container.decodeIfPresent(String.self, forKey: .customStyleName)) ?? Defaults.customStyleName
+    customStyleInstruction = try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     enableGeminiOpenRouterFallback =
@@ -531,6 +503,8 @@ struct Settings: Codable {
     try container.encode(previewBeforePaste, forKey: .previewBeforePaste)
     try container.encode(learnMode, forKey: .learnMode)
     try container.encode(styleHotKeys, forKey: .styleHotKeys)
+    try container.encode(customStyleName, forKey: .customStyleName)
+    try container.encodeIfPresent(customStyleInstruction, forKey: .customStyleInstruction)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
@@ -622,33 +596,18 @@ struct Settings: Codable {
 
     protectedTerms = Self.normalizedTerms(protectedTerms)
     styleHotKeys = styleHotKeys.filter { PolishStyle(rawValue: $0.key) != nil }
+    normalizeCustomStyle()
   }
 
-  func styleHotKey(for style: PolishStyle) -> HotKey? {
-    styleHotKeys[style.rawValue]
-  }
-
-  /// The style Polish uses in an app: the user's choice for it, then the built-in default, then the default style.
-  func polishStyle(forApp bundleIdentifier: String?) -> PolishStyle {
-    guard let bundleIdentifier else { return polishStyle }
-    return appPolishStyles[bundleIdentifier] ?? defaultPolishStyle(forApp: bundleIdentifier)
-  }
-
-  /// The style an app gets when the user has not chosen one for it.
-  func defaultPolishStyle(forApp bundleIdentifier: String) -> PolishStyle {
-    Self.prefersMinimalStyle(bundleIdentifier) ? .minimal : polishStyle
-  }
-
-  /// Terminals and code editors hold commands and code, where rewording does more harm than good.
-  private static let minimalStyleApps: Set<String> = [
-    "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable",
-    "net.kovidgoyal.kitty", "org.alacritty", "com.github.wez.wezterm", "com.apple.dt.Xcode",
-    "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92", "dev.zed.Zed",
-    "com.sublimetext.4", "com.panic.Nova",
-  ]
-
-  private static func prefersMinimalStyle(_ bundleIdentifier: String) -> Bool {
-    minimalStyleApps.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
+  /// Caps the Custom style's text, and stops using Custom anywhere once its instruction is cleared.
+  private mutating func normalizeCustomStyle() {
+    customStyleName = String(Self.trimmed(customStyleName).prefix(30))
+    if customStyleName.isEmpty { customStyleName = Defaults.customStyleName }
+    customStyleInstruction = Self.nilIfEmpty(customStyleInstruction).map { String($0.prefix(500)) }
+    guard customStyleInstruction == nil else { return }
+    if polishStyle == .custom { polishStyle = .natural }
+    appPolishStyles = appPolishStyles.filter { $0.value != .custom }
+    styleHotKeys[PolishStyle.custom.rawValue] = nil
   }
 
   /// Splits the Settings field into terms: one per comma or line.
@@ -717,6 +676,8 @@ struct Settings: Codable {
     case previewBeforePaste
     case learnMode
     case styleHotKeys
+    case customStyleName
+    case customStyleInstruction
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
     case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone

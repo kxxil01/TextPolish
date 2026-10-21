@@ -75,6 +75,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var protectedTermsField: NSTextField!
     var previewBeforePasteCheckbox: NSButton!
     var learnModeCheckbox: NSButton!
+    var customStyleNameField: NSTextField!
+    var customStyleInstructionField: NSTextField!
     var extraInstructionField: NSTextField!
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
@@ -238,6 +240,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             action: #selector(learnModeChanged(_:))
         )
 
+        createCustomStyleFields()
+
         // Keep the default bezeled cell so the field reads as editable; just let it wrap.
         extraInstructionField = NSTextField()
         extraInstructionField.placeholderString = "Optional, e.g. Keep British spelling"
@@ -257,6 +261,22 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         activeAttField = NSTextField()
         activeAttField.placeholderString = "2"
         activeAttField.delegate = self
+    }
+
+    private func createCustomStyleFields() {
+        customStyleNameField = NSTextField()
+        customStyleNameField.placeholderString = "Custom"
+        customStyleNameField.delegate = self
+        customStyleNameField.setAccessibilityLabel("Custom style name")
+
+        customStyleInstructionField = NSTextField()
+        customStyleInstructionField.placeholderString = "e.g. Short and direct, as a status update to my manager"
+        customStyleInstructionField.usesSingleLineMode = false
+        customStyleInstructionField.cell?.wraps = true
+        customStyleInstructionField.cell?.isScrollable = false
+        customStyleInstructionField.lineBreakMode = .byWordWrapping
+        customStyleInstructionField.delegate = self
+        customStyleInstructionField.setAccessibilityLabel("Custom style instruction")
     }
 
     private func makeProviderTile(_ title: String, tag: Int) -> NSButton {
@@ -639,7 +659,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(header)
         y -= 22
 
-        let styles = Settings.PolishStyle.allCases
+        // Tags and field indexes follow `allCases`; Custom gets a row once it has an instruction.
+        let allStyles = Settings.PolishStyle.allCases
+        let styles = settings?.availablePolishStyles ?? allStyles.filter { $0 != .custom }
         let rowPitch: CGFloat = 44
         let cardHeight = CGFloat(styles.count - 1) * rowPitch + 26 + 24
         let card = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
@@ -650,10 +672,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let fieldWidth = cardContent.frame.width - settingsLabelWidth - 8 - clearWidth - 8
         styleHotKeyClearButtons = []
         var rowY = cardContent.frame.height - 26
-        for (index, style) in styles.enumerated() where styleHotKeyFields.indices.contains(index) {
+        for (row, style) in styles.enumerated() {
+            guard let index = allStyles.firstIndex(of: style), styleHotKeyFields.indices.contains(index) else { continue }
             let field = styleHotKeyFields[index]
-            let name = "Polish as \(style.displayName)"
-            addRow(to: cardContent, label: style.displayName, y: rowY, control: field, controlWidth: fieldWidth)
+            let displayName = settings?.displayName(for: style) ?? style.displayName
+            let name = "Polish as \(displayName)"
+            addRow(to: cardContent, label: displayName, y: rowY, control: field, controlWidth: fieldWidth)
             field.setAccessibilityLabel(name)
             let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearStyleHotKey(_:)))
             clearButton.tag = index
@@ -663,7 +687,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             clearButton.autoresizingMask = [.minXMargin]
             cardContent.addSubview(clearButton)
             styleHotKeyClearButtons.append(clearButton)
-            if index < styles.count - 1 {
+            if row < styles.count - 1 {
                 addSeparator(to: cardContent, y: rowY - (rowPitch - 26) / 2)
             }
             rowY -= rowPitch
@@ -711,6 +735,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         addSeparator(to: general, y: 31)
         addRow(to: general, label: "Correction Language", y: 0, control: languagePopup, controlWidth: nil)
         y -= generalHeight + 16
+        y = buildCustomStyleCard(in: container, top: y, padding: padding, contentWidth: contentWidth)
 
         // Tuning: stored separately for each provider.
         let providerName = settings?.provider.displayName ?? "Provider"
@@ -740,6 +765,27 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
 
         return container
+    }
+
+    /// The writer's own style: a name for menus and how it should sound. Returns the y below the card.
+    private func buildCustomStyleCard(in container: NSView, top: CGFloat, padding: CGFloat, contentWidth: CGFloat) -> CGFloat {
+        var y = top
+        let header = SettingsUI.makeSectionHeader("Custom Style")
+        header.frame = NSRect(x: padding + 4, y: y - 16, width: contentWidth - 4, height: 16)
+        container.addSubview(header)
+        y -= 22
+
+        let cardHeight: CGFloat = 90 + 24
+        let card = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
+        container.addSubview(card)
+        let content = card.contentView!
+        addRow(to: content, label: "Name", y: 64, control: customStyleNameField, controlWidth: 160, hint: "shown in the Polish Style menu")
+        addSeparator(to: content, y: 59)
+        addRow(to: content, label: "How It Sounds", y: 0, control: customStyleInstructionField, controlWidth: nil, controlHeight: 54)
+        let hint = SettingsUI.makeHint("Empty hides Custom")
+        hint.frame = NSRect(x: 0, y: 12, width: settingsLabelWidth, height: 15)
+        content.addSubview(hint)
+        return y - cardHeight - 16
     }
 
     // MARK: - Row Helpers
@@ -789,12 +835,16 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .shorter: return "Shorter: cut filler, keep every point"
         case .formal: return "Formal: polite and professional"
         case .friendly: return "Friendly: warm and casual"
+        case .custom: return "Custom: your own style"
         }
     }
 
     private func loadAdvancedFields() {
         requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
+        syncCustomStyleChoice()
         polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
+        customStyleNameField.stringValue = settings.customStyleName
+        customStyleInstructionField.stringValue = settings.customStyleInstruction ?? ""
         protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
         previewBeforePasteCheckbox.state = settings.previewBeforePaste ? .on : .off
         learnModeCheckbox.state = settings.learnMode ? .on : .off
@@ -1052,6 +1102,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             liveSave()
             return
         }
+        if field === customStyleNameField || field === customStyleInstructionField {
+            settings.customStyleName = customStyleNameField.stringValue
+            settings.customStyleInstruction = customStyleInstructionField.stringValue
+            liveSave()
+            return
+        }
         if field === activeSimField {
             setCurrentProviderMinSimilarity(Double(field.stringValue) ?? 0.65)
             liveSave()
@@ -1093,8 +1149,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     /// Clear only does something when the style has a shortcut.
     private func syncStyleHotKeyClearButtons() {
-        for (button, field) in zip(styleHotKeyClearButtons, styleHotKeyFields) {
-            button.isEnabled = field.hotKey != nil
+        for button in styleHotKeyClearButtons where styleHotKeyFields.indices.contains(button.tag) {
+            button.isEnabled = styleHotKeyFields[button.tag].hotKey != nil
         }
     }
 
@@ -1230,6 +1286,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         guard settings != nil else { return }
         settings.enableGeminiOpenRouterFallback = sender.state == .on
         liveSave()
+    }
+
+    /// Names the Custom choice after the writer's style, and offers it only once it has an instruction.
+    private func syncCustomStyleChoice() {
+        guard let index = Settings.PolishStyle.allCases.firstIndex(of: .custom),
+              let item = polishStylePopup.item(at: index) else { return }
+        item.title = "\(settings.customStyleName): your own style"
+        item.isHidden = !settings.hasCustomStyle
     }
 
     @objc func polishStyleChanged(_ sender: NSPopUpButton) {

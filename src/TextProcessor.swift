@@ -236,10 +236,14 @@ extension TextProcessor {
   }
 
   /// Corrections keep every line. Rewrites may join lines inside a paragraph, but never add lines,
-  /// and paragraph breaks and list items must survive.
+  /// and paragraph breaks and list items must survive. A custom style sets its own layout.
   func keepsLineStructure(original: String, candidate: String, style: CorrectionStyle) -> Bool {
     guard style.rewritesWording else {
       return newlineCount(in: candidate) == newlineCount(in: original)
+    }
+    // A custom style may ask for a different layout, such as bullet points.
+    if case .custom = style {
+      return true
     }
     return newlineCount(in: candidate) <= newlineCount(in: original)
       && blankLineCount(in: candidate) == blankLineCount(in: original)

@@ -91,7 +91,18 @@ enum CorrectionPromptBuilder {
     case .shorten: return shortenRules + rewriteSafetyRules
     case .formal: return formalRules + rewriteSafetyRules
     case .friendly: return friendlyRules + rewriteSafetyRules
+    case .custom(let instruction): return customRules(instruction) + rewriteSafetyRules
     }
+  }
+
+  /// The writer describes the style; the meaning guards still apply.
+  private static func customRules(_ instruction: String) -> [String] {
+    [
+      "You are an editor. Rewrite the text in the style the writer describes below, as if the same person wrote it.",
+      "Writer's style: \(instruction)",
+      "Follow that style for tone, length, and layout, but never change what the text says.",
+      "Do not add greetings, sign-offs, or emojis unless the style asks for them.",
+    ]
   }
 
   private static let minimalRules: [String] = [
@@ -166,6 +177,13 @@ enum CorrectionPromptBuilder {
         "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
           + "mentions (@user, #channel), links, and code blocks.",
       ]
+    } else if case .custom = style {
+      // The writer's style may ask for a list or shorter lines, so the layout follows it.
+      layoutRules = [
+        "Join line breaks that split one paragraph into short lines, unless the writer's style asks for another layout, "
+          + "such as a list.",
+        "Preserve Markdown, emojis, mentions (@user, #channel), links, and code blocks.",
+      ]
     } else {
       // AI-written text often puts every sentence on its own line; a person writes flowing paragraphs.
       layoutRules = [
@@ -195,6 +213,8 @@ enum CorrectionPromptBuilder {
     case .shorten: return shortenExamples
     case .formal: return formalExamples
     case .friendly: return friendlyExamples
+    // Any example would pull the output toward one style instead of the writer's.
+    case .custom: return []
     }
   }
 

@@ -10,6 +10,8 @@ enum CorrectionStyle: Sendable, Equatable {
   case formal
   /// Warm, casual wording, as a friendly coworker writes in chat.
   case friendly
+  /// The writer's own style, described in their words, such as "short bullet points for a status update".
+  case custom(String)
 
   /// Every style except Minimal rewrites wording, so they share the rewrite layout rules and checks.
   var rewritesWording: Bool {
@@ -22,7 +24,21 @@ enum CorrectionStyle: Sendable, Equatable {
     case .minimal: return configured
     case .clarify: return min(configured, 0.4)
     // Shortening and changing tone replace more words while keeping the meaning.
-    case .shorten, .formal, .friendly: return min(configured, 0.3)
+    case .shorten, .formal, .friendly, .custom: return min(configured, 0.3)
+    }
+  }
+}
+
+extension CorrectionStyle: CustomStringConvertible {
+  /// The style's name for logs; a custom style's instruction stays out of them.
+  var description: String {
+    switch self {
+    case .minimal: return "minimal"
+    case .clarify: return "clarify"
+    case .shorten: return "shorten"
+    case .formal: return "formal"
+    case .friendly: return "friendly"
+    case .custom: return "custom"
     }
   }
 }
