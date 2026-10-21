@@ -202,6 +202,12 @@ struct Settings: Codable {
     case natural
     /// Fix typos, grammar, and clear punctuation mistakes only.
     case minimal
+    /// Cut filler and repetition, keeping every fact and request.
+    case shorter
+    /// Polite and professional, for work email or clients.
+    case formal
+    /// Warm and casual, for chat with coworkers.
+    case friendly
 
     init(from decoder: Decoder) throws {
       let container = try decoder.singleValueContainer()
@@ -212,6 +218,9 @@ struct Settings: Codable {
       switch self {
       case .natural: return .clarify
       case .minimal: return .minimal
+      case .shorter: return .shorten
+      case .formal: return .formal
+      case .friendly: return .friendly
       }
     }
 
@@ -219,6 +228,9 @@ struct Settings: Codable {
       switch self {
       case .natural: return "Natural"
       case .minimal: return "Minimal"
+      case .shorter: return "Shorter"
+      case .formal: return "Formal"
+      case .friendly: return "Friendly"
       }
     }
   }

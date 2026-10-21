@@ -99,6 +99,39 @@ final class LivePromptChecks: XCTestCase {
     XCTAssertEqual(output, input)
   }
 
+  // MARK: - Shorter, Formal, Friendly
+
+  func testShorterCutsFillerAndKeepsFacts() async throws {
+    let input = "hi, just wanted to let you know that I have already finished the monthly report for March "
+      + "and I have also already uploaded it to the shared folder, so whenever you have some free time you can check it, "
+      + "thank you so much"
+    let output = try await polish(input, style: .shorten)
+
+    XCTAssertLessThan(Double(output.count), Double(input.count) * 0.8, "At least a fifth shorter")
+    XCTAssertTrue(output.lowercased().contains("march"))
+    XCTAssertTrue(output.lowercased().contains("shared folder"))
+  }
+
+  func testFormalSpellsOutChatAbbreviations() async throws {
+    let input = "thx for the update, pls check the numbers again and lmk if anything looks off"
+    let output = try await polish(input, style: .formal)
+
+    for slang in ["thx", "pls", "lmk"] {
+      XCTAssertFalse(output.lowercased().split(whereSeparator: { !$0.isLetter }).contains(Substring(slang)), "Spelled out \(slang)")
+    }
+    XCTAssertTrue(output.lowercased().contains("please"))
+  }
+
+  func testFriendlySoftensWithoutChangingTheAsk() async throws {
+    let input = "Send the files today. Do not forget the contract."
+    let output = try await polish(input, style: .friendly)
+
+    XCTAssertNotEqual(output, input)
+    for word in ["files", "today", "contract"] {
+      XCTAssertTrue(output.lowercased().contains(word), "Kept \(word)")
+    }
+  }
+
   // MARK: - Minimal
 
   func testMinimalFixesTyposAndKeepsSlang() async throws {

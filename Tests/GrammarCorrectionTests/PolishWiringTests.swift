@@ -22,6 +22,16 @@ extension CorrectionControllerTests {
   }
 
   @MainActor
+  func testShorterFormalAndFriendlyShowRewriteFeedback() async {
+    for style in [CorrectionStyle.shorten, .formal, .friendly] {
+      let feedback = await polishFeedback(style: style)
+
+      XCTAssertEqual(feedback.rewriteSuccessCount, 1, "\(style)")
+      XCTAssertEqual(feedback.successCount, 0, "\(style)")
+    }
+  }
+
+  @MainActor
   private func polishFeedback(style: CorrectionStyle) async -> StubFeedback {
     let finished = expectation(description: "polish finished")
     let feedback = StubFeedback()

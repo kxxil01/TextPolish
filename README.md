@@ -26,7 +26,7 @@ It currently supports two workflows:
 - Global hotkeys that work across apps
 - Clipboard-safe operations (snapshot + guaranteed restore)
 - One Polish action for the selection, or the whole field when nothing is selected
-- Polish style: Natural (default) improves wording and joins choppy line breaks so text reads naturally, keeping meaning, tone, and slang; Minimal fixes typos and grammar only and preserves voice and formatting
+- Polish style: Natural (default) improves wording and joins choppy line breaks so text reads naturally, keeping meaning, tone, and slang; Minimal fixes typos and grammar only and preserves voice and formatting; Shorter cuts filler while keeping every point; Formal makes it polite and professional; Friendly makes it warm and casual
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens
