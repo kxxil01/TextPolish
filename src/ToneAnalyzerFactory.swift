@@ -110,6 +110,16 @@ enum ToneAnalyzerFactory {
           diagnosticsModel: settings.anthropicModel
         )
       }
+    case .custom:
+      do {
+        return try OpenAIToneAnalyzer(endpoint: .custom(settings), settings: settings)
+      } catch {
+        return FailingToneAnalyzer(
+          underlyingError: error,
+          diagnosticsProvider: .custom,
+          diagnosticsModel: settings.customProvider.model
+        )
+      }
     }
   }
 
@@ -123,6 +133,8 @@ enum ToneAnalyzerFactory {
       return ProviderCredentials.isConfigured(for: .openRouter, settings: settings)
     case .openRouter:
       return ProviderCredentials.isConfigured(for: .gemini, settings: settings)
+    case .custom:
+      return false
     }
   }
 }

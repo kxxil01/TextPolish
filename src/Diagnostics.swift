@@ -256,6 +256,8 @@ final class DiagnosticsStore {
       return "OpenAI"
     case .anthropic:
       return "Anthropic"
+    case .custom:
+      return "Custom"
     }
   }
 

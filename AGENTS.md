@@ -61,6 +61,8 @@ src/
 ├── GrammarCorrector.swift          CorrectionStyle and the corrector protocol
 ├── CorrectorFactory.swift          Builds the corrector for the selected provider
 ├── OpenAICorrector.swift, GeminiCorrector.swift, AnthropicCorrector.swift, OpenRouterCorrector.swift
+├── OpenAICompatibleEndpoint.swift, Settings+CustomProvider.swift
+│                                   The Custom provider: any OpenAI-compatible API through the OpenAI client
 ├── OpenAITokenPolicy.swift, GeminiRequestPolicy.swift, AnthropicRequestPolicy.swift
 │                                   Per-model request parameters (reasoning, thinking, temperature, JSON mode)
 ├── CorrectionPromptBuilder.swift   Prompt rules and examples per style; retry instructions per failed check
@@ -120,7 +122,8 @@ Before shipping a prompt or model change, run the Polish prompts against a real 
 
 ```bash
 TEXTPOLISH_LIVE_CHECKS=1 OPENAI_API_KEY=sk-... swift test --filter LivePromptChecks
-# Other providers: TEXTPOLISH_LIVE_PROVIDER=gemini|anthropic|openrouter with that provider's key variable.
+# Other providers: TEXTPOLISH_LIVE_PROVIDER=gemini|anthropic|openrouter with that provider's key variable,
+# or custom with TEXTPOLISH_LIVE_BASE_URL, TEXTPOLISH_LIVE_MODEL, and an optional TEXTPOLISH_CUSTOM_API_KEY.
 # Another model: TEXTPOLISH_LIVE_MODEL=gpt-5-nano
 ```
 
@@ -134,7 +137,8 @@ File: `~/Library/Application Support/TextPolish/settings.json` (lessons are save
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `provider` | `gemini` | `gemini`, `openRouter`, `openAI`, or `anthropic` |
+| `provider` | `gemini` | `gemini`, `openRouter`, `openAI`, `anthropic`, or `custom` |
+| `customProvider` | empty | Any OpenAI-compatible API: `baseURL`, `model`, optional `apiKey`, `maxAttempts`, `minSimilarity`, `extraInstruction` |
 | `openAIModel` | `gpt-4.1-mini` | Fast, no reasoning step, rewords well |
 | `geminiModel` | `gemini-2.5-flash` | |
 | `anthropicModel` | `claude-haiku-4-5` | |
@@ -168,7 +172,9 @@ Per-app timing overrides (keys are bundle IDs or app names):
 
 ### API keys
 
-Resolution order: macOS Keychain (service `com.kxxil01.TextPolish`, then legacy `com.ilham.GrammarCorrection`), the settings file, then environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`).
+Resolution order: macOS Keychain (service `com.kxxil01.TextPolish`, then legacy `com.ilham.GrammarCorrection`), the settings file, then environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `TEXTPOLISH_CUSTOM_API_KEY`).
+
+The Custom provider reuses the OpenAI client through `OpenAICompatibleEndpoint`: its own base URL, model, and keychain account (`customApiKey`). With no key, requests go without an Authorization header. It has no fallback partner.
 
 ---
 

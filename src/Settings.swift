@@ -248,6 +248,8 @@ struct Settings: Codable {
     case openRouter
     case openAI
     case anthropic
+    /// Any OpenAI-compatible API, set up in `customProvider`.
+    case custom
 
     init(from decoder: Decoder) throws {
       let container = try decoder.singleValueContainer()
@@ -266,6 +268,7 @@ struct Settings: Codable {
       case .openRouter: return "OpenRouter"
       case .openAI: return "OpenAI"
       case .anthropic: return "Anthropic"
+      case .custom: return "Custom"
       }
     }
   }
@@ -323,6 +326,7 @@ struct Settings: Codable {
   var anthropicMaxAttempts: Int
   var anthropicMinSimilarity: Double
   var anthropicExtraInstruction: String?
+  var customProvider: CustomProvider
 
   private enum Defaults {
     static let requestTimeoutSeconds: Double = 10
@@ -383,7 +387,8 @@ struct Settings: Codable {
     anthropicBaseURL: String = "https://api.anthropic.com",
     anthropicMaxAttempts: Int = 2,
     anthropicMinSimilarity: Double = 0.65,
-    anthropicExtraInstruction: String? = nil
+    anthropicExtraInstruction: String? = nil,
+    customProvider: CustomProvider = CustomProvider()
   ) {
     self.provider = provider
     self.requestTimeoutSeconds = requestTimeoutSeconds
@@ -431,6 +436,7 @@ struct Settings: Codable {
     self.anthropicMaxAttempts = anthropicMaxAttempts
     self.anthropicMinSimilarity = anthropicMinSimilarity
     self.anthropicExtraInstruction = anthropicExtraInstruction
+    self.customProvider = customProvider
     normalizeRuntimeValues()
   }
 
@@ -487,6 +493,7 @@ struct Settings: Codable {
     anthropicMaxAttempts = try container.decodeIfPresent(Int.self, forKey: .anthropicMaxAttempts) ?? 2
     anthropicMinSimilarity = try container.decodeIfPresent(Double.self, forKey: .anthropicMinSimilarity) ?? 0.65
     anthropicExtraInstruction = try container.decodeIfPresent(String.self, forKey: .anthropicExtraInstruction)
+    customProvider = (try? container.decodeIfPresent(CustomProvider.self, forKey: .customProvider)) ?? CustomProvider()
     normalizeRuntimeValues()
   }
 
@@ -539,6 +546,7 @@ struct Settings: Codable {
     try container.encode(anthropicMaxAttempts, forKey: .anthropicMaxAttempts)
     try container.encode(anthropicMinSimilarity, forKey: .anthropicMinSimilarity)
     try container.encodeIfPresent(anthropicExtraInstruction, forKey: .anthropicExtraInstruction)
+    try container.encode(customProvider, forKey: .customProvider)
   }
 
   mutating func normalizeRuntimeValues() {
@@ -600,6 +608,7 @@ struct Settings: Codable {
     openAIExtraInstruction = Self.nilIfEmpty(openAIExtraInstruction)
     anthropicExtraInstruction = Self.nilIfEmpty(anthropicExtraInstruction)
 
+    customProvider.normalize()
     protectedTerms = Self.normalizedTerms(protectedTerms)
     styleHotKeys = styleHotKeys.filter { PolishStyle(rawValue: $0.key) != nil }
     normalizeCustomStyle()
@@ -714,6 +723,7 @@ struct Settings: Codable {
     case anthropicMaxAttempts
     case anthropicMinSimilarity
     case anthropicExtraInstruction
+    case customProvider
   }
 
   func timingProfile(bundleIdentifier: String?, appName: String?) -> TimingProfile? {

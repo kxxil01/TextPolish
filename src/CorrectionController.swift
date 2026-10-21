@@ -554,6 +554,9 @@ extension CorrectionController {
       fallbackProvider = .anthropic
     case .anthropic:
       fallbackProvider = .openAI
+    case .custom:
+      // The Custom provider has no partner to fall back to.
+      return nil
     }
 
     let fallbackSettings = Settings(
@@ -610,6 +613,8 @@ extension CorrectionController {
       return settings.openAIModel
     case .anthropic:
       return settings.anthropicModel
+    case .custom:
+      return settings.customProvider.model
     }
   }
 

@@ -66,6 +66,9 @@ Hotkeys are configurable from the menu and settings window.
 - Anthropic
   - Default model: `claude-haiku-4-5`
   - Default base URL: `https://api.anthropic.com`
+- Custom: any service with an OpenAI-compatible API, such as Groq, DeepSeek, Mistral, Together, or a local Ollama or LM Studio
+  - Set the base URL (for example `https://api.groq.com/openai/v1` or `http://localhost:11434/v1`) and the model in Settings > Provider > Custom, or click Detect to pick one from the server's model list
+  - The API key is optional, since local servers often need none
 
 ## Setup
 

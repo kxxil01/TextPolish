@@ -20,12 +20,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var openRouterProviderButton: NSButton!
     var openAIProviderButton: NSButton!
     var anthropicProviderButton: NSButton!
+    var customProviderButton: NSButton!
     var fallbackCheckbox: NSButton!
 
     // Shared detail fields for the visible provider panel
     private var providerApiKeyField: NSTextField!
-    private var providerModelField: NSTextField!
-    private var providerBaseURLField: NSTextField!
+    var providerModelField: NSTextField!
+    var providerBaseURLField: NSTextField!
     private var detectModelButton: NSButton!
 
     // Per-provider backing fields (always created, tests read/write these)
@@ -148,6 +149,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         openRouterProviderButton = makeProviderTile("OpenRouter", tag: 1)
         openAIProviderButton = makeProviderTile("OpenAI", tag: 2)
         anthropicProviderButton = makeProviderTile("Anthropic", tag: 3)
+        customProviderButton = makeProviderTile("Custom", tag: 4)
 
         fallbackCheckbox = NSButton(
             checkboxWithTitle: "Auto-fallback to alternative provider",
@@ -295,7 +297,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         button.layer?.cornerRadius = 10
         button.setAccessibilityLabel(title)
 
-        let sfNames = ["sparkle", "arrow.left.arrow.right", "circle.dotted", "diamond"]
+        let sfNames = ["sparkle", "arrow.left.arrow.right", "circle.dotted", "diamond", "server.rack"]
         let sfName = sfNames[min(tag, sfNames.count - 1)]
         let symbolImage = NSImageView()
         if let img = NSImage(systemSymbolName: sfName, accessibilityDescription: title) {
@@ -458,11 +460,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let padding: CGFloat = 20
         let contentWidth = container.frame.width - padding * 2
         let tileGap: CGFloat = 8
-        let tileWidth = (contentWidth - tileGap * 3) / 4
+        let tiles = [
+            geminiProviderButton!, openRouterProviderButton!, openAIProviderButton!, anthropicProviderButton!, customProviderButton!,
+        ]
+        let tileWidth = (contentWidth - tileGap * CGFloat(tiles.count - 1)) / CGFloat(tiles.count)
         let tileHeight: CGFloat = 64
         let tileY = container.frame.height - tileHeight - 4
 
-        let tiles = [geminiProviderButton!, openRouterProviderButton!, openAIProviderButton!, anthropicProviderButton!]
         for (i, tile) in tiles.enumerated() {
             tile.frame = NSRect(x: padding + (tileWidth + tileGap) * CGFloat(i), y: tileY, width: tileWidth, height: tileHeight)
             tile.autoresizingMask = [.width, .minYMargin]
@@ -542,7 +546,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         providerApiKeyField?.stringValue = ""
         providerApiKeyField?.placeholderString = hasKeychainKey(account: account)
             ? "API key configured (leave blank to keep)"
-            : "Enter API key"
+            : provider == .custom ? "Optional, local servers often need none" : "Enter API key"
 
         switch provider {
         case .gemini:
@@ -565,10 +569,16 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             providerModelField?.placeholderString = "claude-haiku-4-5"
             providerBaseURLField?.stringValue = settings.anthropicBaseURL
             providerBaseURLField?.placeholderString = "https://api.anthropic.com"
+        case .custom:
+            providerModelField?.stringValue = settings.customProvider.model
+            providerModelField?.placeholderString = "Model name, or click Detect"
+            providerBaseURLField?.stringValue = settings.customProvider.baseURL
+            providerBaseURLField?.placeholderString = "Any OpenAI-compatible URL, e.g. http://localhost:11434/v1"
         }
 
         fallbackCheckbox?.state = settings.enableGeminiOpenRouterFallback ? .on : .off
         fallbackCheckbox?.title = fallbackTitle(for: provider)
+        fallbackCheckbox?.isEnabled = provider != .custom
         syncBackingFieldsFromSettings()
         loadAdvancedFields()
     }
@@ -581,6 +591,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: partner = .gemini
         case .openAI: partner = .anthropic
         case .anthropic: partner = .openAI
+        case .custom: return "Fallback is not available for the Custom provider"
         }
         let title = "If \(provider.displayName) fails, retry with \(partner.displayName)"
         if hasKeychainKey(account: apiKeyAccount(for: partner)) {
@@ -597,6 +608,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             (openRouterProviderButton, .openRouter),
             (openAIProviderButton, .openAI),
             (anthropicProviderButton, .anthropic),
+            (customProviderButton, .custom),
         ]
         for (button, buttonProvider) in providerButtons {
             guard let button else { continue }
@@ -876,6 +888,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             extraInstructionField.stringValue = settings.anthropicExtraInstruction ?? ""
             activeSimField.stringValue = String(format: "%.2f", settings.anthropicMinSimilarity)
             activeAttField.stringValue = String(settings.anthropicMaxAttempts)
+        case .custom:
+            extraInstructionField.stringValue = settings.customProvider.extraInstruction ?? ""
+            activeSimField.stringValue = String(format: "%.2f", settings.customProvider.minSimilarity)
+            activeAttField.stringValue = String(settings.customProvider.maxAttempts)
         }
     }
 
@@ -999,6 +1015,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: return "openRouterApiKey"
         case .openAI: return "openAIApiKey"
         case .anthropic: return "anthropicApiKey"
+        case .custom: return OpenAICompatibleEndpoint.customKeychainAccount
         }
     }
 
@@ -1008,6 +1025,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: return "TextPolish \u{2014} OpenRouter API Key"
         case .openAI: return "TextPolish \u{2014} OpenAI API Key"
         case .anthropic: return "TextPolish \u{2014} Anthropic API Key"
+        case .custom: return "TextPolish - Custom API Key"
         }
     }
 
@@ -1200,6 +1218,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterApiKey = nil
         case .openAI: settings.openAIApiKey = nil
         case .anthropic: settings.anthropicApiKey = nil
+        case .custom: settings.customProvider.apiKey = nil
         }
         refreshProviderDetail()
     }
@@ -1210,6 +1229,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterModel = value
         case .openAI: settings.openAIModel = value
         case .anthropic: settings.anthropicModel = value
+        case .custom: settings.customProvider.model = value
         }
     }
 
@@ -1219,6 +1239,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterBaseURL = value
         case .openAI: settings.openAIBaseURL = value
         case .anthropic: settings.anthropicBaseURL = value
+        case .custom: settings.customProvider.baseURL = value
         }
     }
 
@@ -1229,6 +1250,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterExtraInstruction = stored
         case .openAI: settings.openAIExtraInstruction = stored
         case .anthropic: settings.anthropicExtraInstruction = stored
+        case .custom: settings.customProvider.extraInstruction = stored
         }
     }
 
@@ -1238,6 +1260,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterMinSimilarity = value
         case .openAI: settings.openAIMinSimilarity = value
         case .anthropic: settings.anthropicMinSimilarity = value
+        case .custom: settings.customProvider.minSimilarity = value
         }
     }
 
@@ -1247,6 +1270,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: settings.openRouterMaxAttempts = value
         case .openAI: settings.openAIMaxAttempts = value
         case .anthropic: settings.anthropicMaxAttempts = value
+        case .custom: settings.customProvider.maxAttempts = value
         }
     }
 
@@ -1256,6 +1280,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: return settings.openRouterMinSimilarity
         case .openAI: return settings.openAIMinSimilarity
         case .anthropic: return settings.anthropicMinSimilarity
+        case .custom: return settings.customProvider.minSimilarity
         }
     }
 
@@ -1265,13 +1290,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: return settings.openRouterMaxAttempts
         case .openAI: return settings.openAIMaxAttempts
         case .anthropic: return settings.anthropicMaxAttempts
+        case .custom: return settings.customProvider.maxAttempts
         }
     }
 
     // MARK: - Actions
 
     @objc func providerTileClicked(_ sender: NSButton) {
-        let providers: [Settings.Provider] = [.gemini, .openRouter, .openAI, .anthropic]
+        let providers: [Settings.Provider] = [.gemini, .openRouter, .openAI, .anthropic, .custom]
         guard sender.tag >= 0, sender.tag < providers.count else { return }
         commitPendingEdits()
         settings.provider = providers[sender.tag]
@@ -1286,6 +1312,19 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         openRouterProviderButton.state = provider == .openRouter ? .on : .off
         openAIProviderButton.state = provider == .openAI ? .on : .off
         anthropicProviderButton.state = provider == .anthropic ? .on : .off
+        customProviderButton.state = provider == .custom ? .on : .off
+    }
+
+    /// The provider whose tile is on, if any.
+    private func selectedProviderTile() -> Settings.Provider? {
+        let tiles: [(NSButton?, Settings.Provider)] = [
+            (geminiProviderButton, .gemini),
+            (openRouterProviderButton, .openRouter),
+            (openAIProviderButton, .openAI),
+            (anthropicProviderButton, .anthropic),
+            (customProviderButton, .custom),
+        ]
+        return tiles.first { $0.0?.state == .on }?.1
     }
 
     @objc func fallbackChanged(_ sender: NSButton) {
@@ -1338,6 +1377,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .openRouter: detectOpenRouterModel(sender)
         case .openAI: detectOpenAIModel(sender)
         case .anthropic: detectAnthropicModel(sender)
+        case .custom: detectCustomModel(sender)
         }
     }
 
@@ -1360,14 +1400,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         guard var newSettings = settings else { return false }
 
         // Provider
-        if geminiProviderButton.state == .on {
-            newSettings.provider = .gemini
-        } else if openRouterProviderButton.state == .on {
-            newSettings.provider = .openRouter
-        } else if openAIProviderButton.state == .on {
-            newSettings.provider = .openAI
-        } else if anthropicProviderButton.state == .on {
-            newSettings.provider = .anthropic
+        if let provider = selectedProviderTile() {
+            newSettings.provider = provider
         }
         newSettings.enableGeminiOpenRouterFallback = fallbackCheckbox.state == .on
         let previousActiveMinSimilarity = minSimilarity(in: settings, provider: newSettings.provider)
@@ -1484,6 +1518,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             newSettings.anthropicExtraInstruction = extraValue
             if let activeMinSimilarity { newSettings.anthropicMinSimilarity = activeMinSimilarity }
             if let activeMaxAttempts { newSettings.anthropicMaxAttempts = activeMaxAttempts }
+        case .custom:
+            newSettings.customProvider.extraInstruction = extraValue
+            if let activeMinSimilarity { newSettings.customProvider.minSimilarity = activeMinSimilarity }
+            if let activeMaxAttempts { newSettings.customProvider.maxAttempts = activeMaxAttempts }
         }
 
         newSettings.normalizeRuntimeValues()
@@ -1629,12 +1667,27 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         )
     }
 
+    /// The Custom provider lists its models at the same `/models` path as OpenAI, often without a key.
+    @objc func detectCustomModel(_: NSButton) {
+        detectModel(
+            provider: .custom,
+            account: OpenAICompatibleEndpoint.customKeychainAccount,
+            backingKeyField: providerApiKeyField,
+            backingButton: detectModelButton,
+            fallbackBaseURL: settings.customProvider.baseURL,
+            requiresKey: false,
+            detect: ModelDetector.detectCompatibleModel,
+            applyModel: { [weak self] model in self?.settings?.customProvider.model = model }
+        )
+    }
+
     private func detectModel(
         provider: Settings.Provider,
         account: String,
         backingKeyField: NSTextField,
         backingButton: NSButton,
         fallbackBaseURL: String,
+        requiresKey: Bool = true,
         detect: @escaping (String, String) async throws -> String,
         applyModel: @escaping (String) -> Void
     ) {
@@ -1642,7 +1695,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         if typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             typedKey = backingKeyField.stringValue
         }
-        guard !typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasKeychainKey(account: account) else {
+        guard !requiresKey || !typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || hasKeychainKey(account: account)
+        else {
             showErrorAlertIfNeeded(
                 title: "API key needed",
                 message: "Enter an API key for \(provider.displayName) before detecting a model."
@@ -1663,7 +1718,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 apiKey = await self.keychainKey(account: account) ?? ""
             }
-            guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            guard !requiresKey || !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 backingButton.title = "Detect Model"
                 backingButton.isEnabled = true
                 self.detectModelButton.title = "Detect"
