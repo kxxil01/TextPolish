@@ -296,23 +296,25 @@ final class CorrectionController {
           self.recordSuccess(state, note: "No changes")
           return
         }
-        guard try await self.confirmInPreviewIfNeeded(original: input.text, polished: corrected, state: state) else {
+        guard let chosen = try await self.confirmInPreviewIfNeeded(
+          original: input.text, polished: corrected, style: style, state: state
+        ) else {
           return
         }
 
         let newlinesIn = input.text.filter(\.isNewline).count
-        let newlinesOut = corrected.filter(\.isNewline).count
-        TPLogger.log("Polish output: chars=\(corrected.count) newlines=\(newlinesIn)->\(newlinesOut), pasting")
+        let newlinesOut = chosen.text.filter(\.isNewline).count
+        TPLogger.log("Polish output: chars=\(chosen.text.count) newlines=\(newlinesIn)->\(newlinesOut), pasting")
         try Task.checkCancellation()
-        try await self.paste(corrected, into: target.pid, timings: timings, deadline: state.deadline) {
+        try await self.paste(chosen.text, into: target.pid, timings: timings, deadline: state.deadline) {
           ownedClipboardChangeCount = $0
         }
         didPaste = true
         try await self.sleepRespectingDeadline(timings.postPasteDelay, until: state.deadline)
-        self.showSuccess(for: style)
+        self.showSuccess(for: chosen.style)
         self.recordSuccess(state)
         self.onSuccess?()
-        self.onPolished?(PolishRecord(original: input.text, polished: corrected, processID: target.pid, style: style))
+        self.onPolished?(PolishRecord(original: input.text, polished: chosen.text, processID: target.pid, style: chosen.style))
       } catch is CancellationError {
         self.finishCanceled(didPaste: didPaste, style: style, state: state)
       } catch {
@@ -724,23 +726,49 @@ extension CorrectionController {
     }
   }
 
-  /// With Preview on, waits for Paste or Cancel. Returns false when the user canceled.
-  private func confirmInPreviewIfNeeded(original: String, polished: String, state: PolishRunState) async throws -> Bool {
-    guard settings.previewBeforePaste, let reviewer else { return true }
-    TPLogger.log("Polish preview: waiting for Paste or Cancel")
-    let reviewStartedAt = Date()
-    let approved = await reviewer.review(original: original, polished: polished)
-    // Diagnostics latency measures Polish, not how long the user read the preview.
-    state.startedAt += Date().timeIntervalSince(reviewStartedAt)
-    try Task.checkCancellation()
-    guard approved else {
-      feedback.showInfo("Canceled")
-      recordNote(state, message: "Canceled in preview")
-      return false
+  /// With Preview on, waits for Paste or Cancel, polishing the original again when the user asks.
+  /// Returns the text and style to paste, or nil when the user canceled.
+  private func confirmInPreviewIfNeeded(
+    original: String,
+    polished: String,
+    style: CorrectionStyle,
+    state: PolishRunState
+  ) async throws -> (text: String, style: CorrectionStyle)? {
+    guard settings.previewBeforePaste, let reviewer else { return (polished, style) }
+    defer { reviewer.dismiss() }
+    var current = (text: polished, style: style)
+    while true {
+      TPLogger.log("Polish preview: waiting for Paste or Cancel")
+      let reviewStartedAt = Date()
+      let decision = await reviewer.review(
+        original: original, polished: current.text, style: current.style, choices: previewStyleChoices(for: current.style)
+      )
+      // Diagnostics latency measures Polish, not how long the user read the preview.
+      state.startedAt += Date().timeIntervalSince(reviewStartedAt)
+      try Task.checkCancellation()
+      // Time spent reading the preview does not count against the operation timeout.
+      state.deadline = ContinuousClock.now + operationTimeout
+      switch decision {
+      case .paste:
+        return current
+      case .cancel:
+        feedback.showInfo("Canceled")
+        recordNote(state, message: "Canceled in preview")
+        return nil
+      case .retry(let newStyle):
+        TPLogger.log("Polish preview: trying again style=\(newStyle)")
+        let text = try await correctWithRecovery(original, style: newStyle, corrector: state.usedCorrector, state: state)
+        current = (text, newStyle)
+      }
     }
-    // Time spent reading the preview does not count against the operation timeout.
-    state.deadline = ContinuousClock.now + operationTimeout
-    return true
+  }
+
+  /// Styles the preview offers for another try; a translation stays a translation.
+  private func previewStyleChoices(for style: CorrectionStyle) -> [PolishStyleChoice] {
+    guard style != .translateToEnglish else { return [] }
+    return settings.availablePolishStyles.map {
+      PolishStyleChoice(name: settings.displayName(for: $0), style: settings.correctionStyle(for: $0))
+    }
   }
 
   /// Puts the result on the clipboard, returns to the target app, and sends ⌘V.

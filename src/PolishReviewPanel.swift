@@ -1,60 +1,138 @@
 import AppKit
 
+/// What the user chose in the preview.
+enum PolishReviewDecision: Equatable, Sendable {
+  case paste
+  case cancel
+  /// Polish the original again in this style.
+  case retry(CorrectionStyle)
+}
+
+/// A style the preview offers for another try.
+struct PolishStyleChoice: Equatable, Sendable {
+  let name: String
+  let style: CorrectionStyle
+}
+
 /// Asks the user to confirm a Polish result before it replaces their text.
 @MainActor
 protocol PolishReviewing: AnyObject {
-  /// Shows what changed and returns true when the user chooses to paste it.
-  func review(original: String, polished: String) async -> Bool
+  /// Shows the result and waits for Paste, Cancel, or another try. Empty `choices` hides the style picker.
+  func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
+    -> PolishReviewDecision
+  /// Closes the panel without a choice, for example when another try fails.
+  func dismiss()
 }
 
-/// A small panel with the changes highlighted: Return pastes, Escape or closing cancels.
+/// A small panel with the changes highlighted: Return pastes, Escape or closing cancels, and Try Again or
+/// another style polishes the original again while the panel stays up.
 /// It takes keyboard input without activating TextPolish, so the app being polished stays in front.
 @MainActor
 final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
   private var panel: NSPanel?
-  private var continuation: CheckedContinuation<Bool, Never>?
+  private var continuation: CheckedContinuation<PolishReviewDecision, Never>?
+  private var currentStyle: CorrectionStyle = .clarify
+  private var choices: [PolishStyleChoice] = []
+  private var textView: NSTextView?
+  private var stylePopup: NSPopUpButton?
+  private var actionButtons: [NSButton] = []
+  /// Cancel was pressed while another try ran; the next review returns Cancel without showing anything.
+  private var canceledWhileWorking = false
 
-  func review(original: String, polished: String) async -> Bool {
-    finish(approved: false)
+  func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
+    -> PolishReviewDecision
+  {
+    resolve(.cancel)
+    if canceledWhileWorking {
+      dismiss()
+      return .cancel
+    }
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         self.continuation = continuation
-        self.show(changes: WordDiff.changes(from: original, to: polished))
+        self.currentStyle = style
+        self.choices = choices
+        self.show(original: original, polished: polished)
       }
     } onCancel: {
-      Task { @MainActor in self.finish(approved: false) }
+      Task { @MainActor in
+        self.resolve(.cancel)
+        self.dismiss()
+      }
     }
+  }
+
+  func dismiss() {
+    canceledWhileWorking = false
+    close()
   }
 
   func windowWillClose(_: Notification) {
-    finish(approved: false)
+    cancel()
   }
 
   @objc private func paste() {
-    finish(approved: true)
+    resolve(.paste)
+    close()
   }
 
   @objc private func cancel() {
-    finish(approved: false)
+    if continuation == nil, panel != nil {
+      canceledWhileWorking = true
+    }
+    resolve(.cancel)
+    close()
   }
 
-  private func finish(approved: Bool) {
-    if let panel {
-      panel.delegate = nil
-      panel.orderOut(nil)
-      self.panel = nil
-    }
+  @objc private func tryAgain() {
+    retry(currentStyle)
+  }
+
+  @objc private func styleChosen(_ sender: NSPopUpButton) {
+    guard choices.indices.contains(sender.indexOfSelectedItem) else { return }
+    retry(choices[sender.indexOfSelectedItem].style)
+  }
+
+  /// Keeps the panel up, showing progress, while the controller polishes again.
+  private func retry(_ style: CorrectionStyle) {
+    guard continuation != nil else { return }
+    let name = choices.first { $0.style == style }?.name
+    let message = name.map { "Polishing as \($0)\u{2026}" } ?? "Trying again\u{2026}"
+    textView?.textStorage?.setAttributedString(NSAttributedString(
+      string: message,
+      attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.secondaryLabelColor]
+    ))
+    stylePopup?.isEnabled = false
+    actionButtons.forEach { $0.isEnabled = false }
+    resolve(.retry(style))
+  }
+
+  private func resolve(_ decision: PolishReviewDecision) {
     guard let continuation else { return }
     self.continuation = nil
-    continuation.resume(returning: approved)
+    continuation.resume(returning: decision)
   }
 
-  private func show(changes: [WordDiff.Change]) {
-    let width: CGFloat = 520
+  private func close() {
+    guard let panel else { return }
+    panel.delegate = nil
+    panel.orderOut(nil)
+    self.panel = nil
+    textView = nil
+    stylePopup = nil
+    actionButtons = []
+  }
+
+  private func show(original: String, polished: String) {
+    let width: CGFloat = 600
     let padding: CGFloat = 16
     let buttonHeight: CGFloat = 32
     let font = NSFont.systemFont(ofSize: 14)
-    let text = WordDiff.attributedString(from: changes, font: font)
+    let isTranslation = currentStyle == .translateToEnglish
+    // Every word of a translation changes, so a diff would only be noise.
+    let text = isTranslation
+      ? NSAttributedString(string: polished, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
+      : WordDiff.attributedString(from: WordDiff.changes(from: original, to: polished), font: font)
 
     let textWidth = width - padding * 2
     let measured = text.boundingRect(
@@ -64,13 +142,17 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     let textHeight = min(max(ceil(measured.height) + 16, 60), 320)
     let height = padding + textHeight + 12 + buttonHeight + padding
 
+    // Another try replaces the panel in the same spot.
+    let previousTopLeft = panel.map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) }
+    close()
+
     let panel = NSPanel(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.titled, .closable, .nonactivatingPanel],
       backing: .buffered,
       defer: false
     )
-    panel.title = "Review Polish"
+    panel.title = isTranslation ? "Review Translation" : "Review Polish"
     panel.isReleasedWhenClosed = false
     panel.level = .floating
     // Panels hide when their app is inactive by default; TextPolish never becomes active here.
@@ -88,13 +170,50 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     textView.textContainerInset = NSSize(width: 4, height: 6)
     textView.autoresizingMask = [.width]
     textView.textStorage?.setAttributedString(text)
-    textView.setAccessibilityLabel("Changes made by Polish")
+    textView.setAccessibilityLabel(isTranslation ? "Translation" : "Changes made by Polish")
     scrollView.documentView = textView
     content.addSubview(scrollView)
+    self.textView = textView
+
+    addButtons(to: content, width: width, padding: padding, buttonHeight: buttonHeight)
+
+    panel.contentView = content
+    if let previousTopLeft {
+      panel.setFrameTopLeftPoint(previousTopLeft)
+    } else {
+      panel.center()
+    }
+    self.panel = panel
+    panel.makeKeyAndOrderFront(nil)
+  }
+
+  /// Style picker and Try Again on the left; Cancel and Paste on the right.
+  private func addButtons(to content: NSView, width: CGFloat, padding: CGFloat, buttonHeight: CGFloat) {
+    var x = padding
+    if !choices.isEmpty {
+      let popup = NSPopUpButton(frame: NSRect(x: x, y: padding + 2, width: 150, height: 28), pullsDown: false)
+      popup.addItems(withTitles: choices.map(\.name))
+      if let index = choices.firstIndex(where: { $0.style == currentStyle }) {
+        popup.selectItem(at: index)
+      }
+      popup.target = self
+      popup.action = #selector(styleChosen(_:))
+      popup.toolTip = "Polish again in another style"
+      popup.setAccessibilityLabel("Style")
+      content.addSubview(popup)
+      stylePopup = popup
+      x += 150 + 8
+    }
+
+    let tryAgainButton = NSButton(title: "Try Again", target: self, action: #selector(tryAgain))
+    tryAgainButton.frame = NSRect(x: x, y: padding, width: 100, height: buttonHeight)
+    tryAgainButton.toolTip = "Ask for another version"
+    content.addSubview(tryAgainButton)
 
     let pasteButton = NSButton(title: "Paste", target: self, action: #selector(paste))
     pasteButton.keyEquivalent = "\r"
     pasteButton.frame = NSRect(x: width - padding - 96, y: padding, width: 96, height: buttonHeight)
+    pasteButton.toolTip = "Return pastes, Escape cancels"
     content.addSubview(pasteButton)
 
     let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel))
@@ -102,16 +221,7 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     cancelButton.frame = NSRect(x: width - padding - 96 - 8 - 96, y: padding, width: 96, height: buttonHeight)
     content.addSubview(cancelButton)
 
-    let hint = NSTextField(labelWithString: "Return pastes, Escape cancels")
-    hint.font = .systemFont(ofSize: 11)
-    hint.textColor = .secondaryLabelColor
-    hint.frame = NSRect(x: padding, y: padding + 8, width: 220, height: 16)
-    content.addSubview(hint)
-
-    panel.contentView = content
-    panel.center()
-    self.panel = panel
-    panel.makeKeyAndOrderFront(nil)
+    actionButtons = [tryAgainButton, pasteButton]
   }
 
   #if DEBUG
@@ -125,8 +235,34 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
       return panel.styleMask.contains(.nonactivatingPanel) && !panel.hidesOnDeactivate && panel.level == .floating
     }
 
+    var debugTitle: String? {
+      panel?.title
+    }
+
+    var debugText: String? {
+      textView?.string
+    }
+
+    var debugStyleNames: [String]? {
+      stylePopup?.itemTitles
+    }
+
     func debugChoose(paste approved: Bool) {
-      finish(approved: approved)
+      if approved {
+        paste()
+      } else {
+        cancel()
+      }
+    }
+
+    func debugTryAgain() {
+      tryAgain()
+    }
+
+    func debugChooseStyle(named name: String) {
+      guard let stylePopup else { return }
+      stylePopup.selectItem(withTitle: name)
+      styleChosen(stylePopup)
     }
   #endif
 }
