@@ -26,6 +26,10 @@ final class OpenAIModelSelectionTests: XCTestCase {
     XCTAssertEqual(ModelDetector.preferredOpenAIModel(from: realisticIDs), "gpt-5-nano")
   }
 
+  func testPrefersGPT41MiniWhenAvailable() {
+    XCTAssertEqual(ModelDetector.preferredOpenAIModel(from: realisticIDs + ["gpt-4.1-mini"]), "gpt-4.1-mini")
+  }
+
   func testFallsBackThroughPreferredChatModels() {
     let withoutNano = realisticIDs.filter { !$0.hasPrefix("gpt-5-nano") }
     XCTAssertEqual(ModelDetector.preferredOpenAIModel(from: withoutNano), "gpt-5-mini")

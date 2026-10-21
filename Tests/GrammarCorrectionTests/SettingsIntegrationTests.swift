@@ -313,7 +313,7 @@ extension SettingsIntegrationTests {
         let settings = Settings()
 
         // Then
-        XCTAssertEqual(settings.openAIModel, "gpt-5-nano", "Default OpenAI model should be gpt-5-nano")
+        XCTAssertEqual(settings.openAIModel, "gpt-4.1-mini", "Default OpenAI model should be gpt-4.1-mini")
     }
 
     func testAnthropicDefaultModel() {

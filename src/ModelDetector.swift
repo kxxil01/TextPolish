@@ -184,8 +184,9 @@ enum ModelDetector {
         }
     }
 
-    /// Fast, low-cost chat models that suit short corrections, most preferred first.
-    private static let openAIPreferredModels = ["gpt-5-nano", "gpt-5-mini", "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4o-mini"]
+    /// Fast, low-cost chat models that suit short corrections, most preferred first. gpt-4.1-mini leads:
+    /// with no reasoning step it reworded Natural text well in about 2 seconds, where gpt-5-nano took 5-7.
+    private static let openAIPreferredModels = ["gpt-4.1-mini", "gpt-5-nano", "gpt-5-mini", "gpt-4.1-nano", "gpt-4o-mini"]
 
     /// Picks a chat model for corrections. OpenAI-compatible servers with their own model names
     /// get their first model; OpenAI lists that hold no chat model get nil instead of a model that fails.
