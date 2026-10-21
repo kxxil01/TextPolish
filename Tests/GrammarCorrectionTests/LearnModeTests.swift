@@ -62,6 +62,45 @@ final class LearnModeTests: XCTestCase {
     XCTAssertFalse(panel.debugIsShowing)
   }
 
+  func testPanelStaysLongerForMoreChangesUpToALimit() {
+    XCTAssertEqual(LearnPanel.readingTime(lineCount: 1), .seconds(9))
+    XCTAssertEqual(LearnPanel.readingTime(lineCount: 4), .seconds(18))
+    XCTAssertEqual(LearnPanel.readingTime(lineCount: 5), .seconds(20))
+  }
+
+  @MainActor
+  func testPanelClosesByItself() async {
+    _ = NSApplication.shared
+    let panel = LearnPanel(visibleDuration: .milliseconds(50))
+
+    panel.show(lines: ["a → b: why"])
+    await waitUntil { !panel.debugIsShowing }
+
+    XCTAssertFalse(panel.debugIsShowing)
+  }
+
+  @MainActor
+  func testHoveringKeepsThePanelUpThenLeavingClosesIt() async throws {
+    _ = NSApplication.shared
+    let panel = LearnPanel(visibleDuration: .milliseconds(50), afterHoverDelay: .milliseconds(50))
+
+    panel.show(lines: ["a → b: why"])
+    panel.debugSimulateHover(inside: true)
+    try await Task.sleep(for: .milliseconds(200))
+    XCTAssertTrue(panel.debugIsShowing, "Reading with the pointer on the panel keeps it open")
+
+    panel.debugSimulateHover(inside: false)
+    await waitUntil { !panel.debugIsShowing }
+    XCTAssertFalse(panel.debugIsShowing)
+  }
+
+  @MainActor
+  private func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<200 where !condition() {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+  }
+
   func testSettingsRoundTripLearnMode() throws {
     var settings = Settings()
     settings.learnMode = true
