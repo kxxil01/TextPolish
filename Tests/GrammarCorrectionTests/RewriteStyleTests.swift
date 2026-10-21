@@ -23,7 +23,7 @@ extension CorrectorRetryAndPlaceholderTests {
     XCTAssertFalse(systems.last?.contains("Do not rewrite, rephrase") ?? true)
   }
 
-  func testClarifyRetriesWhenOutputDriftsFromMeaning() async throws {
+  func testClarifyRetriesWhenOutputChangesTooMuch() async throws {
     let input = "can you inform me if there is something wrong"
     var systems: [String] = []
     MockURLProtocol.handler = { request in
@@ -39,7 +39,28 @@ extension CorrectorRetryAndPlaceholderTests {
 
     XCTAssertEqual(result, input)
     XCTAssertEqual(systems.count, 2)
-    XCTAssertTrue(systems[1].contains("drifted from its meaning"))
+    XCTAssertTrue(systems[1].contains("changed the text too much"))
+    XCTAssertFalse(systems[1].contains("paragraph layout"))
+  }
+
+  func testClarifyRetryNamesTheLayoutWhenABlankLineIsDropped() async throws {
+    let input = "Hi team,\n\nI've updated the report.\nThe numbers now match."
+    let droppedBlankLine = "Hi team, I've updated the report. The numbers now match."
+    let joined = "Hi team,\n\nI've updated the report. The numbers now match."
+    var systems: [String] = []
+    MockURLProtocol.handler = { request in
+      systems.append(try Self.systemPrompt(from: request))
+      let content = systems.count == 1 ? droppedBlankLine : joined
+      return Self.httpResponse(for: request, statusCode: 200, body: Self.openAIBody(content))
+    }
+    let corrector = try OpenAICorrector(settings: Self.openAISettings(maxAttempts: 2), session: Self.makeMockSession())
+
+    let result = try await corrector.correct(input, style: .clarify)
+
+    XCTAssertEqual(result, joined)
+    XCTAssertEqual(systems.count, 2)
+    XCTAssertTrue(systems[1].contains("changed the paragraph layout"))
+    XCTAssertFalse(systems[1].contains("changed the text too much"))
   }
 
   func testClarifyRequestAsksForLowReasoningOnGPT5Nano() async throws {

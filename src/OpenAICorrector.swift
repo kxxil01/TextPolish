@@ -142,16 +142,18 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       }
 
       let restored = restore(cleaned, placeholders: protected.placeholders)
-      if isAcceptable(original: text, candidate: restored, style: style) {
-        return restored
-      }
-      retryReason = .overRewrite
-      let summary = rejectionSummary(
+      let minimum = style.minimumSimilarity(configured: minSimilarity)
+      guard let rejection = rejectionReason(
         original: text,
         candidate: restored,
-        minimumSimilarity: style.minimumSimilarity(configured: minSimilarity)
-      )
-      TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: overRewrite, \(summary)")
+        style: style,
+        minimumSimilarity: minimum
+      ) else {
+        return restored
+      }
+      retryReason = rejection
+      let summary = rejectionSummary(original: text, candidate: restored, minimumSimilarity: minimum)
+      TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
     throw OpenAIError.overRewrite
@@ -335,13 +337,6 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
 
     return nil
-  }
-
-  private func isAcceptable(original: String, candidate: String, style: CorrectionStyle) -> Bool {
-    guard candidate != original else { return true }
-    guard keepsLineStructure(original: original, candidate: candidate, style: style) else { return false }
-    let minimum = style.minimumSimilarity(configured: minSimilarity)
-    return isSimilarEnough(original: original, candidate: candidate, minimum: minimum)
   }
 }
 

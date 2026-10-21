@@ -218,6 +218,23 @@ extension TextProcessor {
     }
   }
 
+  /// Which acceptance check `candidate` fails, or nil when it can be used.
+  func rejectionReason(
+    original: String,
+    candidate: String,
+    style: CorrectionStyle,
+    minimumSimilarity: Double
+  ) -> CorrectionRetryReason? {
+    guard candidate != original else { return nil }
+    guard keepsLineStructure(original: original, candidate: candidate, style: style) else {
+      return .lineStructureChanged
+    }
+    guard isSimilarEnough(original: original, candidate: candidate, minimum: minimumSimilarity) else {
+      return .overRewrite
+    }
+    return nil
+  }
+
   /// Why a candidate failed the acceptance checks, for the system log. Counts and scores only, never the text.
   func rejectionSummary(original: String, candidate: String, minimumSimilarity: Double) -> String {
     let lines = "lines \(newlineCount(in: original))->\(newlineCount(in: candidate))"
