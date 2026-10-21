@@ -1,4 +1,4 @@
-# TextPolish — Developer & Agent Guide
+# TextPolish: Developer & Agent Guide
 
 Technical documentation for contributors and AI coding agents.
 
@@ -6,107 +6,38 @@ Technical documentation for contributors and AI coding agents.
 
 ## Project Overview
 
-**TextPolish** is a macOS menu bar app that provides AI-powered text enhancement in any application using global keyboard shortcuts. It offers two main features:
+**TextPolish** is a macOS menu bar app that improves text in any application with a global shortcut. It sends the text to the user's AI provider (OpenAI, Gemini, Anthropic, or OpenRouter, with their own API key) and pastes the result back.
 
-1. **Grammar Correction** - Fixes grammar and typos by copying selected text, sending it to an AI provider, pasting the result, and restoring the original clipboard
-2. **Tone Analysis** - Analyzes the tone and sentiment of selected text, providing feedback on emotional impact and suggestions
+1. **Polish** (`⌃⌥⌘G`): polishes the selection, or the whole field when nothing is selected, in one of five styles: Natural (default), Minimal, Shorter, Formal, Friendly.
+2. **Analyze Tone** (`⌃⌥⌘T`): explains how the selected text comes across, in a result window.
 
-The app tracks daily usage for both features and displays the combined count in the status bar badge.
+Optional extras: a style per app, a shortcut per style, Never Change words, Preview before paste, and Learn mode with Recent Lessons.
 
 ### Core Principles
 
-1. **Fast & minimal** — No heavy UI, instant hotkeys, small footprint
-2. **Clipboard safe** — Always snapshot and restore user's clipboard
-3. **Minimal edits** — Fix errors only, preserve voice and formatting
-4. **Fail gracefully** — Show clear errors, never lose user data
+1. **Fast & minimal**: no Dock icon, instant hotkeys, small footprint
+2. **Clipboard safe**: snapshot and restore the user's clipboard
+3. **Keep the writer's meaning and voice**: styles change wording, never facts or requests
+4. **Fail gracefully**: clear errors, never lose user data, never freeze the UI
+5. **Private**: text goes only to the configured provider; logs never contain the user's text or keys
 
 ---
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User triggers                        │
-│                    hotkey (⌃⌥⌘G / ⌃⌥⌘⇧G)                    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     HotKeyManager                           │
-│              (Carbon global hotkey registration)            │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   CorrectionController                      │
-│         (orchestrates copy → correct → paste flow)          │
-│                                                             │
-│  1. Snapshot clipboard (PasteboardController)               │
-│  2. Send ⌘C via KeyboardController                          │
-│  3. Wait for clipboard change                               │
-│  4. Call GrammarCorrector.correct(text)                     │
-│  5. Set corrected text to clipboard                         │
-│  6. Send ⌘V via KeyboardController                          │
-│  7. Restore original clipboard                              │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              GeminiCorrector / OpenRouterCorrector          │
-│                    (AI provider API calls)                  │
-└─────────────────────────────────────────────────────────────┘
-```
+### Polish flow (`CorrectionController`)
 
-### Tone Analysis Flow
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User triggers                        │
-│                          hotkey (TBD)                       │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     HotKeyManager                           │
-│              (Carbon global hotkey registration)            │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                ToneAnalysisController                       │
-│         (orchestrates copy → analyze → show result)         │
-│                                                             │
-│  1. Snapshot clipboard (PasteboardController)               │
-│  2. Send ⌘C via KeyboardController                          │
-│  3. Wait for clipboard change                               │
-│  4. Call ToneAnalyzer.analyze(text)                         │
-│  5. Display result in window                                │
-│  6. Restore original clipboard                              │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     ToneAnalyzerFactory                     │
-│              (creates analyzer based on provider)           │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              GeminiCorrector / OpenRouterCorrector          │
-│                    (AI provider API calls)                  │
-└─────────────────────────────────────────────────────────────┘
-```
+1. Hotkey or menu action resolves the style: style shortcut, else the app's chosen style, else the built-in default for terminals and code editors (Minimal), else the default style (`Settings.polishStyle(forApp:)`).
+2. Snapshot the clipboard; `SelectionProbe` (Accessibility) decides selection versus whole field (⌘A).
+3. Copy with ⌘C and wait for the clipboard to change (sentinel value).
+4. `GrammarCorrector.correct(_:style:)`: protect code, links, Discord tokens and Never Change terms as placeholders, build the prompt (`CorrectionPromptBuilder`), call the provider, validate, retry with the specific failed check, restore placeholders.
+5. If Preview is on, `PolishReviewPanel` shows the diff (`WordDiff`) and waits for Paste or Cancel.
+6. Paste with ⌘V (re-activating the target app if needed), restore the clipboard, show feedback.
+7. If Learn is on, ask the provider to explain the main changes (`ChangeExplaining`), show `LearnPanel`, save to `LessonHistory`.
 
-### Usage Tracking
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      AppDelegate                            │
-│                                                             │
-│  • Grammar correction counter (daily)                       │
-│  • Tone analysis counter (daily)                            │
-│  • Combined badge on status bar                             │
-│  • Automatic reset at midnight                              │
-└─────────────────────────────────────────────────────────────┘
-```
+### Tone flow (`ToneAnalysisController`)
+
+Copy as above, then `ToneAnalyzer.analyze(_:)` (from `ToneAnalyzerFactory`, with provider fallback), then show `ToneAnalysisResultWindow` and restore the clipboard.
 
 ---
 
@@ -114,82 +45,68 @@ The app tracks daily usage for both features and displays the combined count in 
 
 ```
 src/
-├── GrammarCorrectionMain.swift   # Entry point
-├── AppDelegate.swift             # Menu bar UI, settings, Sparkle updates, usage tracking
-├── CorrectionController.swift    # Copy→correct→paste orchestration
-├── ToneAnalysisController.swift  # Tone analysis orchestration
-├── ToneAnalyzer.swift           # Protocol for tone analyzers
-├── ToneAnalyzerFactory.swift    # Tone analyzer factory
-├── ToneAnalysisResultWindow.swift # Results window UI
-├── ToneAnalysisResultPresenter.swift # Result presentation logic
-├── HotKeyManager.swift           # Carbon global hotkey registration
-├── KeyboardController.swift      # CGEvent keyboard simulation (⌘A/⌘C/⌘V)
-├── PasteboardController.swift    # Clipboard snapshot/restore/wait
-├── GrammarCorrector.swift        # Protocol for correction providers
-├── GeminiCorrector.swift         # Google Gemini API implementation
-├── OpenRouterCorrector.swift     # OpenRouter API implementation
-├── CorrectorFactory.swift        # Provider selection factory
-├── Settings.swift                # JSON settings persistence
-├── Keychain.swift                # macOS Keychain wrapper
-├── FeedbackPresenter.swift       # Status item visual feedback
-├── UpdateStatus.swift            # Update state enum
-├── UpdateCheckFeedback.swift     # Sparkle update feedback
-├── FallbackController.swift     # Error fallback handling
-├── SettingsWindowController.swift # Settings window controller
-└── SettingsWindowViewController.swift # Settings UI and logic
+├── GrammarCorrectionMain.swift, AppDelegate.swift, AppDelegateSupport.swift
+│                                   Entry point; menu, hotkey routing, settings, Sparkle, Learn and lessons wiring
+├── CorrectionController.swift      Polish orchestration (copy, correct, preview, paste, restore)
+├── SelectionProbe.swift            Accessibility check: selected text, nothing selected, or unknown
+├── KeyboardController.swift, PasteboardController.swift
+│                                   ⌘A/⌘C/⌘V events; clipboard snapshot, restore, wait
+├── HotKeyManager.swift             Carbon hotkeys: Polish, Analyze Tone, optional style shortcuts
+├── GrammarCorrector.swift          CorrectionStyle and the corrector protocol
+├── CorrectorFactory.swift          Builds the corrector for the selected provider
+├── OpenAICorrector.swift, GeminiCorrector.swift, AnthropicCorrector.swift, OpenRouterCorrector.swift
+├── OpenAITokenPolicy.swift, GeminiRequestPolicy.swift, AnthropicRequestPolicy.swift
+│                                   Per-model request parameters (reasoning, thinking, temperature, JSON mode)
+├── CorrectionPromptBuilder.swift   Prompt rules and examples per style; retry instructions per failed check
+├── TextProcessor.swift             Placeholders, cleanup, line-structure and similarity checks
+├── PromptGuardrails.swift          Input limits, refusal detection, output length
+├── ChangeExplanation.swift         Learn mode prompt and parser
+├── WordDiff.swift                  Word-level diff for the preview
+├── PolishReviewPanel.swift         Preview panel (non-activating)
+├── LearnPanel.swift, LessonHistory.swift, LessonsWindow.swift
+├── ToneAnalysisController.swift, ToneAnalyzer.swift, ToneAnalyzerFactory.swift, *ToneAnalyzer.swift
+├── Settings.swift                  JSON settings, defaults, normalization, per-app styles
+├── SettingsWindowController.swift, SettingsWindowViewController.swift, SettingsUIComponents.swift
+├── KeyComboField.swift, PastableSecureTextField.swift
+├── Keychain.swift, ProviderCredentials.swift
+│                                   Secrets: existence checks never read the secret; reads happen off the main thread
+├── ModelDetector.swift             Detect Model (prefers gpt-4.1-mini for OpenAI)
+├── Diagnostics.swift, DiagnosticsWindow.swift, RecentLogs.swift
+├── TPLogger.swift                  Public system log lines (subsystem com.kxxil01.TextPolish)
+├── FeedbackPresenter.swift, FallbackController.swift, UpdateStatus.swift, UpdateCheckFeedback.swift
+└── RetrySupport.swift, APIEndpointPaths.swift, PromptPair.swift, ControllerProtocols.swift, NotificationExtensions.swift
 
 scripts/
-├── build_app.sh                  # Build TextPolish.app bundle
-├── build_pkg.sh                  # Build .pkg installer
-├── sign_and_notarize.sh          # Code signing & notarization
-├── sparkle_generate_keys.sh      # Generate Sparkle EdDSA keys
-├── sparkle_generate_appcast.sh   # Generate appcast.xml
-└── cleanup_all.sh                # Clean build artifacts & user data
-
-Tests/GrammarCorrectionTests/
-├── CorrectionControllerTests.swift    # Grammar correction tests
-├── FallbackControllerTests.swift     # Fallback handling tests
-├── HotKeyManagerTests.swift         # Hotkey registration tests
-├── SettingsHotKeyTests.swift        # Settings and hotkey tests
-├── SettingsWindowControllerTests.swift # Settings window tests
-├── SettingsWindowViewControllerTests.swift # Settings UI tests
-├── SettingsIntegrationTests.swift   # Integration tests
-├── ModelDetectorTests.swift         # Model detection tests
-├── StatusItemFeedbackTests.swift    # Status item tests
-├── UpdateCheckFeedbackTests.swift   # Update feedback tests
-├── UpdateStatusTests.swift          # Update status tests
-├── ProviderWordingTests.swift       # Provider error message tests
-├── KeyComboFieldTests.swift         # Key combo field tests
-└── ...
+├── build_app.sh, build_pkg.sh      Build the app bundle and installer
+├── release.sh                      Publish a release once main CI passes (see Release Process)
+├── sign_and_notarize.sh, sparkle_generate_keys.sh, sparkle_generate_appcast.sh
+└── generate_app_icon.sh, cleanup_all.sh
 ```
 
 ---
 
 ## Build & Run
 
-### Quick start
-
 ```bash
-./scripts/build_app.sh
-open ./build/TextPolish.app
+./scripts/build_app.sh && open ./build/TextPolish.app   # app bundle
+swift build && swift run TextPolish                     # development
 ```
 
-### SwiftPM (development)
+A local build is signed differently from releases, so macOS asks again for keychain access to saved keys.
+
+---
+
+## Testing
 
 ```bash
-swift build
-swift run TextPolish
-
-# Release build
-swift build -c release
-swift run -c release TextPolish
+swift test                       # unit and UI-level tests
+swiftlint lint --strict          # CI fails on any warning
 ```
 
-### Run tests
-
-```bash
-swift test
-```
+- Providers are mocked with `URLProtocol` stubs; keyboard, clipboard and feedback have stubs in `CorrectionControllerTests`.
+- Wait on conditions or events, never on a sleep racing another sleep. Drive stubs by call order (see `StubPasteboard.externalChangeAfterReads`).
+- Tests never read real keychain secrets. Settings are isolated to a per-process temp folder.
+- `TPLogger` writes to stderr during tests, so test runs stay out of the app's system log.
 
 ### Live prompt checks
 
@@ -203,29 +120,30 @@ TEXTPOLISH_LIVE_CHECKS=1 OPENAI_API_KEY=sk-... swift test --filter LivePromptChe
 
 Model output varies between runs; each check prints its input and output so a failure can be read.
 
-### Build installer
-
-```bash
-./scripts/build_pkg.sh
-open ./build/TextPolish.pkg
-```
-
 ---
 
 ## Settings
 
-Settings file: `~/Library/Application Support/TextPolish/settings.json`
-
-### Key fields
+File: `~/Library/Application Support/TextPolish/settings.json` (lessons are saved next to it in `lessons.json`).
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `provider` | `"gemini"` | `"gemini"` or `"openRouter"` |
-| `geminiModel` | `"gemini-2.0-flash-lite-001"` | Gemini model name |
-| `openRouterModel` | `"meta-llama/llama-3.2-3b-instruct:free"` | OpenRouter model ID |
-| `correctionLanguage` | `"auto"` | `"auto"`, `"en-US"`, or `"id-ID"` |
-| `requestTimeoutSeconds` | `20` | API request timeout |
-| `fallbackToOpenRouterOnGeminiError` | `false` | Retry with OpenRouter on Gemini 429/5xx |
+| `provider` | `gemini` | `gemini`, `openRouter`, `openAI`, or `anthropic` |
+| `openAIModel` | `gpt-4.1-mini` | Fast, no reasoning step, rewords well |
+| `geminiModel` | `gemini-2.5-flash` | |
+| `anthropicModel` | `claude-haiku-4-5` | |
+| `openRouterModel` | `google/gemma-3n-e4b-it:free` | |
+| `polishStyle` | `natural` | `natural`, `minimal`, `shorter`, `formal`, `friendly` |
+| `appPolishStyles` | `{}` | Style per app, keyed by bundle ID |
+| `styleHotKeys` | `{}` | Optional shortcut per style, keyed by style |
+| `protectedTerms` | `[]` | Never Change words |
+| `previewBeforePaste` | `false` | Confirm before pasting |
+| `learnMode` | `false` | Explain the main changes after each Polish |
+| `correctionLanguage` | `auto` | `auto`, `en-US`, or `id-ID` |
+| `requestTimeoutSeconds` | `20` | 1 to 120 |
+| `fallbackToOpenRouterOnGeminiError` | `false` | Try the paired provider when the first fails (Gemini and OpenRouter, OpenAI and Anthropic) |
+
+Per-provider tuning: `<provider>MaxAttempts` (default 2), `<provider>MinSimilarity` (default 0.65), `<provider>ExtraInstruction`.
 
 ### Timing profiles
 
@@ -234,21 +152,14 @@ Per-app timing overrides (keys are bundle IDs or app names):
 ```json
 {
   "timingProfiles": {
-    "Discord": {
-      "copyTimeoutMilliseconds": 1200,
-      "pasteSettleDelayMilliseconds": 40
-    }
+    "Discord": { "copyTimeoutMilliseconds": 1200, "pasteSettleDelayMilliseconds": 40 }
   }
 }
 ```
 
 ### API keys
 
-Priority order for API key resolution:
-1. macOS Keychain (service: `com.kxxil01.TextPolish`)
-2. Legacy Keychain (service: `com.ilham.GrammarCorrection`)
-3. Settings file (`geminiApiKey` / `openRouterApiKey`)
-4. Environment variables (`GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`)
+Resolution order: macOS Keychain (service `com.kxxil01.TextPolish`, then legacy `com.ilham.GrammarCorrection`), the settings file, then environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`).
 
 ---
 
@@ -256,176 +167,58 @@ Priority order for API key resolution:
 
 ### Clipboard safety
 
-```swift
-let snapshot = pasteboard.snapshot()
-defer { pasteboard.restore(snapshot) }
-// ... correction logic ...
+The original clipboard is snapshotted before copying and restored afterwards, including on error, cancel, or a canceled preview. If another app writes to the clipboard during Polish, TextPolish neither pastes nor restores.
+
+### Validation and retries
+
+A candidate is rejected when it is a refusal, much longer than the input, drops a placeholder, changes line structure (Minimal keeps every line; other styles may join lines inside a paragraph but must keep blank lines and list items, and add no lines), or falls below the similarity floor (configured value for Minimal, at most 0.4 for Natural, 0.3 for Shorter, Formal and Friendly). The retry prompt names the check that failed. After `maxAttempts`, the paired provider may be tried if fallback is on.
+
+### Keychain and the main thread
+
+A keychain read can show a system prompt that blocks the calling thread until the user answers, and the prompt takes keyboard focus. So:
+- Existence checks use attribute-only queries (`Keychain.hasConfiguredPassword`, `ProviderCredentials.isConfigured`), which never prompt.
+- Secrets are read off the main thread (`Keychain.loadConfiguredPassword`, or inside a provider request). `Keychain.getConfiguredPassword` asserts it is not on the main thread.
+
+### Logging
+
+`TPLogger.log` writes public lines to the unified log (NSLog text is stored as `<private>`). Never log the user's text or a secret; log counts, styles, model names and outcomes. Read them with:
+
+```bash
+log show --last 10m --predicate 'subsystem == "com.kxxil01.TextPolish"'
 ```
 
-Always restore clipboard, even on error or cancellation.
-
-### Usage tracking
-
-The app tracks daily usage for both features:
-
-- **Grammar corrections**: Increment on successful text correction
-- **Tone analyses**: Increment on successful tone analysis
-- **Combined badge**: Status bar shows total (corrections + analyses)
-- **Daily reset**: Counters automatically reset at midnight
-- **Storage**: UserDefaults with date tracking
-
-```swift
-// Incremented on successful grammar correction
-incrementCorrectionCount()
-
-// Incremented on successful tone analysis
-incrementToneAnalysisCount()
-
-// Combined count displayed in status bar
-makeIconWithBadge(count: todayCorrectionCount + todayToneAnalysisCount)
-```
-
-### Copy detection
-
-Uses a sentinel value to detect when clipboard actually changes:
-
-```swift
-pasteboard.setString("GC_COPY_SENTINEL_...")
-keyboard.sendCommandC()
-// Wait for clipboard to change from sentinel
-```
-
-### Correction validation
-
-- Compares Levenshtein similarity between original and corrected text
-- Rejects if similarity < `minSimilarity` (default 0.65)
-- Retries up to `maxAttempts` if LLM over-rewrites
-
-### Protected content
-
-Regex-protects content that should not be modified:
-- Code blocks (``` ... ```)
-- Inline code (`...`)
-- URLs
-- Discord tokens (`<@id>`, `<#channel>`, `<:emoji:id>`)
-
-### Tone analysis
-
-The tone analysis feature provides feedback on text emotional impact:
-
-- **Analyzes**: Tone, sentiment, formality level
-- **Shows results**: In dedicated window with detailed breakdown
-- **Copies text**: Uses same clipboard safety pattern as correction
-- **No paste**: Results displayed in window, not pasted to app
-- **Counts usage**: Increments daily counter on successful analysis
-- **Same providers**: Uses Gemini/OpenRouter for AI analysis
+Users can send the same lines from Diagnostics > Copy Logs.
 
 ---
 
 ## Coding Conventions
 
-- **Swift concurrency**: Use `async/await`, mark UI code `@MainActor`
-- **Error handling**: Show user-friendly errors via `FeedbackPresenter`
-- **Dependencies**: Apple frameworks only (no external SwiftPM deps in main target)
-- **File size**: Keep files small and single-purpose
-- **Logging**: Use `TPLogger.log(...)`. Lines are public in the system log, so never log the user's text or a secret. Read them with `log show --last 10m --predicate 'subsystem == "com.kxxil01.TextPolish"'`
-- **Testing**: Suppress UI dialogs in test environment using `NSClassFromString("XCTestCase")`
-- **Test environment**: Use `#if DEBUG` guards for test-specific behavior
+- Swift 5.9 package, macOS 13+, AppKit with frame-based layout; UI on `@MainActor`, async/await elsewhere
+- Apple frameworks only in the app target (Sparkle is the one dependency, for updates)
+- Keep files small and single-purpose; match the surrounding style
+- Every user-visible change gets tests; render new windows in a temporary test to check layout, then delete it
+- No em or en dashes in code, comments, docs, commits, or PRs
 
 ---
 
 ## Release Process
 
-1. Update version in `scripts/build_app.sh`
-2. Create GitHub release tag (e.g., `v1.0.0`)
-3. CI builds app, signs, generates appcast, uploads assets
+1. Merge the PRs to `main` (squash). CI must pass on the PR.
+2. Write release notes to a file, then run:
+   ```bash
+   scripts/release.sh 0.0.74 notes.md
+   ```
+   The script waits for CI on the exact `main` commit and refuses to release if it failed, creates the release (tags have no `v` prefix), waits for the signed build (`release.yml`), and confirms the Sparkle appcast and the Homebrew cask (`kxxil01/homebrew-tap`) show the new version.
+3. Users update through Sparkle (Check for Updates) or `brew upgrade --cask textpolish`.
 
-### Signing (optional but recommended)
-
-```bash
-export CODESIGN_IDENTITY="Developer ID Application: ..."
-export NOTARY_PROFILE="TextPolishNotary"
-./scripts/sign_and_notarize.sh
-```
-
----
-
-## Roadmap
-
-### Reliability
-- [ ] Debounce rapid hotkey presses
-- [ ] Esc-to-cancel during correction
-- [ ] Diagnostics panel (last error, provider status)
-
-### Features
-- [x] Tone analysis (sentiment, formality, emotional impact)
-- [ ] Undo last correction (hotkey)
-- [ ] Correction history log
-- [ ] Custom prompts/modes (formal, casual, shorten)
-- [ ] More providers (Claude, OpenAI, Ollama)
-
-### Distribution
-- [ ] Proper app icon
-- [ ] Xcode project for easier distribution
+Releases are signed with the stable "TextPolish Local" certificate, so the keychain keeps trusting new versions.
 
 ---
 
 ## Troubleshooting (Development)
 
-**Accessibility not working?**
-- Check System Settings → Privacy & Security → Accessibility
-- The app must be in /Applications for reliable permissions
-
-**Hotkeys not registering?**
-- Check for conflicts with other apps
-- Verify Carbon event handler is installed
-
-**Clipboard not updating?**
-- Some apps have delayed clipboard updates
-- Adjust `copyTimeoutMilliseconds` in timing profiles
-
-**Keychain prompts?**
-- First-time access requires user approval
-- Check Keychain Access.app for stored items
-
----
-
-## Testing
-
-The project uses **Swift Testing** with **XCTest** for comprehensive coverage:
-
-### Running Tests
-```bash
-swift test
-swift test --enable-code-coverage  # With coverage
-```
-
-### Test Environment Guards
-
-UI dialogs are suppressed in test environment to prevent CI/CD blocking:
-
-```swift
-#if DEBUG
-if NSClassFromString("XCTestCase") != nil {
-    TPLogger.log("Error suppressed in test environment: \(error)")
-    return
-}
-#endif
-// Show actual dialog in production
-```
-
-### Test Coverage
-
-- **Unit tests**: Core logic and controllers
-- **Integration tests**: Settings window and app integration
-- **UI tests**: Window controllers and view controllers
-- **Mocking**: Comprehensive mocks for providers, keyboard, pasteboard
-
-**Current status**: 135 tests, 100% pass rate
-
-### CI/CD Best Practices
-
-- All popup dialogs must include test environment guards
-- Use logging instead of blocking UI in tests
-- Mock external dependencies (API calls, clipboard, keyboard)
-- Test async/await code with proper task management
+- **Polish does nothing**: read the log lines above. "No changes" means the model returned the text unchanged; rejected attempts name the failed check.
+- **Accessibility not working**: System Settings > Privacy & Security > Accessibility; the app should run from /Applications.
+- **Hotkeys not registering**: another app may own the combination; the menu shows which shortcuts failed.
+- **Clipboard not updating**: some apps copy slowly; raise `copyTimeoutMilliseconds` in a timing profile.
+- **Keychain prompts**: expected for local builds; a release build asks at most once per key.
