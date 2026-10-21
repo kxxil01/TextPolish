@@ -137,6 +137,7 @@ final class CorrectionController {
   private let frontmostApplicationPIDProvider: @MainActor () -> pid_t?
   private let applicationResolver: @MainActor (pid_t) -> NSRunningApplication?
   private let selectionStateProvider: @MainActor (pid_t?) -> SelectionState
+  private let reviewer: PolishReviewing?
 
   init(
     corrector: GrammarCorrector,
@@ -152,6 +153,7 @@ final class CorrectionController {
     frontmostApplicationPIDProvider: (@MainActor () -> pid_t?)? = nil,
     applicationResolver: (@MainActor (pid_t) -> NSRunningApplication?)? = nil,
     selectionStateProvider: (@MainActor (pid_t?) -> SelectionState)? = nil,
+    reviewer: PolishReviewing? = nil,
     addGlobalKeyMonitor: GlobalKeyMonitorInstaller? = nil,
     addLocalKeyMonitor: LocalKeyMonitorInstaller? = nil,
     removeEventMonitor: EventMonitorRemover? = nil,
@@ -175,6 +177,7 @@ final class CorrectionController {
     }
     // Unknown by default so tests never depend on whichever app is focused; the app injects SelectionProbe.
     self.selectionStateProvider = selectionStateProvider ?? { _ in .unknown }
+    self.reviewer = reviewer
     self.addGlobalKeyMonitor = addGlobalKeyMonitor ?? CorrectionController.defaultAddGlobalKeyMonitor
     self.addLocalKeyMonitor = addLocalKeyMonitor ?? CorrectionController.defaultAddLocalKeyMonitor
     self.removeEventMonitor = removeEventMonitor ?? CorrectionController.defaultRemoveEventMonitor
@@ -230,7 +233,7 @@ final class CorrectionController {
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       let operationStartedAt = Date()
-      let deadline = ContinuousClock.now + self.operationTimeout
+      var deadline = ContinuousClock.now + self.operationTimeout
       var activeProvider = self.settings.provider
       var activeModel = self.modelName(for: activeProvider)
       var fallbackCount = 0
@@ -401,6 +404,27 @@ final class CorrectionController {
           return
         }
 
+        if self.settings.previewBeforePaste, let reviewer = self.reviewer {
+          TPLogger.log("Polish preview: waiting for Paste or Cancel")
+          let approved = await reviewer.review(original: inputText, polished: corrected)
+          try Task.checkCancellation()
+          guard approved else {
+            self.feedback.showInfo("Canceled")
+            DiagnosticsStore.shared.recordNote(
+              operation: .correction,
+              provider: activeProvider,
+              model: activeModel,
+              latencySeconds: Date().timeIntervalSince(operationStartedAt),
+              retryCount: (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0,
+              fallbackCount: fallbackCount,
+              message: "Canceled in preview",
+              updateHealth: false
+            )
+            return
+          }
+          // Time spent reading the preview does not count against the operation timeout.
+          deadline = ContinuousClock.now + self.operationTimeout
+        }
         let newlinesIn = inputText.filter(\.isNewline).count
         let newlinesOut = corrected.filter(\.isNewline).count
         TPLogger.log("Polish output: chars=\(corrected.count) newlines=\(newlinesIn)->\(newlinesOut), pasting")

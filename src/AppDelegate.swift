@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var polishItem: NSMenuItem?
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
+    private let polishReviewPanel = PolishReviewPanel()
     private var appPolishStyleItems: [NSMenuItem] = []
     private var appPolishStyleTarget: (bundleID: String, name: String)?
     private var analyzeToneItem: NSMenuItem?
@@ -122,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return self.shouldAttemptFallback(for: error)
             },
             selectionStateProvider: { SelectionProbe.state(forProcess: $0) },
+            reviewer: polishReviewPanel,
             onSuccess: { [weak self] in
                 self?.incrementCorrectionCount()
             }

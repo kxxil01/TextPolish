@@ -323,6 +323,8 @@ struct Settings: Codable {
   var protectedTerms: [String]
   /// Style chosen for one app, keyed by bundle identifier. Wins over the default style in that app.
   var appPolishStyles: [String: PolishStyle]
+  /// Show the changes and wait for Paste or Cancel before replacing the text.
+  var previewBeforePaste: Bool
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
   var enableGeminiOpenRouterFallback: Bool
@@ -377,6 +379,7 @@ struct Settings: Codable {
     polishStyle: PolishStyle = .natural,
     protectedTerms: [String] = [],
     appPolishStyles: [String: PolishStyle] = [:],
+    previewBeforePaste: Bool = false,
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     enableGeminiOpenRouterFallback: Bool = false,
@@ -418,6 +421,7 @@ struct Settings: Codable {
     self.polishStyle = polishStyle
     self.protectedTerms = protectedTerms
     self.appPolishStyles = appPolishStyles
+    self.previewBeforePaste = previewBeforePaste
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
@@ -463,6 +467,7 @@ struct Settings: Codable {
     polishStyle = (try? container.decode(PolishStyle.self, forKey: .polishStyle)) ?? .natural
     protectedTerms = (try? container.decodeIfPresent([String].self, forKey: .protectedTerms)) ?? []
     appPolishStyles = (try? container.decodeIfPresent([String: PolishStyle].self, forKey: .appPolishStyles)) ?? [:]
+    previewBeforePaste = (try? container.decodeIfPresent(Bool.self, forKey: .previewBeforePaste)) ?? false
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     enableGeminiOpenRouterFallback =
@@ -513,6 +518,7 @@ struct Settings: Codable {
     try container.encode(polishStyle, forKey: .polishStyle)
     try container.encode(protectedTerms, forKey: .protectedTerms)
     try container.encode(appPolishStyles, forKey: .appPolishStyles)
+    try container.encode(previewBeforePaste, forKey: .previewBeforePaste)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
@@ -691,6 +697,7 @@ struct Settings: Codable {
     case polishStyle
     case protectedTerms
     case appPolishStyles
+    case previewBeforePaste
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
     case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone
