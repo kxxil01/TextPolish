@@ -1299,7 +1299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                       !OpenAITokenPolicy.isChatModel(settings.openAIModel)
             {
                 lines.append("")
-                lines.append("⚠ \"\(settings.openAIModel)\" is not a chat model. Use Detect Model or set gpt-5-nano.")
+                lines.append("⚠ \"\(settings.openAIModel)\" is not a chat model. Use Detect Model or set gpt-4.1-mini.")
             }
         } catch {
             lines.append("✗ Failed to fetch models: \(error.localizedDescription)")

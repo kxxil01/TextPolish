@@ -49,7 +49,7 @@ Hotkeys are configurable from the menu and settings window.
   - Default model: `google/gemma-3n-e4b-it:free`
   - Default base URL: `https://openrouter.ai/api/v1`
 - OpenAI
-  - Default model: `gpt-5-nano`
+  - Default model: `gpt-4.1-mini`
   - Default base URL: `https://api.openai.com/v1`
 - Anthropic
   - Default model: `claude-haiku-4-5`

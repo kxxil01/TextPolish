@@ -341,7 +341,7 @@ struct Settings: Codable {
     static let geminiBaseURL = "https://generativelanguage.googleapis.com"
     static let openRouterModel = "google/gemma-3n-e4b-it:free"
     static let openRouterBaseURL = "https://openrouter.ai/api/v1"
-    static let openAIModel = "gpt-5-nano"
+    static let openAIModel = "gpt-4.1-mini"
     static let openAIBaseURL = "https://api.openai.com/v1"
     static let anthropicModel = "claude-haiku-4-5"
     static let anthropicBaseURL = "https://api.anthropic.com"
@@ -375,7 +375,7 @@ struct Settings: Codable {
     openRouterMinSimilarity: Double = 0.65,
     openRouterExtraInstruction: String? = nil,
     openAIApiKey: String? = nil,
-    openAIModel: String = "gpt-5-nano",
+    openAIModel: String = "gpt-4.1-mini",
     openAIBaseURL: String = "https://api.openai.com/v1",
     openAIMaxAttempts: Int = 2,
     openAIMinSimilarity: Double = 0.65,

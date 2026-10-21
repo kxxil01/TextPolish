@@ -507,7 +507,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             providerBaseURLField?.placeholderString = "https://openrouter.ai/api/v1"
         case .openAI:
             providerModelField?.stringValue = settings.openAIModel
-            providerModelField?.placeholderString = "gpt-5-nano"
+            providerModelField?.placeholderString = "gpt-4.1-mini"
             providerBaseURLField?.stringValue = settings.openAIBaseURL
             providerBaseURLField?.placeholderString = "https://api.openai.com/v1"
         case .anthropic:
