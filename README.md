@@ -30,6 +30,7 @@ It currently supports two workflows:
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
 - Preview before paste (optional, Settings > Advanced): see the changes highlighted, then press Return to paste or Escape to cancel
+- Learn mode (optional, Settings > Advanced): after each Polish, a small panel explains the main changes, such as "status progress → a progress status: adjective comes before the noun"
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens
 - Retry logic and timeout bounds for provider requests
 - Provider diagnostics and health status in the menu

@@ -71,6 +71,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var polishStylePopup: NSPopUpButton!
     var protectedTermsField: NSTextField!
     var previewBeforePasteCheckbox: NSButton!
+    var learnModeCheckbox: NSButton!
     var extraInstructionField: NSTextField!
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
@@ -222,6 +223,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             checkboxWithTitle: "Show the changes and confirm before pasting",
             target: self,
             action: #selector(previewBeforePasteChanged(_:))
+        )
+        learnModeCheckbox = NSButton(
+            checkboxWithTitle: "Explain the main changes after each Polish",
+            target: self,
+            action: #selector(learnModeChanged(_:))
         )
 
         // Keep the default bezeled cell so the field reads as editable; just let it wrap.
@@ -629,11 +635,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 170 + 24
+        let generalHeight: CGFloat = 206 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
-        addRow(to: general, label: "Polish Style", y: 144, control: polishStylePopup, controlWidth: nil)
+        addRow(to: general, label: "Polish Style", y: 180, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 175)
+        addRow(to: general, label: "Learn", y: 144, control: learnModeCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 139)
         addRow(to: general, label: "Preview", y: 108, control: previewBeforePasteCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 103)
@@ -729,6 +737,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
         protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
         previewBeforePasteCheckbox.state = settings.previewBeforePaste ? .on : .off
+        learnModeCheckbox.state = settings.learnMode ? .on : .off
 
         switch settings.correctionLanguage {
         case .auto: languagePopup.selectItem(at: 0)
@@ -1155,6 +1164,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         liveSave()
     }
 
+    @objc func learnModeChanged(_ sender: NSButton) {
+        guard settings != nil else { return }
+        settings.learnMode = sender.state == .on
+        liveSave()
+    }
+
     @objc func languageChanged(_ sender: NSPopUpButton) {
         guard settings != nil else { return }
         switch sender.indexOfSelectedItem {
@@ -1285,6 +1300,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
         newSettings.protectedTerms = Settings.parseProtectedTerms(protectedTermsField.stringValue)
         newSettings.previewBeforePaste = previewBeforePasteCheckbox.state == .on
+        newSettings.learnMode = learnModeCheckbox.state == .on
         if Settings.PolishStyle.allCases.indices.contains(polishStylePopup.indexOfSelectedItem) {
             newSettings.polishStyle = Settings.PolishStyle.allCases[polishStylePopup.indexOfSelectedItem]
         }

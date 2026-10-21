@@ -408,3 +408,14 @@ private struct OpenAIChatCompletionsResponse: Decodable {
 // Safety: `lastRetryCount` is mutated only inside a single in-flight request path.
 // `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
 extension OpenAICorrector: @unchecked Sendable {}
+
+extension OpenAICorrector: ChangeExplaining {
+  func explainChanges(original: String, polished: String) async throws -> [String] {
+    let output = try await generate(
+      prompt: ChangeExplanationPrompt.make(original: original, polished: polished),
+      apiKey: try resolveApiKey(),
+      style: .minimal
+    )
+    return ChangeExplanationPrompt.parse(output)
+  }
+}

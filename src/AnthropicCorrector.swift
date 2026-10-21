@@ -355,3 +355,13 @@ struct AnthropicMessagesResponse: Decodable {
 // Safety: `lastRetryCount` is mutated only inside a single in-flight request path.
 // `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
 extension AnthropicCorrector: @unchecked Sendable {}
+
+extension AnthropicCorrector: ChangeExplaining {
+  func explainChanges(original: String, polished: String) async throws -> [String] {
+    let output = try await generate(
+      prompt: ChangeExplanationPrompt.make(original: original, polished: polished),
+      apiKey: try resolveApiKey()
+    )
+    return ChangeExplanationPrompt.parse(output)
+  }
+}
