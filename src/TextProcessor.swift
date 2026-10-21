@@ -57,8 +57,9 @@ extension TextProcessor {
   /// Safety cap to avoid O(n*m) Levenshtein work on very large payloads.
   private static var maxSimilarityCheckSize: Int { 256_000 }
 
-  /// Protects special text patterns (code blocks, URLs, etc.) by replacing them with placeholders
-  func protect(_ text: String) -> ProtectedText {
+  /// Protects special text patterns (code blocks, URLs, etc.) and the user's protected terms by replacing them
+  /// with placeholders, so the model cannot change them.
+  func protect(_ text: String, terms: [String] = []) -> ProtectedText {
     var counter = 0
     var placeholders: [String: String] = [:]
     var current = text
@@ -71,7 +72,7 @@ extension TextProcessor {
       Self.inlineCodeRegex,
       Self.discordTokenRegex,
       Self.urlRegex,
-    ]
+    ] + termRegexes(for: terms)
 
     for regex in regexes {
       current = protectMatches(
@@ -84,6 +85,18 @@ extension TextProcessor {
     }
 
     return ProtectedText(text: current, placeholders: placeholders)
+  }
+
+  /// Whole-word, case-insensitive matches for each term, longest first so a longer term wins over one inside it.
+  /// Underscores count as word characters, which keeps terms from matching inside placeholder tokens.
+  private func termRegexes(for terms: [String]) -> [NSRegularExpression] {
+    terms
+      .filter { !$0.isEmpty }
+      .sorted { $0.count > $1.count }
+      .compactMap { term in
+        let pattern = "(?<![\\p{L}\\p{N}_])" + NSRegularExpression.escapedPattern(for: term) + "(?![\\p{L}\\p{N}_])"
+        return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+      }
   }
 
   /// Protects matches found by a regex pattern

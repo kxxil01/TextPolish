@@ -55,6 +55,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
+  private let protectedTerms: [String]
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
 
@@ -92,6 +93,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     self.retryPolicy = RetryPolicy(maxNetworkAttempts: 2, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.geminiMinSimilarity))
     self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.geminiExtraInstruction)
+    self.protectedTerms = settings.protectedTerms
     self.correctionLanguage = settings.correctionLanguage
   }
 
@@ -112,7 +114,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
 
     let apiKey = try resolveApiKey()
-    let protected = protect(text)
+    let protected = protect(text, terms: protectedTerms)
 
     var retryReason: CorrectionRetryReason?
     for attempt in 1...maxAttempts {

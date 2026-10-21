@@ -55,6 +55,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
+  private let protectedTerms: [String]
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
   private var lastRateLimitRetryAfterSeconds: Double?
@@ -88,6 +89,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     self.retryPolicy = RetryPolicy()
     self.minSimilarity = max(0.0, min(1.0, settings.openAIMinSimilarity))
     self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.openAIExtraInstruction)
+    self.protectedTerms = settings.protectedTerms
     self.correctionLanguage = settings.correctionLanguage
   }
 
@@ -108,7 +110,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
 
     let apiKey = try resolveApiKey()
-    let protected = protect(text)
+    let protected = protect(text, terms: protectedTerms)
 
     var retryReason: CorrectionRetryReason?
     for attempt in 1...maxAttempts {
