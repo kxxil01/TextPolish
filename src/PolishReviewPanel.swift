@@ -128,7 +128,7 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     let padding: CGFloat = 16
     let buttonHeight: CGFloat = 32
     let font = NSFont.systemFont(ofSize: 14)
-    let isTranslation = currentStyle == .translateToEnglish
+    let isTranslation = currentStyle.translatesToEnglish
     // Every word of a translation changes, so a diff would only be noise.
     let text = isTranslation
       ? NSAttributedString(string: polished, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
@@ -152,7 +152,11 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
       backing: .buffered,
       defer: false
     )
-    panel.title = isTranslation ? "Review Translation" : "Review Polish"
+    switch currentStyle {
+    case .translateToEnglish: panel.title = "Review Translation"
+    case .reply: panel.title = "Review Reply"
+    default: panel.title = "Review Polish"
+    }
     panel.isReleasedWhenClosed = false
     panel.level = .floating
     // Panels hide when their app is inactive by default; TextPolish never becomes active here.

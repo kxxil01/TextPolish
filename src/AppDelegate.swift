@@ -38,7 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var polishItem: NSMenuItem?
     private var translateItem: NSMenuItem?
     private var explainItem: NSMenuItem?
+    private var replyItem: NSMenuItem?
     private let explanationPanel = LearnPanel()
+    /// The last message Explain Message showed, so Reply in English can answer it.
+    private var replyContext = ReplyContext()
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
@@ -219,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onPolished: { [weak self] record in
                 self?.polishUndoer?.record(record)
                 // Every word of a translation changes, so there are no corrections to explain.
-                guard record.style != .translateToEnglish else { return }
+                guard !record.style.translatesToEnglish else { return }
                 self?.explainChangesIfLearning(original: record.original, polished: record.polished)
             }
         )
@@ -331,6 +334,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "Explain Message", action: #selector(explainMessage),
             toolTip: "Shows what the selected message means and how it sounds, without changing it"
         )
+        let replyItem = makeMenuItem(
+            "Reply in English", action: #selector(replyInEnglish),
+            toolTip: "Rewrites your draft as an English reply to the last message you explained"
+        )
+        self.replyItem = replyItem
 
         self.polishItem = polishItem
         self.translateItem = translateItem
@@ -348,6 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(translateItem)
         menu.addItem(undoItem)
         menu.addItem(explainItem)
+        menu.addItem(replyItem)
         menu.addItem(analyzeToneItem)
 
         let cancelItem = NSMenuItem(
@@ -723,6 +732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
                 "Translate to English \(settings.hotKeyTranslate.displayString)",
                 "Explain Message \(settings.hotKeyExplain.displayString)",
+                "Reply in English \(settings.hotKeyReply.displayString)",
             ] + styleShortcuts).joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
@@ -734,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var result: [Int: Settings.HotKey] = [
             HotKeyManager.HotKeyID.translate.rawValue: settings.hotKeyTranslate,
             HotKeyManager.HotKeyID.explain.rawValue: settings.hotKeyExplain,
+            HotKeyManager.HotKeyID.reply.rawValue: settings.hotKeyReply,
         ]
         for (index, style) in Settings.PolishStyle.allCases.enumerated() {
             if let hotKey = settings.styleHotKey(for: style) {
@@ -770,6 +781,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             correctionController?.polish(style: .translateToEnglish, targetApplication: target, timingsOverride: correctionTimings)
         case HotKeyManager.HotKeyID.explain.rawValue:
             explainSelection(in: target, timings: toneTimings)
+        case HotKeyManager.HotKeyID.reply.rawValue:
+            correctionController?.polish(style: replyStyle(), targetApplication: target, timingsOverride: correctionTimings)
         default:
             // A style shortcut polishes in that style, whatever style the app normally uses.
             let styles = Settings.PolishStyle.allCases
@@ -830,8 +843,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             language: settings.explanationLanguage,
             presenter: explanationPanel,
             targetApplication: target,
-            timingsOverride: timings
+            timingsOverride: timings,
+            onExplained: { [weak self] message in
+                self?.replyContext.remember(message)
+            }
         )
+    }
+
+    @objc private func replyInEnglish() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            self.correctionController?.polish(
+                style: self.replyStyle(),
+                targetApplication: target,
+                timingsOverride: self.timingsOverride(for: target)
+            )
+        }
+    }
+
+    /// A reply to the last explained message while it is recent; otherwise the draft is answered on its own.
+    private func replyStyle() -> CorrectionStyle {
+        let message = replyContext.recentMessage()
+        TPLogger.log("Reply: context=\(message == nil ? "none" : "last explained message")")
+        return .reply(answering: message)
     }
 
     @objc private func translateToEnglish() {
@@ -1023,6 +1058,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "• Analyze Tone: \(settings.hotKeyAnalyzeTone.displayString)",
             "• Translate to English: \(settings.hotKeyTranslate.displayString)",
             "• Explain Message: \(settings.hotKeyExplain.displayString)",
+            "• Reply in English: \(settings.hotKeyReply.displayString)",
         ].joined(separator: "\n")
 
         alert.addButton(withTitle: "Open Accessibility Settings")
@@ -1079,6 +1115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         translateItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyTranslate.modifiers)
         explainItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: settings.hotKeyExplain.keyCode)
         explainItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyExplain.modifiers)
+        replyItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: settings.hotKeyReply.keyCode)
+        replyItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyReply.modifiers)
 
         analyzeToneItem?.title = "Analyze Tone"
         analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
@@ -1194,6 +1232,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugServicesProvider: ServicesProvider {
             servicesProvider
+        }
+
+        func debugRememberExplainedMessage(_ message: String) {
+            replyContext.remember(message)
+        }
+
+        var debugReplyStyle: CorrectionStyle {
+            replyStyle()
         }
 
         @discardableResult

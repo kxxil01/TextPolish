@@ -16,6 +16,7 @@ struct Settings: Codable {
     static let analyzeToneDefault = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let translateDefault = HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let explainDefault = HotKey(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(controlKey | optionKey | cmdKey))
+    static let replyDefault = HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey | cmdKey))
 
     var displayString: String {
       var parts: [String] = []
@@ -297,6 +298,7 @@ struct Settings: Codable {
   var hotKeyAnalyzeTone: HotKey
   var hotKeyTranslate: HotKey
   var hotKeyExplain: HotKey
+  var hotKeyReply: HotKey
   /// The language Explain Message writes in.
   var explanationLanguage: ExplanationLanguage
   /// Optional shortcuts that Polish in one style, keyed by `PolishStyle` raw value. None by default.
@@ -365,6 +367,7 @@ struct Settings: Codable {
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     hotKeyTranslate: HotKey = .translateDefault,
     hotKeyExplain: HotKey = .explainDefault,
+    hotKeyReply: HotKey = .replyDefault,
     explanationLanguage: ExplanationLanguage = .indonesian,
     styleHotKeys: [String: HotKey] = [:],
     customStyleName: String = "Custom",
@@ -415,6 +418,7 @@ struct Settings: Codable {
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.hotKeyTranslate = hotKeyTranslate
     self.hotKeyExplain = hotKeyExplain
+    self.hotKeyReply = hotKeyReply
     self.explanationLanguage = explanationLanguage
     self.styleHotKeys = styleHotKeys
     self.customStyleName = customStyleName
@@ -472,6 +476,7 @@ struct Settings: Codable {
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     hotKeyTranslate = (try? container.decode(HotKey.self, forKey: .hotKeyTranslate)) ?? .translateDefault
     hotKeyExplain = (try? container.decode(HotKey.self, forKey: .hotKeyExplain)) ?? .explainDefault
+    hotKeyReply = (try? container.decode(HotKey.self, forKey: .hotKeyReply)) ?? .replyDefault
     explanationLanguage = (try? container.decode(ExplanationLanguage.self, forKey: .explanationLanguage)) ?? .indonesian
     enableGeminiOpenRouterFallback =
       try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
@@ -531,6 +536,7 @@ struct Settings: Codable {
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(hotKeyTranslate, forKey: .hotKeyTranslate)
     try container.encode(hotKeyExplain, forKey: .hotKeyExplain)
+    try container.encode(hotKeyReply, forKey: .hotKeyReply)
     try container.encode(explanationLanguage, forKey: .explanationLanguage)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .fallbackToOpenRouterOnGeminiError)
@@ -710,6 +716,7 @@ struct Settings: Codable {
     case hotKeyAnalyzeTone
     case hotKeyTranslate
     case hotKeyExplain
+    case hotKeyReply
     case explanationLanguage
     case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
