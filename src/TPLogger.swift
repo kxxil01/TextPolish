@@ -12,9 +12,13 @@ enum TPLogger {
 
   /// Writes a public line to the system log. NSLog text shows up as `<private>`, which made these
   /// lines unreadable, so callers must never pass the user's text or a secret.
+  /// Test runs write to stderr instead, so they show in the test output and stay out of the app's system log.
   static func log(_ message: @autoclosure () -> String) {
-    let prefix = isRunningTests ? testPrefix : productionPrefix
-    let line = "\(prefix) \(message())"
+    if isRunningTests {
+      FileHandle.standardError.write(Data("\(testPrefix) \(message())\n".utf8))
+      return
+    }
+    let line = "\(productionPrefix) \(message())"
     logger.log("\(line, privacy: .public)")
   }
 }
