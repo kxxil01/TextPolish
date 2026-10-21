@@ -10,10 +10,18 @@ protocol ChangeExplanationPresenting: AnyObject {
 final class LearnPanel: ChangeExplanationPresenting {
   private var panel: NSPanel?
   private var hideTask: Task<Void, Never>?
-  private let visibleDuration: Duration
+  private let fixedVisibleDuration: Duration?
+  private let afterHoverDelay: Duration
 
-  init(visibleDuration: Duration = .seconds(60)) {
-    self.visibleDuration = visibleDuration
+  /// Leave `visibleDuration` nil to give each change time to be read (see `readingTime(lineCount:)`).
+  init(visibleDuration: Duration? = nil, afterHoverDelay: Duration = .seconds(4)) {
+    fixedVisibleDuration = visibleDuration
+    self.afterHoverDelay = afterHoverDelay
+  }
+
+  /// Six seconds plus three per change, at most twenty. Lessons are also saved, so closing early loses nothing.
+  nonisolated static func readingTime(lineCount: Int) -> Duration {
+    .seconds(min(6 + 3 * lineCount, 20))
   }
 
   func show(lines: [String]) {
@@ -45,7 +53,17 @@ final class LearnPanel: ChangeExplanationPresenting {
     panel.hidesOnDeactivate = false
     panel.becomesKeyOnlyIfNeeded = true
     panel.isReleasedWhenClosed = false
-    panel.contentView = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+    // Hovering keeps the panel up while the user reads; leaving starts a short countdown.
+    let content = HoverTrackingView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+    content.onHoverChange = { [weak self] isInside in
+      guard let self else { return }
+      if isInside {
+        self.cancelHide()
+      } else {
+        self.scheduleHide(after: self.afterHoverDelay)
+      }
+    }
+    panel.contentView = content
     panel.contentView?.addSubview(label)
 
     if let screen = NSScreen.main {
@@ -55,7 +73,16 @@ final class LearnPanel: ChangeExplanationPresenting {
     panel.orderFrontRegardless()
     self.panel = panel
 
-    let duration = visibleDuration
+    scheduleHide(after: fixedVisibleDuration ?? Self.readingTime(lineCount: lines.count))
+  }
+
+  private func cancelHide() {
+    hideTask?.cancel()
+    hideTask = nil
+  }
+
+  private func scheduleHide(after duration: Duration) {
+    cancelHide()
     hideTask = Task { [weak self] in
       try? await Task.sleep(for: duration)
       guard !Task.isCancelled else { return }
@@ -117,5 +144,33 @@ final class LearnPanel: ChangeExplanationPresenting {
     var debugIsShowing: Bool {
       panel != nil
     }
+
+    func debugSimulateHover(inside: Bool) {
+      (panel?.contentView as? HoverTrackingView)?.onHoverChange?(inside)
+    }
   #endif
+}
+
+/// Reports when the pointer enters or leaves the view.
+private final class HoverTrackingView: NSView {
+  var onHoverChange: ((Bool) -> Void)?
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(NSTrackingArea(
+      rect: bounds,
+      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self,
+      userInfo: nil
+    ))
+  }
+
+  override func mouseEntered(with _: NSEvent) {
+    onHoverChange?(true)
+  }
+
+  override func mouseExited(with _: NSEvent) {
+    onHoverChange?(false)
+  }
 }
