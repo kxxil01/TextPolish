@@ -396,3 +396,14 @@ private struct GeminiGenerateContentResponse: Decodable {
 }
 
 extension GeminiCorrector: @unchecked Sendable {}
+
+extension GeminiCorrector: ChangeExplaining {
+  func explainChanges(original: String, polished: String) async throws -> [String] {
+    let output = try await generate(
+      prompt: ChangeExplanationPrompt.make(original: original, polished: polished),
+      apiKey: try resolveApiKey(),
+      style: .minimal
+    )
+    return ChangeExplanationPrompt.parse(output)
+  }
+}

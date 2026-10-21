@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
+    private let learnPanel = LearnPanel()
+    private var explanationTask: Task<Void, Never>?
     private var appPolishStyleItems: [NSMenuItem] = []
     private var appPolishStyleTarget: (bundleID: String, name: String)?
     private var analyzeToneItem: NSMenuItem?
@@ -126,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             reviewer: polishReviewPanel,
             onSuccess: { [weak self] in
                 self?.incrementCorrectionCount()
+            },
+            onPolished: { [weak self] original, polished in
+                self?.explainChangesIfLearning(original: original, polished: polished)
             }
         )
 
@@ -899,6 +904,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard styles.indices.contains(sender.tag) else { return }
         applySettingsMutation { $0.polishStyle = styles[sender.tag] }
         syncHotKeyMenuItems()
+    }
+
+    /// Learn mode: asks the current provider why the main changes were made and shows them without taking focus.
+    private func explainChangesIfLearning(original: String, polished: String) {
+        guard settings.learnMode, let explainer = CorrectorFactory.make(settings: settings) as? ChangeExplaining else {
+            return
+        }
+        explanationTask?.cancel()
+        explanationTask = Task { [weak self] in
+            do {
+                let lines = try await explainer.explainChanges(original: original, polished: polished)
+                guard !Task.isCancelled, let self else { return }
+                TPLogger.log("Learn: \(lines.count) explanations")
+                self.learnPanel.show(lines: lines)
+            } catch {
+                TPLogger.log("Learn explanation failed: \(error)")
+            }
+        }
     }
 
     @objc private func selectAppPolishStyle(_ sender: NSMenuItem) {

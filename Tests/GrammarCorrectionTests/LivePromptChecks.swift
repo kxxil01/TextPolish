@@ -132,6 +132,20 @@ final class LivePromptChecks: XCTestCase {
     }
   }
 
+  // MARK: - Learn mode
+
+  func testLearnExplainsTheMainChanges() async throws {
+    let explainer = try XCTUnwrap(corrector as? ChangeExplaining)
+    let original = "I compiled everything and added status progress, so it can be easier to track"
+    let polished = "I compiled everything and added a progress status to make it easier to track"
+
+    let lines = try await explainer.explainChanges(original: original, polished: polished)
+    print("[LivePromptChecks] \(name)\n  " + lines.joined(separator: "\n  "))
+
+    XCTAssertFalse(lines.isEmpty)
+    XCTAssertTrue(lines.allSatisfy { $0.contains("→") })
+  }
+
   // MARK: - Minimal
 
   func testMinimalFixesTyposAndKeepsSlang() async throws {

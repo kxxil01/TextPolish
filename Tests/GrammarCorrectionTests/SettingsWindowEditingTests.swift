@@ -69,6 +69,17 @@ final class SettingsWindowEditingTests: XCTestCase {
   }
 
   @MainActor
+  func testLearnCheckboxSavesLive() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let checkbox = try XCTUnwrap(viewController.learnModeCheckbox)
+
+    checkbox.state = .on
+    viewController.learnModeChanged(checkbox)
+
+    XCTAssertTrue(Settings.loadOrCreateDefault().learnMode)
+  }
+
+  @MainActor
   func testPolishHotkeyFieldSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
     let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
