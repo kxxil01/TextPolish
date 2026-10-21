@@ -75,6 +75,8 @@ final class CorrectionControllerTests: XCTestCase {
     private(set) var restoreCallCount = 0
     private var changeCountValue = 0
     var onSetString: ((String) -> Void)?
+    /// Another app writes to the clipboard after this many more `changeCount` reads, independent of timing.
+    var externalChangeAfterReads: Int?
 
     init(waitResults: [Result<String, Error>] = []) {
       self.waitResults = waitResults
@@ -95,11 +97,15 @@ final class CorrectionControllerTests: XCTestCase {
     }
 
     var changeCount: Int {
-      changeCountValue
-    }
-
-    func simulateExternalClipboardChange() {
-      changeCountValue += 1
+      if let reads = externalChangeAfterReads {
+        if reads == 0 {
+          changeCountValue += 1
+          externalChangeAfterReads = nil
+        } else {
+          externalChangeAfterReads = reads - 1
+        }
+      }
+      return changeCountValue
     }
 
     func waitForCopiedString(
@@ -547,11 +553,10 @@ final class CorrectionControllerTests: XCTestCase {
     let keyboard = StubKeyboard(isTrusted: true)
     let pasteboard = StubPasteboard(waitResults: [.success("hello")])
     pasteboard.onSetString = { string in
+      // Polish records the clipboard count right after writing, then checks it again before pasting;
+      // the external write lands between those two reads.
       if string == "hello!" {
-        Task { @MainActor in
-          try? await Task.sleep(for: .milliseconds(5))
-          pasteboard.simulateExternalClipboardChange()
-        }
+        pasteboard.externalChangeAfterReads = 1
       }
     }
 
