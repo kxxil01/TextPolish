@@ -45,6 +45,21 @@ It currently supports two workflows:
 - Daily usage counters (correction + tone analysis) with a combined status-bar badge
 - Sparkle auto-update support in release builds
 
+## Command Line and Shortcuts
+
+TextPolish can polish or translate text from a terminal, a script, or the Shortcuts app. It uses the provider, model, and API key from Settings.
+
+```bash
+TP=/Applications/TextPolish.app/Contents/MacOS/TextPolish
+$TP polish "i already check the report, pls revise"
+echo "tolong cek laporan kemarin" | $TP translate
+pbpaste | $TP polish --style formal | pbcopy
+```
+
+Styles: `natural`, `minimal`, `shorter`, `formal`, `friendly`, or your Custom style's name. Without `--style`, the default style is used.
+
+Shortcuts app: add a "Run Shell Script" action, set Pass Input to "to stdin", and enter `/Applications/TextPolish.app/Contents/MacOS/TextPolish polish --style formal`.
+
 ## Default Hotkeys
 
 - Polish: `Ctrl+Option+Command+G` (`⌃⌥⌘G`)

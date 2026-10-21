@@ -40,6 +40,10 @@ Optional extras: a style per app, a shortcut per style, Never Change words, Prev
 
 Right-click > Services > "Polish with TextPolish" and "Translate to English with TextPolish" are declared under `NSServices` in the Info.plist that `scripts/build_app.sh` writes. macOS hands over the selected text, so Polish skips the copy step (`polish(style:text:)`) and pastes over the selection as usual.
 
+### Command line (`CommandLinePolish`)
+
+`TextPolish polish [--style name] [text]` and `TextPolish translate [text]` run before the menu bar app starts (see `GrammarCorrectionMain`). Text comes from the arguments or stdin, and the result goes to stdout: exit 0 on success, 1 on a provider error, 2 on a usage error. Any other arguments start the app as usual. The correction runs off the main thread while the main thread waits, so keychain reads stay off the main thread.
+
 ### Tone flow (`ToneAnalysisController`)
 
 Copy as above, then `ToneAnalyzer.analyze(_:)` (from `ToneAnalyzerFactory`, with provider fallback), then show `ToneAnalysisResultWindow` and restore the clipboard.
