@@ -239,7 +239,7 @@ final class CorrectionController {
     let timings = timingsOverride ?? timings
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
-      let operationStartedAt = Date()
+      var operationStartedAt = Date()
       var deadline = ContinuousClock.now + self.operationTimeout
       var activeProvider = self.settings.provider
       var activeModel = self.modelName(for: activeProvider)
@@ -413,7 +413,10 @@ final class CorrectionController {
 
         if self.settings.previewBeforePaste, let reviewer = self.reviewer {
           TPLogger.log("Polish preview: waiting for Paste or Cancel")
+          let reviewStartedAt = Date()
           let approved = await reviewer.review(original: inputText, polished: corrected)
+          // Diagnostics latency measures Polish, not how long the user read the preview.
+          operationStartedAt += Date().timeIntervalSince(reviewStartedAt)
           try Task.checkCancellation()
           guard approved else {
             self.feedback.showInfo("Canceled")
