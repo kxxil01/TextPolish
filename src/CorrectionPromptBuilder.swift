@@ -10,13 +10,13 @@ enum CorrectionRetryReason: Sendable, Equatable {
 
   func promptInstruction(for style: CorrectionStyle) -> String {
     switch self {
-    case .overRewrite where style == .clarify:
+    case .overRewrite where style.rewritesWording:
       return "IMPORTANT: Your previous output changed the text too much. "
         + "This time, keep more of the original wording and only rephrase the parts that are unclear or awkward."
     case .overRewrite:
       return "IMPORTANT: Your previous output changed the text too much. "
         + "This time, keep everything identical except for the minimal characters needed to correct errors."
-    case .lineStructureChanged where style == .clarify:
+    case .lineStructureChanged where style.rewritesWording:
       return "IMPORTANT: Your previous output changed the paragraph layout. Keep every blank line between paragraphs "
         + "and every list item on its own line, and do not add line breaks. Joining lines inside one paragraph is fine."
     case .lineStructureChanged:
@@ -42,7 +42,7 @@ enum CorrectionPromptBuilder {
     extraInstruction: String?,
     style: CorrectionStyle = .minimal
   ) -> PromptPair {
-    var instructions = style == .clarify ? clarifyRules : minimalRules
+    var instructions = rules(for: style)
     instructions.append(contentsOf: formattingRules(for: style))
 
     if let retryReason {
@@ -54,11 +54,11 @@ enum CorrectionPromptBuilder {
     }
 
     if let extraInstruction, !extraInstruction.isEmpty {
-      let scope = style == .clarify ? "keep the meaning unchanged" : "still keep changes minimal"
+      let scope = style.rewritesWording ? "keep the meaning unchanged" : "still keep changes minimal"
       instructions.append("Extra instruction (apply lightly, \(scope)): \(extraInstruction)")
     }
 
-    instructions.append(contentsOf: style == .clarify ? clarifyExamples : minimalExamples)
+    instructions.append(contentsOf: examples(for: style))
 
     instructions.append("Return only the corrected text. No explanations, no quotes, no code fences.")
     instructions.append(
@@ -79,6 +79,16 @@ enum CorrectionPromptBuilder {
   }
 
   // MARK: - Rules
+
+  private static func rules(for style: CorrectionStyle) -> [String] {
+    switch style {
+    case .minimal: return minimalRules
+    case .clarify: return clarifyRules
+    case .shorten: return shortenRules + rewriteSafetyRules
+    case .formal: return formalRules + rewriteSafetyRules
+    case .friendly: return friendlyRules + rewriteSafetyRules
+    }
+  }
 
   private static let minimalRules: [String] = [
     "You are a grammar and typo corrector.",
@@ -111,15 +121,47 @@ enum CorrectionPromptBuilder {
     "If the wording already reads naturally, keep the words unchanged, but still join lines that split a paragraph.",
   ]
 
+  /// Meaning guards shared by Shorter, Formal, and Friendly.
+  private static let rewriteSafetyRules: [String] = [
+    "Keep the meaning exactly. Do not add, drop, or change facts, requests, names, numbers, dates, or commitments, "
+      + "and do not add new ideas.",
+    "Fix spelling, grammar, and punctuation along the way.",
+    "Do not translate. Words in another language stay in that language.",
+  ]
+
+  private static let shortenRules: [String] = [
+    "You are an editor. Make the text shorter and easier to read, as if the same person wrote it in fewer words.",
+    "Cut filler, repetition, hedging, and long-winded phrases. Prefer short sentences and plain words.",
+    "Keep every question and request; shorten how they are said, not what they ask.",
+    "Keep the tone. Casual stays casual, and slang or abbreviations such as pls, tbh, or btw stay.",
+    "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
+    "If the text is already short and direct, keep the words unchanged, but still join lines that split a paragraph.",
+  ]
+
+  private static let formalRules: [String] = [
+    "You are an editor. Rewrite the text in a polite, professional tone suitable for work email or a client, "
+      + "as if the same person wrote it carefully.",
+    "Use complete sentences with standard capitalization and punctuation. "
+      + "Spell out slang and chat abbreviations such as pls, thx, asap, or btw.",
+    "Stay concise and direct: professional, not stiff, and no longer than needed.",
+    "Do not add greetings, sign-offs, apologies, or thanks that are not in the text.",
+  ]
+
+  private static let friendlyRules: [String] = [
+    "You are an editor. Rewrite the text in a warm, friendly, casual tone, as a friendly coworker writes in chat.",
+    "Use simple, natural words and contractions. Soften blunt phrasing without changing what is asked.",
+    "Keep it concise. Do not add emojis, greetings, or sign-offs that are not in the text.",
+    "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
+  ]
+
   private static func formattingRules(for style: CorrectionStyle) -> [String] {
     let layoutRules: [String]
-    switch style {
-    case .minimal:
+    if !style.rewritesWording {
       layoutRules = [
         "Preserve formatting exactly: whitespace, line breaks, indentation, Markdown, emojis, "
           + "mentions (@user, #channel), links, and code blocks.",
       ]
-    case .clarify:
+    } else {
       // AI-written text often puts every sentence on its own line; a person writes flowing paragraphs.
       layoutRules = [
         "Join line breaks that split one paragraph into short lines, so the paragraph flows as normal sentences. "
@@ -138,6 +180,33 @@ enum CorrectionPromptBuilder {
   }
 
   // MARK: - Examples
+
+  private static func examples(for style: CorrectionStyle) -> [String] {
+    switch style {
+    case .minimal: return minimalExamples
+    case .clarify: return clarifyExamples
+    case .shorten: return shortenExamples
+    case .formal: return formalExamples
+    case .friendly: return friendlyExamples
+    }
+  }
+
+  private static let shortenExamples: [String] = [
+    "Example input: <user_text>hi, just want to inform you that I already finished the report and I already uploaded it "
+      + "to the shared folder, so you can check it whenever you have time, thank you</user_text>",
+    "Example output: hi, I've finished the report and uploaded it to the shared folder. "
+      + "check it whenever you have time, thanks",
+  ]
+
+  private static let formalExamples: [String] = [
+    "Example input: <user_text>pls send me the invoice asap, the client keep asking about it</user_text>",
+    "Example output: Please send me the invoice as soon as possible. The client keeps asking about it.",
+  ]
+
+  private static let friendlyExamples: [String] = [
+    "Example input: <user_text>Send me the report by 5pm. I need it for the meeting.</user_text>",
+    "Example output: Could you send me the report by 5pm? I need it for the meeting.",
+  ]
 
   private static let minimalExamples: [String] = [
     "Example input: <user_text>i dont think thats gonna work tbh, lets try tomorow</user_text>",

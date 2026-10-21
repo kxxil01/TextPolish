@@ -221,14 +221,12 @@ extension TextProcessor {
   /// Corrections keep every line. Rewrites may join lines inside a paragraph, but never add lines,
   /// and paragraph breaks and list items must survive.
   func keepsLineStructure(original: String, candidate: String, style: CorrectionStyle) -> Bool {
-    switch style {
-    case .minimal:
+    guard style.rewritesWording else {
       return newlineCount(in: candidate) == newlineCount(in: original)
-    case .clarify:
-      return newlineCount(in: candidate) <= newlineCount(in: original)
-        && blankLineCount(in: candidate) == blankLineCount(in: original)
-        && listItemCount(in: candidate) == listItemCount(in: original)
     }
+    return newlineCount(in: candidate) <= newlineCount(in: original)
+      && blankLineCount(in: candidate) == blankLineCount(in: original)
+      && listItemCount(in: candidate) == listItemCount(in: original)
   }
 
   /// Which acceptance check `candidate` fails, or nil when it can be used.

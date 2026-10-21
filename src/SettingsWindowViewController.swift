@@ -709,6 +709,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         switch style {
         case .natural: return "Natural: improve wording and flow"
         case .minimal: return "Minimal: fix errors only"
+        case .shorter: return "Shorter: cut filler, keep every point"
+        case .formal: return "Formal: polite and professional"
+        case .friendly: return "Friendly: warm and casual"
         }
     }
 

@@ -48,11 +48,17 @@ final class AppPolishStyleTests: XCTestCase {
     let delegate = try makeDelegate()
 
     delegate.debugShowAppPolishStyles(bundleID: discord, name: "Discord")
-    XCTAssertEqual(delegate.debugAppPolishStyleTitles, ["In Discord", "✓ Default (Natural)", "Natural", "Minimal"])
+    XCTAssertEqual(
+      delegate.debugAppPolishStyleTitles,
+      ["In Discord", "✓ Default (Natural)", "Natural", "Minimal", "Shorter", "Formal", "Friendly"]
+    )
 
     delegate.debugSelectAppPolishStyle(title: "Minimal")
     XCTAssertEqual(Settings.loadOrCreateDefault().appPolishStyles, [discord: .minimal])
-    XCTAssertEqual(delegate.debugAppPolishStyleTitles, ["In Discord", "Default (Natural)", "Natural", "✓ Minimal"])
+    XCTAssertEqual(
+      delegate.debugAppPolishStyleTitles,
+      ["In Discord", "Default (Natural)", "Natural", "✓ Minimal", "Shorter", "Formal", "Friendly"]
+    )
 
     delegate.debugSelectAppPolishStyle(title: "Default (Natural)")
     XCTAssertEqual(Settings.loadOrCreateDefault().appPolishStyles, [:])

@@ -34,18 +34,18 @@ enum GeminiRequestPolicy {
   }
 
   /// Corrections keep thinking as low as each model allows (Gemini 2.5 Pro cannot disable it; 128 is its minimum).
-  /// Clarifying rewrites get a small allowance, Google's "low" level, so rephrasing is careful.
+  /// Rewrites get a small allowance, Google's "low" level, so rephrasing is careful.
   static func thinkingConfig(model: String, style: CorrectionStyle = .minimal) -> GeminiGenerationConfig.ThinkingConfig? {
     let normalized = normalize(model)
     let rewriteBudget = 1024
     if normalized.hasPrefix("gemini-2.5-flash") {
-      return .init(thinkingBudget: style == .clarify ? rewriteBudget : 0, thinkingLevel: nil)
+      return .init(thinkingBudget: style.rewritesWording ? rewriteBudget : 0, thinkingLevel: nil)
     }
     if normalized.hasPrefix("gemini-2.5-pro") {
-      return .init(thinkingBudget: style == .clarify ? rewriteBudget : 128, thinkingLevel: nil)
+      return .init(thinkingBudget: style.rewritesWording ? rewriteBudget : 128, thinkingLevel: nil)
     }
     if isGemini3(normalized) {
-      let level = normalized.contains("pro") || style == .clarify ? "low" : "minimal"
+      let level = normalized.contains("pro") || style.rewritesWording ? "low" : "minimal"
       return .init(thinkingBudget: nil, thinkingLevel: level)
     }
     return nil

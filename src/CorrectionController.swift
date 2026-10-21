@@ -616,9 +616,10 @@ final class CorrectionController {
   }
 
   private func showSuccess(for style: CorrectionStyle) {
-    switch style {
-    case .minimal: feedback.showSuccess()
-    case .clarify: feedback.showRewriteSuccess()
+    if style.rewritesWording {
+      feedback.showRewriteSuccess()
+    } else {
+      feedback.showSuccess()
     }
   }
 
