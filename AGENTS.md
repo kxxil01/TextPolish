@@ -36,6 +36,10 @@ Optional extras: a style per app, a shortcut per style, Never Change words, Prev
 6. Paste with ⌘V (re-activating the target app if needed), restore the clipboard, show feedback.
 7. If Learn is on, ask the provider to explain the main changes (`ChangeExplaining`), show `LearnPanel`, save to `LessonHistory`.
 
+### Services (`ServicesProvider`)
+
+Right-click > Services > "Polish with TextPolish" and "Translate to English with TextPolish" are declared under `NSServices` in the Info.plist that `scripts/build_app.sh` writes. macOS hands over the selected text, so Polish skips the copy step (`polish(style:text:)`) and pastes over the selection as usual.
+
 ### Tone flow (`ToneAnalysisController`)
 
 Copy as above, then `ToneAnalyzer.analyze(_:)` (from `ToneAnalyzerFactory`, with provider fallback), then show `ToneAnalysisResultWindow` and restore the clipboard.
@@ -52,7 +56,8 @@ src/
 ├── SelectionProbe.swift            Accessibility check: selected text, nothing selected, or unknown
 ├── KeyboardController.swift, PasteboardController.swift
 │                                   ⌘A/⌘C/⌘V events; clipboard snapshot, restore, wait
-├── HotKeyManager.swift             Carbon hotkeys: Polish, Analyze Tone, optional style shortcuts
+├── HotKeyManager.swift             Carbon hotkeys: Polish, Analyze Tone, Translate, optional style shortcuts
+├── ServicesProvider.swift          Right-click > Services entries
 ├── GrammarCorrector.swift          CorrectionStyle and the corrector protocol
 ├── CorrectorFactory.swift          Builds the corrector for the selected provider
 ├── OpenAICorrector.swift, GeminiCorrector.swift, AnthropicCorrector.swift, OpenRouterCorrector.swift

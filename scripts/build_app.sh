@@ -152,6 +152,43 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
   ${SPARKLE_AUTOMATIC_CHECKS}
   <key>SUScheduledCheckInterval</key>
   <integer>21600</integer>
+  <key>NSServices</key>
+  <array>
+    <dict>
+      <key>NSMenuItem</key>
+      <dict>
+        <key>default</key>
+        <string>Polish with ${APP_NAME}</string>
+      </dict>
+      <key>NSMessage</key>
+      <string>polishService</string>
+      <key>NSPortName</key>
+      <string>${APP_NAME}</string>
+      <key>NSSendTypes</key>
+      <array>
+        <string>public.utf8-plain-text</string>
+      </array>
+      <key>NSRequiredContext</key>
+      <dict/>
+    </dict>
+    <dict>
+      <key>NSMenuItem</key>
+      <dict>
+        <key>default</key>
+        <string>Translate to English with ${APP_NAME}</string>
+      </dict>
+      <key>NSMessage</key>
+      <string>translateService</string>
+      <key>NSPortName</key>
+      <string>${APP_NAME}</string>
+      <key>NSSendTypes</key>
+      <array>
+        <string>public.utf8-plain-text</string>
+      </array>
+      <key>NSRequiredContext</key>
+      <dict/>
+    </dict>
+  </array>
 </dict>
 </plist>
 EOF

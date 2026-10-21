@@ -217,14 +217,21 @@ final class CorrectionController {
   }
 
   /// Polishes the selection, or the whole field when nothing is selected.
-  func polish(style: CorrectionStyle, targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
-    run(style: style, targetApplication: targetApplication, timingsOverride: timingsOverride)
+  /// `text` is the selection when the caller already has it, as a Services request does; nothing is copied then.
+  func polish(
+    style: CorrectionStyle,
+    targetApplication: NSRunningApplication? = nil,
+    timingsOverride: Timings? = nil,
+    text: String? = nil
+  ) {
+    run(style: style, targetApplication: targetApplication, timingsOverride: timingsOverride, providedText: text)
   }
 
   private func run(
     style: CorrectionStyle,
     targetApplication: NSRunningApplication?,
-    timingsOverride: Timings?
+    timingsOverride: Timings?,
+    providedText: String?
   ) {
     guard !isRunning else {
       maybeShowBusyFeedback()
@@ -276,8 +283,13 @@ final class CorrectionController {
           }
         }
 
-        let input = try await self.copyInput(targetPID: target.pid, timings: timings, deadline: state.deadline) {
-          ownedClipboardChangeCount = $0
+        let input: CopiedInput
+        if let providedText {
+          input = CopiedInput(text: providedText, selection: .selected, wholeField: false)
+        } else {
+          input = try await self.copyInput(targetPID: target.pid, timings: timings, deadline: state.deadline) {
+            ownedClipboardChangeCount = $0
+          }
         }
         try Task.checkCancellation()
         guard !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
