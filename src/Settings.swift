@@ -309,6 +309,8 @@ struct Settings: Codable {
   var polishStyle: PolishStyle
   /// Words Polish must keep exactly as written, such as names, product terms, or words in another language.
   var protectedTerms: [String]
+  /// Style chosen for one app, keyed by bundle identifier. Wins over the default style in that app.
+  var appPolishStyles: [String: PolishStyle]
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
   var enableGeminiOpenRouterFallback: Bool
@@ -362,6 +364,7 @@ struct Settings: Codable {
     correctionLanguage: CorrectionLanguage = .auto,
     polishStyle: PolishStyle = .natural,
     protectedTerms: [String] = [],
+    appPolishStyles: [String: PolishStyle] = [:],
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     enableGeminiOpenRouterFallback: Bool = false,
@@ -402,6 +405,7 @@ struct Settings: Codable {
     self.correctionLanguage = correctionLanguage
     self.polishStyle = polishStyle
     self.protectedTerms = protectedTerms
+    self.appPolishStyles = appPolishStyles
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
@@ -446,6 +450,7 @@ struct Settings: Codable {
     correctionLanguage = try container.decodeIfPresent(CorrectionLanguage.self, forKey: .correctionLanguage) ?? .auto
     polishStyle = (try? container.decode(PolishStyle.self, forKey: .polishStyle)) ?? .natural
     protectedTerms = (try? container.decodeIfPresent([String].self, forKey: .protectedTerms)) ?? []
+    appPolishStyles = (try? container.decodeIfPresent([String: PolishStyle].self, forKey: .appPolishStyles)) ?? [:]
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     enableGeminiOpenRouterFallback =
@@ -495,6 +500,7 @@ struct Settings: Codable {
     try container.encode(correctionLanguage, forKey: .correctionLanguage)
     try container.encode(polishStyle, forKey: .polishStyle)
     try container.encode(protectedTerms, forKey: .protectedTerms)
+    try container.encode(appPolishStyles, forKey: .appPolishStyles)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
@@ -587,6 +593,29 @@ struct Settings: Codable {
     protectedTerms = Self.normalizedTerms(protectedTerms)
   }
 
+  /// The style Polish uses in an app: the user's choice for it, then the built-in default, then the default style.
+  func polishStyle(forApp bundleIdentifier: String?) -> PolishStyle {
+    guard let bundleIdentifier else { return polishStyle }
+    return appPolishStyles[bundleIdentifier] ?? defaultPolishStyle(forApp: bundleIdentifier)
+  }
+
+  /// The style an app gets when the user has not chosen one for it.
+  func defaultPolishStyle(forApp bundleIdentifier: String) -> PolishStyle {
+    Self.prefersMinimalStyle(bundleIdentifier) ? .minimal : polishStyle
+  }
+
+  /// Terminals and code editors hold commands and code, where rewording does more harm than good.
+  private static let minimalStyleApps: Set<String> = [
+    "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable",
+    "net.kovidgoyal.kitty", "org.alacritty", "com.github.wez.wezterm", "com.apple.dt.Xcode",
+    "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92", "dev.zed.Zed",
+    "com.sublimetext.4", "com.panic.Nova",
+  ]
+
+  private static func prefersMinimalStyle(_ bundleIdentifier: String) -> Bool {
+    minimalStyleApps.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
+  }
+
   /// Splits the Settings field into terms: one per comma or line.
   static func parseProtectedTerms(_ text: String) -> [String] {
     normalizedTerms(text.components(separatedBy: CharacterSet(charactersIn: ",\n")))
@@ -649,6 +678,7 @@ struct Settings: Codable {
     case correctionLanguage
     case polishStyle
     case protectedTerms
+    case appPolishStyles
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
     case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone

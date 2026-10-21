@@ -37,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var polishItem: NSMenuItem?
     private var polishStyleItems: [NSMenuItem] = []
+    private var polishStyleMenu: NSMenu?
+    private var appPolishStyleItems: [NSMenuItem] = []
+    private var appPolishStyleTarget: (bundleID: String, name: String)?
     private var analyzeToneItem: NSMenuItem?
     private var cancelCorrectionItem: NSMenuItem?
     private var checkForUpdatesItem: NSMenuItem?
@@ -196,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func statusItemClicked(_: Any?) {
         captureFrontmostApplication()
+        syncAppPolishStyleItems()
         refreshCorrectionCountIfNewDay()
         refreshToneAnalysisCountIfNewDay()
         updateStatusItemIcon()
@@ -273,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return item
         }
         polishStyleItem.submenu = polishStyleMenu
+        self.polishStyleMenu = polishStyleMenu
 
         let analyzeToneItem = NSMenuItem(
             title: "Analyze Tone",
@@ -861,7 +866,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch id {
         case HotKeyManager.HotKeyID.polish.rawValue:
             correctionController?.polish(
-                style: settings.polishStyle.correctionStyle,
+                style: settings.polishStyle(forApp: target?.bundleIdentifier).correctionStyle,
                 targetApplication: target,
                 timingsOverride: correctionTimings
             )
@@ -880,7 +885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let target = self.lastTargetApplication
             let timings = self.timingsOverride(for: target)
             self.correctionController?.polish(
-                style: self.settings.polishStyle.correctionStyle,
+                style: self.settings.polishStyle(forApp: target?.bundleIdentifier).correctionStyle,
                 targetApplication: target,
                 timingsOverride: timings
             )
@@ -892,6 +897,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard styles.indices.contains(sender.tag) else { return }
         applySettingsMutation { $0.polishStyle = styles[sender.tag] }
         syncHotKeyMenuItems()
+    }
+
+    @objc private func selectAppPolishStyle(_ sender: NSMenuItem) {
+        guard let bundleID = appPolishStyleTarget?.bundleID else { return }
+        let styles = Settings.PolishStyle.allCases
+        // Tags index into the styles; the Default item has no style and clears the app's choice.
+        let chosen = styles.indices.contains(sender.tag) ? styles[sender.tag] : nil
+        applySettingsMutation { $0.appPolishStyles[bundleID] = chosen }
+        syncHotKeyMenuItems()
+    }
+
+    /// Shows a section for the app Polish will act on, so its style can differ from the default.
+    private func syncAppPolishStyleItems() {
+        appPolishStyleTarget = lastTargetApplication.flatMap { app in
+            app.bundleIdentifier.map { (bundleID: $0, name: app.localizedName ?? $0) }
+        }
+        rebuildAppPolishStyleItems()
+    }
+
+    private func rebuildAppPolishStyleItems() {
+        guard let polishStyleMenu else { return }
+        appPolishStyleItems.forEach(polishStyleMenu.removeItem)
+        appPolishStyleItems = []
+        guard let target = appPolishStyleTarget else { return }
+
+        let chosen = settings.appPolishStyles[target.bundleID]
+        let header = NSMenuItem(title: "In \(target.name)", action: nil, keyEquivalent: "")
+        let defaultStyle = settings.defaultPolishStyle(forApp: target.bundleID)
+        let useDefault = NSMenuItem(
+            title: "Default (\(defaultStyle.displayName))",
+            action: #selector(selectAppPolishStyle(_:)),
+            keyEquivalent: ""
+        )
+        useDefault.tag = -1
+        useDefault.state = chosen == nil ? .on : .off
+        var choices = [useDefault]
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() {
+            let item = NSMenuItem(title: style.displayName, action: #selector(selectAppPolishStyle(_:)), keyEquivalent: "")
+            item.tag = index
+            item.state = chosen == style ? .on : .off
+            choices.append(item)
+        }
+        for item in choices {
+            item.target = self
+            item.indentationLevel = 1
+        }
+        appPolishStyleItems = [.separator(), header] + choices
+        appPolishStyleItems.forEach(polishStyleMenu.addItem)
     }
 
     @objc private func cancelActiveOperation() {
@@ -2242,6 +2295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where polishStyleItems.indices.contains(index) {
             polishStyleItems[index].state = settings.polishStyle == style ? .on : .off
         }
+        rebuildAppPolishStyleItems()
 
         analyzeToneItem?.title = "Analyze Tone"
         analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)
@@ -2313,6 +2367,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugSelectedPolishStyleTitle: String? {
             polishStyleItems.first { $0.state == .on }?.title
+        }
+
+        func debugShowAppPolishStyles(bundleID: String, name: String) {
+            appPolishStyleTarget = (bundleID: bundleID, name: name)
+            rebuildAppPolishStyleItems()
+        }
+
+        /// Titles of the per-app section, with a check mark on the chosen item.
+        var debugAppPolishStyleTitles: [String] {
+            appPolishStyleItems.filter { !$0.isSeparatorItem }.map { $0.state == .on ? "✓ \($0.title)" : $0.title }
+        }
+
+        func debugSelectAppPolishStyle(title: String) {
+            guard let item = appPolishStyleItems.first(where: { $0.title == title }) else { return }
+            selectAppPolishStyle(item)
         }
 
         @discardableResult
