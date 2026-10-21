@@ -424,6 +424,16 @@ private struct OpenAIChatCompletionsResponse: Decodable {
 // `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
 extension OpenAICorrector: @unchecked Sendable {}
 
+extension OpenAICorrector: TextGenerating, MessageExplaining {
+  func generateText(_ prompt: PromptPair) async throws -> String {
+    do {
+      return try await generate(prompt: prompt, apiKey: try resolveApiKey(), style: .minimal)
+    } catch let error as OpenAIError {
+      throw Self.error(error, for: endpoint)
+    }
+  }
+}
+
 extension OpenAICorrector: ChangeExplaining {
   func explainChanges(original: String, polished: String) async throws -> [String] {
     do {

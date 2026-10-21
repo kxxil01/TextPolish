@@ -398,6 +398,12 @@ private struct GeminiGenerateContentResponse: Decodable {
 
 extension GeminiCorrector: @unchecked Sendable {}
 
+extension GeminiCorrector: TextGenerating, MessageExplaining {
+  func generateText(_ prompt: PromptPair) async throws -> String {
+    try await generate(prompt: prompt, apiKey: try resolveApiKey(), style: .minimal)
+  }
+}
+
 extension GeminiCorrector: ChangeExplaining {
   func explainChanges(original: String, polished: String) async throws -> [String] {
     let output = try await generate(

@@ -1,5 +1,6 @@
 import AppKit
 
+/// Copies the selection and runs a read-only job on it, restoring the clipboard: Analyze Tone or Explain Message.
 @MainActor
 final class ToneAnalysisController {
   private enum OperationError: LocalizedError {
@@ -9,7 +10,7 @@ final class ToneAnalysisController {
       switch self {
       case .timedOut(let timeout):
         let seconds = max(1, Int(timeout.components.seconds))
-        return "Tone analysis timed out after \(seconds) seconds"
+        return "The request timed out after \(seconds) seconds"
       }
     }
   }
@@ -52,7 +53,7 @@ final class ToneAnalysisController {
   private var operationTimeout: Duration
   private var isRunning = false
   private var currentTask: Task<Void, Never>?
-  private var currentAnalyzerTask: Task<ToneAnalysisResult, Error>?
+  private var cancelCurrentWork: (() -> Void)?
   private var busyFeedbackGate = FeedbackCooldown(cooldown: .milliseconds(900))
   private let onSuccess: (() -> Void)?
 
@@ -98,31 +99,88 @@ final class ToneAnalysisController {
   func cancelCurrentAnalysis() -> Bool {
     guard isRunning, let currentTask else { return false }
     currentTask.cancel()
-    // Also cancel the analyzer task if it's running
-    currentAnalyzerTask?.cancel()
+    // Also cancel the provider request if it's running
+    cancelCurrentWork?()
     return true
   }
 
-  // Legacy hotspot: split this up before removing the suppression.
-  // swiftlint:disable:next function_body_length
   func analyzeSelection(targetApplication: NSRunningApplication? = nil, timingsOverride: Timings? = nil) {
+    let analyzer = analyzer
+    let job = SelectionJob(
+      operation: .toneAnalysis,
+      progressMessage: "Analyzing tone...",
+      reporting: analyzer as? DiagnosticsProviderReporting,
+      retryReporting: analyzer as? RetryReporting,
+      perform: { [weak self] text, deadline in
+        guard let self else { return }
+        let result = try await self.runWithDeadline(deadline) { try await analyzer.analyze(text) }
+        self.resultPresenter.showResult(result)
+      },
+      showError: { [weak self] message in
+        self?.resultPresenter.showError(message)
+      }
+    )
+    run(job, targetApplication: targetApplication, timingsOverride: timingsOverride)
+  }
+
+  /// Explain Message: copies the selection and shows what it means. `onExplained` gets the message, for Reply.
+  func explainSelection(
+    explainer: MessageExplaining,
+    language: Settings.ExplanationLanguage,
+    presenter: MessageExplanationPresenting,
+    targetApplication: NSRunningApplication? = nil,
+    timingsOverride: Timings? = nil,
+    onExplained: (@MainActor (String) -> Void)? = nil
+  ) {
+    let job = SelectionJob(
+      operation: .messageExplanation,
+      progressMessage: "Explaining...",
+      reporting: explainer as? DiagnosticsProviderReporting,
+      retryReporting: explainer as? RetryReporting,
+      perform: { [weak self] text, deadline in
+        guard let self else { return }
+        let explanation = try await self.runWithDeadline(deadline) { try await explainer.explainMessage(text, in: language) }
+        presenter.show(explanation: explanation)
+        TPLogger.log("Explain: chars=\(text.count) phrases=\(explanation.phrases.count)")
+        onExplained?(text)
+      },
+      showError: { [weak self] message in
+        self?.feedback.showError(message)
+      }
+    )
+    run(job, targetApplication: targetApplication, timingsOverride: timingsOverride)
+  }
+
+  /// One read-only use of the selection: Analyze Tone or Explain Message.
+  private struct SelectionJob {
+    let operation: DiagnosticsOperation
+    let progressMessage: String
+    let reporting: DiagnosticsProviderReporting?
+    let retryReporting: RetryReporting?
+    let perform: @MainActor (String, ContinuousClock.Instant) async throws -> Void
+    let showError: @MainActor (String) -> Void
+
+    var providerModel: (Settings.Provider, String) {
+      reporting.map { ($0.diagnosticsProvider, $0.diagnosticsModel) } ?? (.gemini, "Unknown")
+    }
+
+    var retryCount: Int {
+      retryReporting?.lastRetryCount ?? 0
+    }
+  }
+
+  /// Copies the selection, runs the job on it, and restores the clipboard, recording the outcome for Diagnostics.
+  private func run(_ job: SelectionJob, targetApplication: NSRunningApplication?, timingsOverride: Timings?) {
     guard !isRunning else {
       maybeShowBusyFeedback()
       return
     }
     isRunning = true
-    let analyzer = analyzer
     let timings = timingsOverride ?? timings
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
-      let operationStartedAt = Date()
+      let startedAt = Date()
       let deadline = ContinuousClock.now + self.operationTimeout
-      let resolveProviderModel: () -> (Settings.Provider, String) = {
-        if let reporting = analyzer as? DiagnosticsProviderReporting {
-          return (reporting.diagnosticsProvider, reporting.diagnosticsModel)
-        }
-        return (.gemini, "Unknown")
-      }
       defer {
         self.isRunning = false
         self.currentTask = nil
@@ -130,32 +188,12 @@ final class ToneAnalysisController {
 
       guard self.keyboard.isAccessibilityTrusted(prompt: true) else {
         self.feedback.showError("Enable Accessibility")
-        let (provider, model) = resolveProviderModel()
-        DiagnosticsStore.shared.recordFailure(
-          operation: .toneAnalysis,
-          provider: provider,
-          model: model,
-          latencySeconds: nil,
-          retryCount: 0,
-          fallbackCount: 0,
-          message: "Accessibility permission required",
-          error: nil
-        )
+        self.recordFailure(job, message: "Accessibility permission required", latency: nil, error: nil)
         return
       }
 
       do {
-        let currentPid = ProcessInfo.processInfo.processIdentifier
-        let appToActivate: NSRunningApplication? = {
-          if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
-          if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
-          return nil
-        }()
-        if let appToActivate, !appToActivate.isActive {
-          _ = appToActivate.activate(options: [])
-          try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
-        }
-
+        try await self.activate(targetApplication, timings: timings, deadline: deadline)
         let snapshot = self.pasteboard.snapshot()
         var ownedClipboardChangeCount: Int?
         defer {
@@ -173,75 +211,71 @@ final class ToneAnalysisController {
         )
         try Task.checkCancellation()
 
-        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           self.feedback.showError("No text selected")
-          let (provider, model) = resolveProviderModel()
-          DiagnosticsStore.shared.recordFailure(
-            operation: .toneAnalysis,
-            provider: provider,
-            model: model,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: 0,
-            fallbackCount: 0,
-            message: "No text selected",
-            error: nil
-          )
+          self.recordFailure(job, message: "No text selected", latency: Date().timeIntervalSince(startedAt), error: nil)
           return
         }
 
-        self.feedback.showInfo("Analyzing tone...")
-
-        let result = try await self.runAnalyzer(analyzer, text: inputText, deadline: deadline)
+        self.feedback.showInfo(job.progressMessage)
+        try await job.perform(inputText, deadline)
         try Task.checkCancellation()
-
-        self.resultPresenter.showResult(result)
-        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
-        let (provider, model) = resolveProviderModel()
         DiagnosticsStore.shared.recordSuccess(
-          operation: .toneAnalysis,
-          provider: provider,
-          model: model,
-          latencySeconds: Date().timeIntervalSince(operationStartedAt),
-          retryCount: retryCount,
+          operation: job.operation,
+          provider: job.providerModel.0,
+          model: job.providerModel.1,
+          latencySeconds: Date().timeIntervalSince(startedAt),
+          retryCount: job.retryCount,
           fallbackCount: 0
         )
         self.onSuccess?()
       } catch is CancellationError {
         self.feedback.showInfo("Canceled")
-        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
-        let (provider, model) = resolveProviderModel()
         DiagnosticsStore.shared.recordNote(
-          operation: .toneAnalysis,
-          provider: provider,
-          model: model,
-          latencySeconds: Date().timeIntervalSince(operationStartedAt),
-          retryCount: retryCount,
+          operation: job.operation,
+          provider: job.providerModel.0,
+          model: job.providerModel.1,
+          latencySeconds: Date().timeIntervalSince(startedAt),
+          retryCount: job.retryCount,
           fallbackCount: 0,
           message: "Canceled",
           updateHealth: false
         )
       } catch {
-        let message =
-          (error as? LocalizedError)?.errorDescription ??
-          (error as NSError).localizedDescription
-        self.resultPresenter.showError(message)
-        let retryCount = (analyzer as? RetryReporting)?.lastRetryCount ?? 0
-        let (provider, model) = resolveProviderModel()
-        DiagnosticsStore.shared.recordFailure(
-          operation: .toneAnalysis,
-          provider: provider,
-          model: model,
-          latencySeconds: Date().timeIntervalSince(operationStartedAt),
-          retryCount: retryCount,
-          fallbackCount: 0,
-          message: message,
-          error: error
-        )
-        TPLogger.log("Tone analysis error: \(error)")
+        let message = (error as? LocalizedError)?.errorDescription ?? (error as NSError).localizedDescription
+        job.showError(message)
+        self.recordFailure(job, message: message, latency: Date().timeIntervalSince(startedAt), error: error)
+        TPLogger.log("\(job.operation.rawValue) error: \(error)")
       }
     }
     currentTask = task
+  }
+
+  /// Brings back the app the selection is in, never TextPolish itself.
+  private func activate(_ targetApplication: NSRunningApplication?, timings: Timings, deadline: ContinuousClock.Instant) async throws {
+    let currentPid = ProcessInfo.processInfo.processIdentifier
+    let appToActivate: NSRunningApplication? = {
+      if let targetApplication, targetApplication.processIdentifier != currentPid { return targetApplication }
+      if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost.processIdentifier != currentPid { return frontmost }
+      return nil
+    }()
+    if let appToActivate, !appToActivate.isActive {
+      _ = appToActivate.activate(options: [])
+      try await sleepRespectingDeadline(timings.activationDelay, until: deadline)
+    }
+  }
+
+  private func recordFailure(_ job: SelectionJob, message: String, latency: Double?, error: Error?) {
+    DiagnosticsStore.shared.recordFailure(
+      operation: job.operation,
+      provider: job.providerModel.0,
+      model: job.providerModel.1,
+      latencySeconds: latency,
+      retryCount: job.retryCount,
+      fallbackCount: 0,
+      message: message,
+      error: error
+    )
   }
 
   private func maybeShowBusyFeedback() {
@@ -322,23 +356,23 @@ final class ToneAnalysisController {
     "GC_COPY_SENTINEL_" + UUID().uuidString
   }
 
-  private func runAnalyzer(
-    _ analyzer: ToneAnalyzer,
-    text: String,
-    deadline: ContinuousClock.Instant
-  ) async throws -> ToneAnalysisResult {
+  /// Runs `work` off the main thread and stops waiting at the deadline or when the user cancels.
+  private func runWithDeadline<T: Sendable>(
+    _ deadline: ContinuousClock.Instant,
+    _ work: @escaping @Sendable () async throws -> T
+  ) async throws -> T {
     let remaining = try remainingDuration(until: deadline)
     let timeoutError = OperationError.timedOut(operationTimeout)
     let task = Task.detached(priority: .userInitiated) {
-      try await analyzer.analyze(text)
+      try await work()
     }
-    currentAnalyzerTask = task
+    cancelCurrentWork = { task.cancel() }
     defer {
-      currentAnalyzerTask = nil
+      cancelCurrentWork = nil
       task.cancel()
     }
     return try await withTaskCancellationHandler {
-      let result = try await withThrowingTaskGroup(of: ToneAnalysisResult.self) { group in
+      let result = try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask {
           try await task.value
         }

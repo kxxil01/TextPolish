@@ -65,6 +65,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var polishField: KeyComboField!
     var analyzeToneField: KeyComboField!
     var translateField: KeyComboField!
+    var explainField: KeyComboField!
+    var explanationLanguagePopup: NSPopUpButton!
     /// Optional shortcuts that Polish in one style, in `Settings.PolishStyle.allCases` order.
     var styleHotKeyFields: [KeyComboField] = []
     private var styleHotKeyClearButtons: [NSButton] = []
@@ -205,6 +207,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         analyzeToneField = KeyComboField(frame: .zero)
         translateField = KeyComboField(frame: .zero)
         translateField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        explainField = KeyComboField(frame: .zero)
+        explainField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
 
         polishField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
@@ -246,6 +250,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         )
 
         createCustomStyleFields()
+        createExplanationLanguagePopup()
 
         // Keep the default bezeled cell so the field reads as editable; just let it wrap.
         extraInstructionField = NSTextField()
@@ -266,6 +271,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         activeAttField = NSTextField()
         activeAttField.placeholderString = "2"
         activeAttField.delegate = self
+    }
+
+    private func createExplanationLanguagePopup() {
+        explanationLanguagePopup = NSPopUpButton()
+        explanationLanguagePopup.addItems(withTitles: Settings.ExplanationLanguage.allCases.map(\.displayName))
+        explanationLanguagePopup.target = self
+        explanationLanguagePopup.action = #selector(explanationLanguageChanged(_:))
+        explanationLanguagePopup.toolTip = "The language Explain Message writes in"
+    }
+
+    @objc func explanationLanguageChanged(_ sender: NSPopUpButton) {
+        let languages = Settings.ExplanationLanguage.allCases
+        guard settings != nil, languages.indices.contains(sender.indexOfSelectedItem) else { return }
+        settings.explanationLanguage = languages[sender.indexOfSelectedItem]
+        liveSave()
     }
 
     private func createCustomStyleFields() {
@@ -638,6 +658,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ("Polish", polishField),
             ("Analyze Tone", analyzeToneField),
             ("Translate to English", translateField),
+            ("Explain Message", explainField),
         ]
         let rowPitch: CGFloat = 44
         let contentHeight = CGFloat(rows.count - 1) * rowPitch + 26
@@ -735,11 +756,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 206 + 24
+        let generalHeight: CGFloat = 242 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
-        addRow(to: general, label: "Polish Style", y: 180, control: polishStylePopup, controlWidth: nil)
+        addRow(to: general, label: "Polish Style", y: 216, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 211)
+        addRow(to: general, label: "Explain Messages In", y: 180, control: explanationLanguagePopup, controlWidth: nil)
         addSeparator(to: general, y: 175)
         addRow(to: general, label: "Learn", y: 144, control: learnModeCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 139)
@@ -859,6 +882,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
         syncCustomStyleChoice()
         polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
+        explanationLanguagePopup.selectItem(at: Settings.ExplanationLanguage.allCases.firstIndex(of: settings.explanationLanguage) ?? 0)
         customStyleNameField.stringValue = settings.customStyleName
         customStyleInstructionField.stringValue = settings.customStyleInstruction ?? ""
         protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
@@ -1180,6 +1204,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         polishField.loadFromHotKey(settings.hotKeyPolish)
         analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
         translateField.loadFromHotKey(settings.hotKeyTranslate)
+        explainField.loadFromHotKey(settings.hotKeyExplain)
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
             if let hotKey = settings.styleHotKey(for: style) {
                 styleHotKeyFields[index].loadFromHotKey(hotKey)
@@ -1190,12 +1215,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         syncStyleHotKeyClearButtons()
     }
 
-    /// Copies the hotkey fields into `settings`. An empty Polish, Analyze Tone, or Translate field keeps the existing value;
+    /// Copies the hotkey fields into `settings`. An empty Polish, Analyze Tone, Translate, or Explain field keeps the existing value;
     /// an empty style field means that style has no shortcut.
     private func applyHotKeyFields(to settings: inout Settings) {
         settings.hotKeyPolish = polishField.hotKey ?? settings.hotKeyPolish
         settings.hotKeyAnalyzeTone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
         settings.hotKeyTranslate = translateField.hotKey ?? settings.hotKeyTranslate
+        settings.hotKeyExplain = explainField.hotKey ?? settings.hotKeyExplain
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
             settings.styleHotKeys[style.rawValue] = styleHotKeyFields[index].hotKey
         }
@@ -1544,6 +1570,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             ("Polish", settings.hotKeyPolish),
             ("Analyze Tone", settings.hotKeyAnalyzeTone),
             ("Translate to English", settings.hotKeyTranslate),
+            ("Explain Message", settings.hotKeyExplain),
         ]
         let styles = Settings.PolishStyle.allCases.compactMap { style in
             settings.styleHotKey(for: style).map { (name: "Polish as \(settings.displayName(for: style))", value: $0) }
