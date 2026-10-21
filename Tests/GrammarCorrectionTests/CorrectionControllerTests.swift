@@ -152,8 +152,11 @@ final class CorrectionControllerTests: XCTestCase {
 
   private struct SlowCorrector: GrammarCorrector, Sendable {
     let delay: Duration
+    /// Runs once the text has been copied and correction begins.
+    var onStart: (@Sendable () -> Void)?
 
     func correct(_ text: String) async throws -> String {
+      onStart?()
       try await Task.sleep(for: delay)
       return text + "!"
     }
@@ -279,9 +282,10 @@ final class CorrectionControllerTests: XCTestCase {
 
     let keyboard = StubKeyboard(isTrusted: true)
     let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    let started = expectation(description: "correction started")
     let controller = CorrectionController(
       // Long enough that only cancellation ends it, so a slow runner cannot finish it first.
-      corrector: SlowCorrector(delay: .seconds(30)),
+      corrector: SlowCorrector(delay: .seconds(30), onStart: { started.fulfill() }),
       feedback: feedback,
       settings: Settings.loadOrCreateDefault(),
       timings: Self.fastTimings,
@@ -290,7 +294,8 @@ final class CorrectionControllerTests: XCTestCase {
     )
 
     controller.polish(style: .minimal)
-    try? await Task.sleep(for: .milliseconds(20))
+    // Cancel only after the copy, so the clipboard has something to restore.
+    await fulfillment(of: [started], timeout: 1.0)
     XCTAssertTrue(controller.cancelCurrentCorrection())
 
     await fulfillment(of: [completion], timeout: 1.0)

@@ -112,8 +112,13 @@ final class ToneAnalysisControllerTests: XCTestCase {
 
   private struct SlowToneAnalyzer: ToneAnalyzer, Sendable {
     let delay: Duration
+    /// Runs on the main actor after the text has been copied, before analysis finishes.
+    var duringAnalysis: (@MainActor @Sendable () -> Void)?
 
     func analyze(_ text: String) async throws -> ToneAnalysisResult {
+      if let duringAnalysis {
+        await duringAnalysis()
+      }
       try await Task.sleep(for: delay)
       return ToneAnalysisResult(
         tone: .neutral,
@@ -244,19 +249,16 @@ final class ToneAnalysisControllerTests: XCTestCase {
     let feedback = StubFeedback()
     let presenter = StubResultPresenter()
     let pasteboard = StubPasteboard(waitResults: [.success("This is enough text")])
+    // Another app writes to the clipboard while the analysis runs, after TextPolish copied the text.
+    let analyzer = SlowToneAnalyzer(delay: .milliseconds(10), duringAnalysis: { pasteboard.simulateExternalClipboardChange() })
     let controller = ToneAnalysisController(
-      analyzer: SlowToneAnalyzer(delay: .milliseconds(120)),
+      analyzer: analyzer,
       feedback: feedback,
       resultPresenter: presenter,
       timings: Self.fastTimings,
       keyboard: StubKeyboard(isTrusted: true),
       pasteboard: pasteboard
     )
-
-    Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(20))
-      pasteboard.simulateExternalClipboardChange()
-    }
     Task { @MainActor in
       while presenter.shownResults.isEmpty {
         await Task.yield()
