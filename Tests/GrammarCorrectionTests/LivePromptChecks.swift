@@ -65,6 +65,7 @@ final class LivePromptChecks: XCTestCase {
 
     let items = output.split(separator: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
     XCTAssertEqual(items.count, 2, "Each bullet stays on its own line")
+    XCTAssertFalse(output.contains(" \n"), "No trailing spaces added before line breaks")
   }
 
   func testNaturalKeepsCodeAndLinks() async throws {
@@ -161,6 +162,7 @@ final class LivePromptChecks: XCTestCase {
     let output = try await polish(choppy, style: .minimal)
 
     XCTAssertEqual(newlines(in: output), newlines(in: choppy))
+    XCTAssertFalse(output.contains(" \n"), "No trailing spaces added before line breaks")
   }
 
   func testMinimalLeavesCorrectTextAlone() async throws {
