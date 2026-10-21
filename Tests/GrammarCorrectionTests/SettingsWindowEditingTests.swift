@@ -58,6 +58,17 @@ final class SettingsWindowEditingTests: XCTestCase {
   }
 
   @MainActor
+  func testPreviewCheckboxSavesLive() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let checkbox = try XCTUnwrap(viewController.previewBeforePasteCheckbox)
+
+    checkbox.state = .on
+    viewController.previewBeforePasteChanged(checkbox)
+
+    XCTAssertTrue(Settings.loadOrCreateDefault().previewBeforePaste)
+  }
+
+  @MainActor
   func testPolishHotkeyFieldSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
     let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
