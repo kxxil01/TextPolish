@@ -46,18 +46,24 @@ final class WordDiffTests: XCTestCase {
 }
 
 final class PolishReviewPanelTests: XCTestCase {
+  private let choices = [
+    PolishStyleChoice(name: "Natural", style: .clarify),
+    PolishStyleChoice(name: "Formal", style: .formal),
+  ]
+
   @MainActor
   func testPanelReturnsTheChosenButton() async {
     for approve in [true, false] {
       let panel = PolishReviewPanel()
-      let choice = Task { await panel.review(original: "pls check", polished: "please check") }
+      let choice = Task { await panel.review(original: "pls check", polished: "please check", style: .clarify, choices: choices) }
       await waitUntil { panel.debugIsShowing }
 
       XCTAssertTrue(panel.debugStaysOverOtherApps, "The panel must not hide behind the app being polished")
+      XCTAssertEqual(panel.debugStyleNames, ["Natural", "Formal"])
       panel.debugChoose(paste: approve)
 
-      let approved = await choice.value
-      XCTAssertEqual(approved, approve)
+      let decision = await choice.value
+      XCTAssertEqual(decision, approve ? .paste : .cancel)
       XCTAssertFalse(panel.debugIsShowing)
     }
   }
@@ -65,15 +71,79 @@ final class PolishReviewPanelTests: XCTestCase {
   @MainActor
   func testCancelingPolishClosesThePanel() async {
     let panel = PolishReviewPanel()
-    let choice = Task { await panel.review(original: "a", polished: "b") }
+    let choice = Task { await panel.review(original: "a", polished: "b", style: .clarify, choices: choices) }
     await waitUntil { panel.debugIsShowing }
 
     choice.cancel()
 
-    let approved = await choice.value
-    XCTAssertFalse(approved)
+    let decision = await choice.value
+    XCTAssertEqual(decision, .cancel)
     await waitUntil { !panel.debugIsShowing }
     XCTAssertFalse(panel.debugIsShowing)
+  }
+
+  @MainActor
+  func testTryAgainKeepsThePanelUpAndShowsTheNextVersion() async {
+    let panel = PolishReviewPanel()
+    let first = Task { await panel.review(original: "pls check", polished: "please check", style: .clarify, choices: choices) }
+    await waitUntil { panel.debugIsShowing }
+
+    panel.debugTryAgain()
+    let firstDecision = await first.value
+    XCTAssertEqual(firstDecision, .retry(.clarify))
+    XCTAssertTrue(panel.debugIsShowing, "The panel stays while the next version is made")
+    XCTAssertEqual(panel.debugText, "Polishing as Natural\u{2026}")
+
+    let second = Task { await panel.review(original: "pls check", polished: "Please check.", style: .formal, choices: choices) }
+    await waitUntil { panel.debugText?.contains("Please") == true }
+    panel.debugChoose(paste: true)
+    let secondDecision = await second.value
+    XCTAssertEqual(secondDecision, .paste)
+  }
+
+  @MainActor
+  func testChoosingAnotherStyleAsksForIt() async {
+    let panel = PolishReviewPanel()
+    let choice = Task { await panel.review(original: "pls check", polished: "please check", style: .clarify, choices: choices) }
+    await waitUntil { panel.debugIsShowing }
+
+    panel.debugChooseStyle(named: "Formal")
+
+    let decision = await choice.value
+    XCTAssertEqual(decision, .retry(.formal))
+    panel.dismiss()
+    XCTAssertFalse(panel.debugIsShowing)
+  }
+
+  @MainActor
+  func testCancelWhileTryingAgainCancelsTheNextReview() async {
+    let panel = PolishReviewPanel()
+    let first = Task { await panel.review(original: "a", polished: "b", style: .clarify, choices: choices) }
+    await waitUntil { panel.debugIsShowing }
+    panel.debugTryAgain()
+    _ = await first.value
+
+    panel.debugChoose(paste: false)
+    XCTAssertFalse(panel.debugIsShowing)
+
+    let next = await panel.review(original: "a", polished: "c", style: .clarify, choices: choices)
+    XCTAssertEqual(next, .cancel)
+    XCTAssertFalse(panel.debugIsShowing, "The canceled run never shows again")
+  }
+
+  @MainActor
+  func testTranslationShowsTheEnglishTextWithoutAStylePicker() async {
+    let panel = PolishReviewPanel()
+    let choice = Task {
+      await panel.review(original: "tolong cek", polished: "please check", style: .translateToEnglish, choices: [])
+    }
+    await waitUntil { panel.debugIsShowing }
+
+    XCTAssertEqual(panel.debugTitle, "Review Translation")
+    XCTAssertEqual(panel.debugText, "please check")
+    XCTAssertNil(panel.debugStyleNames)
+    panel.debugChoose(paste: true)
+    _ = await choice.value
   }
 
   @MainActor
@@ -88,26 +158,40 @@ final class PolishReviewPanelTests: XCTestCase {
 extension CorrectionControllerTests {
   @MainActor
   final class StubReviewer: PolishReviewing {
-    var approve: Bool
-    private(set) var reviewed: [(original: String, polished: String)] = []
+    private var decisions: [PolishReviewDecision]
+    private(set) var reviewed: [(original: String, polished: String, style: CorrectionStyle)] = []
+    private(set) var offeredChoices: [[PolishStyleChoice]] = []
+    private(set) var dismissCount = 0
 
     init(approve: Bool) {
-      self.approve = approve
+      decisions = [approve ? .paste : .cancel]
     }
 
-    func review(original: String, polished: String) async -> Bool {
-      reviewed.append((original, polished))
-      return approve
+    init(decisions: [PolishReviewDecision]) {
+      self.decisions = decisions
+    }
+
+    func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
+      -> PolishReviewDecision
+    {
+      reviewed.append((original, polished, style))
+      offeredChoices.append(choices)
+      return decisions.isEmpty ? .cancel : decisions.removeFirst()
+    }
+
+    func dismiss() {
+      dismissCount += 1
     }
   }
 
   @MainActor
   func testPreviewApprovedPastesThePolishedText() async {
-    let run = await runPreview(approve: true)
+    let run = await runPreview(reviewer: StubReviewer(approve: true))
     let (keyboard, pasteboard, feedback, reviewer) = (run.keyboard, run.pasteboard, run.feedback, run.reviewer)
 
     XCTAssertEqual(reviewer.reviewed.first?.original, "hello")
     XCTAssertEqual(reviewer.reviewed.first?.polished, "hello!")
+    XCTAssertEqual(reviewer.offeredChoices.first?.map(\.name), ["Natural", "Minimal", "Shorter", "Formal", "Friendly"])
     XCTAssertEqual(keyboard.commandVCount, 1)
     XCTAssertTrue(pasteboard.setStringCalls.contains("hello!"))
     XCTAssertEqual(feedback.successCount, 1)
@@ -115,7 +199,7 @@ extension CorrectionControllerTests {
 
   @MainActor
   func testPreviewCanceledLeavesTheTextAlone() async {
-    let run = await runPreview(approve: false)
+    let run = await runPreview(reviewer: StubReviewer(approve: false))
     let (keyboard, pasteboard, feedback, reviewer) = (run.keyboard, run.pasteboard, run.feedback, run.reviewer)
 
     XCTAssertEqual(reviewer.reviewed.count, 1)
@@ -127,11 +211,46 @@ extension CorrectionControllerTests {
 
   @MainActor
   func testPreviewIsSkippedWhenTheSettingIsOff() async {
-    let run = await runPreview(approve: false, enabled: false)
+    let run = await runPreview(reviewer: StubReviewer(approve: false), enabled: false)
     let (keyboard, reviewer) = (run.keyboard, run.reviewer)
 
     XCTAssertTrue(reviewer.reviewed.isEmpty)
     XCTAssertEqual(keyboard.commandVCount, 1)
+  }
+
+  @MainActor
+  func testAnotherStyleInThePreviewPolishesTheOriginalAgain() async {
+    let corrector = PreviewStyleCorrector()
+    var records: [PolishRecord] = []
+    let run = await runPreview(
+      reviewer: StubReviewer(decisions: [.retry(.formal), .paste]),
+      corrector: corrector,
+      onPolished: { records.append($0) }
+    )
+
+    XCTAssertEqual(corrector.styles, [.minimal, .formal])
+    XCTAssertEqual(run.reviewer.reviewed.map(\.polished), ["hello (minimal)", "hello (formal)"])
+    XCTAssertEqual(run.reviewer.reviewed.map(\.original), ["hello", "hello"], "Each try starts from the original")
+    XCTAssertTrue(run.pasteboard.setStringCalls.contains("hello (formal)"))
+    XCTAssertEqual(records.first?.style, .formal)
+    XCTAssertEqual(records.first?.polished, "hello (formal)")
+  }
+
+  @MainActor
+  func testAFailedTryClosesThePreviewAndReportsTheError() async {
+    let corrector = PreviewStyleCorrector(failingStyle: .formal)
+    let run = await runPreview(reviewer: StubReviewer(decisions: [.retry(.formal)]), corrector: corrector)
+
+    XCTAssertEqual(run.reviewer.dismissCount, 1)
+    XCTAssertEqual(run.keyboard.commandVCount, 0)
+    XCTAssertEqual(run.feedback.errorMessages.count, 1)
+  }
+
+  @MainActor
+  func testTranslationPreviewOffersNoStyles() async {
+    let run = await runPreview(reviewer: StubReviewer(approve: true), style: .translateToEnglish)
+
+    XCTAssertEqual(run.reviewer.offeredChoices, [[]])
   }
 
   struct PreviewRun {
@@ -142,27 +261,34 @@ extension CorrectionControllerTests {
   }
 
   @MainActor
-  private func runPreview(approve: Bool, enabled: Bool = true) async -> PreviewRun {
+  private func runPreview(
+    reviewer: StubReviewer,
+    enabled: Bool = true,
+    style: CorrectionStyle = .minimal,
+    corrector: GrammarCorrector = PreviewExclaimingCorrector(),
+    onPolished: (@MainActor (PolishRecord) -> Void)? = nil
+  ) async -> PreviewRun {
     let finished = expectation(description: "polish finished")
     let feedback = StubFeedback()
     feedback.onSuccess = { finished.fulfill() }
     feedback.onInfo = { _ in finished.fulfill() }
+    feedback.onError = { _ in finished.fulfill() }
     let keyboard = StubKeyboard(isTrusted: true)
     let pasteboard = StubPasteboard(waitResults: [.success("hello")])
-    let reviewer = StubReviewer(approve: approve)
     var settings = Settings()
     settings.previewBeforePaste = enabled
     let controller = CorrectionController(
-      corrector: PreviewExclaimingCorrector(),
+      corrector: corrector,
       feedback: feedback,
       settings: settings,
       timings: Self.fastTimings,
       keyboard: keyboard,
       pasteboard: pasteboard,
-      reviewer: reviewer
+      reviewer: reviewer,
+      onPolished: onPolished
     )
 
-    controller.polish(style: .minimal)
+    controller.polish(style: style)
 
     await fulfillment(of: [finished], timeout: 1.0)
     return PreviewRun(keyboard: keyboard, pasteboard: pasteboard, feedback: feedback, reviewer: reviewer)
@@ -172,5 +298,34 @@ extension CorrectionControllerTests {
 private struct PreviewExclaimingCorrector: GrammarCorrector {
   func correct(_ text: String) async throws -> String {
     text + "!"
+  }
+}
+
+/// Marks each result with its style, and can fail one style.
+private final class PreviewStyleCorrector: GrammarCorrector, @unchecked Sendable {
+  struct Failure: Error {}
+
+  private let lock = NSLock()
+  private var recorded: [CorrectionStyle] = []
+  private let failingStyle: CorrectionStyle?
+
+  init(failingStyle: CorrectionStyle? = nil) {
+    self.failingStyle = failingStyle
+  }
+
+  var styles: [CorrectionStyle] {
+    lock.withLock { recorded }
+  }
+
+  func correct(_ text: String) async throws -> String {
+    try await correct(text, style: .minimal)
+  }
+
+  func correct(_ text: String, style: CorrectionStyle) async throws -> String {
+    lock.withLock { recorded.append(style) }
+    if style == failingStyle {
+      throw Failure()
+    }
+    return "\(text) (\(style))"
   }
 }

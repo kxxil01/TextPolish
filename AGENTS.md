@@ -32,7 +32,7 @@ Optional extras: a style per app, a shortcut per style, Never Change words, Prev
 2. Snapshot the clipboard; `SelectionProbe` (Accessibility) decides selection versus whole field (⌘A).
 3. Copy with ⌘C and wait for the clipboard to change (sentinel value).
 4. `GrammarCorrector.correct(_:style:)`: protect code, links, Discord tokens and Never Change terms as placeholders, build the prompt (`CorrectionPromptBuilder`), call the provider, validate, retry with the specific failed check, restore placeholders.
-5. If Preview is on, `PolishReviewPanel` shows the diff (`WordDiff`) and waits for Paste or Cancel.
+5. If Preview is on, `PolishReviewPanel` shows the diff (`WordDiff`, or the plain text for a translation) and waits for Paste, Cancel, or another try (Try Again, or another style), which polishes the original again while the panel stays up.
 6. Paste with ⌘V (re-activating the target app if needed), restore the clipboard, show feedback.
 7. If Learn is on, ask the provider to explain the main changes (`ChangeExplaining`), show `LearnPanel`, save to `LessonHistory`.
 
