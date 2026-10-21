@@ -11,6 +11,17 @@ final class HotKeyManager {
     case analyzeTone = 3
   }
 
+  /// Style shortcuts use IDs from here up, one per `Settings.PolishStyle` in `allCases` order.
+  private static let firstStyleHotKeyID = 10
+
+  static func styleHotKeyID(index: Int) -> Int {
+    firstStyleHotKeyID + index
+  }
+
+  static func styleIndex(forHotKeyID id: Int) -> Int? {
+    id >= firstStyleHotKeyID ? id - firstStyleHotKeyID : nil
+  }
+
   enum HotKeyManagerError: Error {
     case couldNotInstallHandler(OSStatus)
     case couldNotRegisterHotKey(OSStatus)
@@ -23,6 +34,7 @@ final class HotKeyManager {
   private var hotKeyRefs: [Int: EventHotKeyRef] = [:]
   private var registeredPolish: Settings.HotKey?
   private var registeredAnalyzeTone: Settings.HotKey?
+  private var registeredStyles: [Int: Settings.HotKey] = [:]
 
   private static let signature: OSType = 0x47434F52 // 'GCOR'
   private static let eventHotKeyDuplicateErr: OSStatus = -9962
@@ -40,12 +52,18 @@ final class HotKeyManager {
     self.installHandler = installHandler
   }
 
-  func registerHotKeys(polish: Settings.HotKey, analyzeTone: Settings.HotKey) throws {
+  func registerHotKeys(
+    polish: Settings.HotKey,
+    analyzeTone: Settings.HotKey,
+    styles: [Int: Settings.HotKey] = [:]
+  ) throws {
     try installHandlerIfNeeded()
     if registeredPolish == polish,
        registeredAnalyzeTone == analyzeTone,
+       registeredStyles == styles,
        hotKeyRefs[HotKeyID.polish.rawValue] != nil,
-       hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil
+       hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil,
+       styles.keys.allSatisfy({ hotKeyRefs[$0] != nil })
     {
       return
     }
@@ -88,6 +106,19 @@ final class HotKeyManager {
 
     registeredPolish = registerWithFallback(id: polishID, desired: polish, previous: previousPolish)
     registeredAnalyzeTone = registerWithFallback(id: analyzeToneID, desired: analyzeTone, previous: previousAnalyzeTone)
+
+    // Style shortcuts are optional extras: one that fails is skipped without touching the others.
+    registeredStyles = [:]
+    for (id, hotKey) in styles.sorted(by: { $0.key < $1.key }) {
+      do {
+        try registerHotKey(id: id, keyCode: hotKey.keyCode, modifiers: hotKey.modifiers)
+        registeredStyles[id] = hotKey
+      } catch {
+        if firstError == nil {
+          firstError = error
+        }
+      }
+    }
 
     if let firstError {
       throw firstError

@@ -854,17 +854,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try hotKeyManager.registerHotKeys(
                 polish: settings.hotKeyPolish,
-                analyzeTone: settings.hotKeyAnalyzeTone
+                analyzeTone: settings.hotKeyAnalyzeTone,
+                styles: styleHotKeysByID()
             )
         } catch {
             TPLogger.log("Failed to register hotkeys: \(error)")
-            let configured = [
+            let styleShortcuts = Settings.PolishStyle.allCases.compactMap { style in
+                settings.styleHotKey(for: style).map { "Polish as \(style.displayName) \($0.displayString)" }
+            }
+            let configured = ([
                 "Polish \(settings.hotKeyPolish.displayString)",
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
-            ].joined(separator: " • ")
+            ] + styleShortcuts).joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
         }
+    }
+
+    private func styleHotKeysByID() -> [Int: Settings.HotKey] {
+        var result: [Int: Settings.HotKey] = [:]
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() {
+            if let hotKey = settings.styleHotKey(for: style) {
+                result[HotKeyManager.styleHotKeyID(index: index)] = hotKey
+            }
+        }
+        return result
     }
 
     @discardableResult
@@ -891,7 +905,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case HotKeyManager.HotKeyID.analyzeTone.rawValue:
             toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
         default:
-            return false
+            // A style shortcut polishes in that style, whatever style the app normally uses.
+            let styles = Settings.PolishStyle.allCases
+            guard let index = HotKeyManager.styleIndex(forHotKeyID: id), styles.indices.contains(index) else {
+                return false
+            }
+            correctionController?.polish(
+                style: styles[index].correctionStyle,
+                targetApplication: target,
+                timingsOverride: correctionTimings
+            )
         }
 
         return true
