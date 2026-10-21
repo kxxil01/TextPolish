@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let lessonHistory = LessonHistory()
     private var lessonsWindow: LessonsWindow?
     private var recentLessonsItem: NSMenuItem?
+    private var polishUndoer: PolishUndoer?
+    private var undoItem: NSMenuItem?
     private var explanationTask: Task<Void, Never>?
     private var appPolishStyleItems: [NSMenuItem] = []
     private var appPolishStyleTarget: (bundleID: String, name: String)?
@@ -113,29 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let feedback = StatusItemFeedback(statusItem: statusItem, baseImage: initialIcon)
         self.feedback = feedback
-        correctionController = CorrectionController(
-            corrector: CorrectorFactory.make(settings: settings),
-            feedback: feedback,
-            settings: settings,
-            timings: .init(settings: settings),
-            operationTimeout: correctionOperationTimeoutDuration(),
-            recoverer: { [weak self] error in
-                guard let self else { return nil }
-                return await self.recoverFromError(error)
-            },
-            shouldAttemptFallback: { [weak self] error in
-                guard let self else { return false }
-                return self.shouldAttemptFallback(for: error)
-            },
-            selectionStateProvider: { SelectionProbe.state(forProcess: $0) },
-            reviewer: polishReviewPanel,
-            onSuccess: { [weak self] in
-                self?.incrementCorrectionCount()
-            },
-            onPolished: { [weak self] original, polished in
-                self?.explainChangesIfLearning(original: original, polished: polished)
-            }
-        )
+        polishUndoer = PolishUndoer(feedback: feedback)
+        correctionController = makeCorrectionController(feedback: feedback)
 
         let toneResultWindow = ToneAnalysisResultWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
@@ -207,10 +188,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         maybeShowWelcome()
     }
 
+    private func makeCorrectionController(feedback: StatusItemFeedback) -> CorrectionController {
+        CorrectionController(
+            corrector: CorrectorFactory.make(settings: settings),
+            feedback: feedback,
+            settings: settings,
+            timings: .init(settings: settings),
+            operationTimeout: correctionOperationTimeoutDuration(),
+            recoverer: { [weak self] error in
+                guard let self else { return nil }
+                return await self.recoverFromError(error)
+            },
+            shouldAttemptFallback: { [weak self] error in
+                guard let self else { return false }
+                return self.shouldAttemptFallback(for: error)
+            },
+            selectionStateProvider: { SelectionProbe.state(forProcess: $0) },
+            reviewer: polishReviewPanel,
+            onSuccess: { [weak self] in
+                self?.incrementCorrectionCount()
+            },
+            onPolished: { [weak self] record in
+                self?.polishUndoer?.record(record)
+                self?.explainChangesIfLearning(original: record.original, polished: record.polished)
+            }
+        )
+    }
+
     @objc private func statusItemClicked(_: Any?) {
         captureFrontmostApplication()
         syncAppPolishStyleItems()
         syncRecentLessonsItem()
+        syncUndoItem()
         refreshCorrectionCountIfNewDay()
         refreshToneAnalysisCountIfNewDay()
         updateStatusItemIcon()
@@ -300,8 +309,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.polishItem = polishItem
         self.analyzeToneItem = analyzeToneItem
 
+        let undoItem = NSMenuItem(title: "Undo Last Polish", action: nil, keyEquivalent: "")
+        undoItem.target = self
+        undoItem.toolTip = "Puts back the text from before the last Polish, if it is still unchanged"
+        self.undoItem = undoItem
+
         menu.addItem(polishItem)
         menu.addItem(polishStyleItem)
+        menu.addItem(undoItem)
         menu.addItem(analyzeToneItem)
 
         let cancelItem = NSMenuItem(
@@ -1198,6 +1213,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Enabled once a Polish has changed some text that Undo can find again.
+    private func syncUndoItem() {
+        undoItem?.action = polishUndoer?.canUndo == true ? #selector(undoLastPolish) : nil
+    }
+
+    @objc private func undoLastPolish() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self, let undoer = self.polishUndoer else { return }
+            guard self.correctionController?.isBusy != true else {
+                self.feedback?.showInfo("Polish is still running")
+                return
+            }
+            await undoer.undo()
+            self.syncUndoItem()
+        }
     }
 
     /// Disabled until Learn mode has saved a lesson; a menu item without an action is shown disabled.
@@ -2444,6 +2476,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugSelectedPolishStyleTitle: String? {
             polishStyleItems.first { $0.state == .on }?.title
+        }
+
+        var debugUndoEnabled: Bool {
+            undoItem?.action != nil
+        }
+
+        func debugRecordPolish(_ record: PolishRecord) {
+            polishUndoer?.record(record)
+            syncUndoItem()
         }
 
         var debugRecentLessonsEnabled: Bool {

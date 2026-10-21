@@ -30,6 +30,27 @@ enum SelectionProbe {
     return .nothingSelected
   }
 
+  /// Full text of the focused field, or nil when Accessibility cannot read it.
+  static func focusedValue(forProcess pid: pid_t) -> String? {
+    focusedElement(forProcess: pid).flatMap { stringAttribute(kAXValueAttribute, of: $0) }
+  }
+
+  static func focusedSelectedText(forProcess pid: pid_t) -> String? {
+    focusedElement(forProcess: pid).flatMap { stringAttribute(kAXSelectedTextAttribute, of: $0) }
+  }
+
+  /// Selects a range (in UTF-16 units, as Accessibility counts) of the focused field; false when the app refuses.
+  static func selectFocusedRange(_ range: NSRange, forProcess pid: pid_t) -> Bool {
+    guard let element = focusedElement(forProcess: pid) else { return false }
+    var axRange = CFRange(location: range.location, length: range.length)
+    guard let value = AXValueCreate(.cfRange, &axRange) else { return false }
+    return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
+  }
+
+  private static func focusedElement(forProcess pid: pid_t) -> AXUIElement? {
+    elementAttribute(kAXFocusedUIElementAttribute, of: AXUIElementCreateApplication(pid))
+  }
+
   private static func elementAttribute(_ name: String, of element: AXUIElement) -> AXUIElement? {
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
