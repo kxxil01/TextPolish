@@ -163,6 +163,7 @@ final class GeminiToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
             if (200..<300).contains(http.statusCode) {
               let decoded = try JSONDecoder().decode(GeminiToneResponse.self, from: data)
+              UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
               let textParts = decoded.candidates?
                 .first?
                 .content?

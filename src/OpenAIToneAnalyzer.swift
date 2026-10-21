@@ -201,6 +201,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     if (200..<300).contains(http.statusCode) {
       lastRateLimitRetryAfterSeconds = nil
       let decoded = try JSONDecoder().decode(OpenAIToneResponse.self, from: data)
+      UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
       let content = decoded.choices?.first?.message?.content ?? ""
       guard !content.isEmpty else { throw ToneAnalysisError.emptyResponse }
       return content

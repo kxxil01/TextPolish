@@ -80,6 +80,8 @@ src/
 │                                   Secrets: existence checks never read the secret; reads happen off the main thread
 ├── ModelDetector.swift             Detect Model (prefers gpt-4.1-mini for OpenAI)
 ├── Diagnostics.swift, DiagnosticsWindow.swift, RecentLogs.swift
+├── TokenUsage.swift, ModelPricing.swift, UsageLedger.swift
+│                                   Usage This Month in Diagnostics: tokens from each response, list prices, usage.json
 ├── TPLogger.swift                  Public system log lines (subsystem com.kxxil01.TextPolish)
 ├── FeedbackPresenter.swift, FallbackController.swift, UpdateStatus.swift, UpdateCheckFeedback.swift
 └── RetrySupport.swift, APIEndpointPaths.swift, PromptPair.swift, ControllerProtocols.swift, NotificationExtensions.swift
@@ -133,7 +135,7 @@ Model output varies between runs; each check prints its input and output so a fa
 
 ## Settings
 
-File: `~/Library/Application Support/TextPolish/settings.json` (lessons are saved next to it in `lessons.json`).
+File: `~/Library/Application Support/TextPolish/settings.json` (lessons are saved next to it in `lessons.json`, and monthly usage in `usage.json`).
 
 | Field | Default | Description |
 |-------|---------|-------------|

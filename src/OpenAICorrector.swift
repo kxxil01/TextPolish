@@ -322,6 +322,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     if (200..<300).contains(http.statusCode) {
       lastRateLimitRetryAfterSeconds = nil
       let decoded = try JSONDecoder().decode(OpenAIChatCompletionsResponse.self, from: data)
+      UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
       let content = decoded.choices?.first?.message?.content ?? ""
       return content
     }

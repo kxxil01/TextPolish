@@ -130,6 +130,7 @@ final class OpenRouterToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsPro
 
         if (200..<300).contains(http.statusCode) {
           let decoded = try JSONDecoder().decode(OpenRouterToneResponse.self, from: data)
+          UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
           let content = decoded.choices?.first?.message?.content ?? ""
 
           // Check if response is empty

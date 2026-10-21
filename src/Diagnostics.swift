@@ -185,6 +185,7 @@ final class DiagnosticsStore {
       section(title: "Provider Health", lines: healthLines),
       section(title: "Recent Activity", lines: lastActivityLines),
       section(title: "Last Error", lines: lastErrorLines),
+      section(title: "Usage This Month", lines: UsageLedger.shared.summaryLines()),
     ].joined(separator: "\n\n")
   }
 

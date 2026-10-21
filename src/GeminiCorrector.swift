@@ -252,6 +252,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
             if (200..<300).contains(http.statusCode) {
               let decoded = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
+              UsageLedger.shared.record(provider: self.diagnosticsProvider, model: self.model, responseBody: data)
               if let blockReason = decoded.promptFeedback?.blockReason, !blockReason.isEmpty {
                 return .fail(GeminiError.blocked(blockReason))
               }
