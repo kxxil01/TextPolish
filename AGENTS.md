@@ -191,6 +191,18 @@ swift run -c release TextPolish
 swift test
 ```
 
+### Live prompt checks
+
+Before shipping a prompt or model change, run the Polish prompts against a real provider. They are skipped unless `TEXTPOLISH_LIVE_CHECKS=1`, so CI never calls a provider. A run costs a few cents.
+
+```bash
+TEXTPOLISH_LIVE_CHECKS=1 OPENAI_API_KEY=sk-... swift test --filter LivePromptChecks
+# Other providers: TEXTPOLISH_LIVE_PROVIDER=gemini|anthropic|openrouter with that provider's key variable.
+# Another model: TEXTPOLISH_LIVE_MODEL=gpt-5-nano
+```
+
+Model output varies between runs; each check prints its input and output so a failure can be read.
+
 ### Build installer
 
 ```bash
