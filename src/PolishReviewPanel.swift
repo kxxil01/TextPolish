@@ -8,6 +8,7 @@ protocol PolishReviewing: AnyObject {
 }
 
 /// A small panel with the changes highlighted: Return pastes, Escape or closing cancels.
+/// It takes keyboard input without activating TextPolish, so the app being polished stays in front.
 @MainActor
 final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
   private var panel: NSPanel?
@@ -65,13 +66,16 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
 
     let panel = NSPanel(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-      styleMask: [.titled, .closable],
+      styleMask: [.titled, .closable, .nonactivatingPanel],
       backing: .buffered,
       defer: false
     )
     panel.title = "Review Polish"
     panel.isReleasedWhenClosed = false
     panel.level = .floating
+    // Panels hide when their app is inactive by default; TextPolish never becomes active here.
+    panel.hidesOnDeactivate = false
+    panel.becomesKeyOnlyIfNeeded = false
     panel.delegate = self
 
     let content = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -107,13 +111,18 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     panel.contentView = content
     panel.center()
     self.panel = panel
-    NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
   }
 
   #if DEBUG
     var debugIsShowing: Bool {
       panel != nil
+    }
+
+    /// Whether the panel keeps the polished app in front and stays visible while TextPolish is inactive.
+    var debugStaysOverOtherApps: Bool {
+      guard let panel else { return false }
+      return panel.styleMask.contains(.nonactivatingPanel) && !panel.hidesOnDeactivate && panel.level == .floating
     }
 
     func debugChoose(paste approved: Bool) {

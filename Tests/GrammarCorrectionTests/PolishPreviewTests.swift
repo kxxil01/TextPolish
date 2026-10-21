@@ -53,6 +53,7 @@ final class PolishReviewPanelTests: XCTestCase {
       let choice = Task { await panel.review(original: "pls check", polished: "please check") }
       await waitUntil { panel.debugIsShowing }
 
+      XCTAssertTrue(panel.debugStaysOverOtherApps, "The panel must not hide behind the app being polished")
       panel.debugChoose(paste: approve)
 
       let approved = await choice.value
