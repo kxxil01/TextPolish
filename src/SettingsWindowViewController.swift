@@ -63,6 +63,9 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     var polishField: KeyComboField!
     var analyzeToneField: KeyComboField!
+    /// Optional shortcuts that Polish in one style, in `Settings.PolishStyle.allCases` order.
+    var styleHotKeyFields: [KeyComboField] = []
+    private var styleHotKeyClearButtons: [NSButton] = []
 
     // MARK: - Advanced Fields
 
@@ -198,6 +201,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         polishField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+        styleHotKeyFields = Settings.PolishStyle.allCases.map { _ in
+            let field = KeyComboField(frame: .zero)
+            field.onChange = { [weak self] _ in self?.hotkeyDidChange() }
+            return field
+        }
 
         // Advanced
         requestTimeoutField = NSTextField()
@@ -612,11 +620,63 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             rowY -= rowPitch
         }
 
+        y -= cardHeight + 16
+        buildStyleHotKeysCard(in: container, top: y, padding: padding, contentWidth: contentWidth)
+
         if settings != nil {
             loadHotKeyFields(from: settings)
         }
 
         return container
+    }
+
+    /// One optional shortcut per style, each with a Clear button.
+    private func buildStyleHotKeysCard(in container: NSView, top: CGFloat, padding: CGFloat, contentWidth: CGFloat) {
+        var y = top
+        let header = SettingsUI.makeSectionHeader("Polish with a Style")
+        header.frame = NSRect(x: padding + 4, y: y - 16, width: contentWidth - 4, height: 16)
+        header.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(header)
+        y -= 22
+
+        let styles = Settings.PolishStyle.allCases
+        let rowPitch: CGFloat = 44
+        let cardHeight = CGFloat(styles.count - 1) * rowPitch + 26 + 24
+        let card = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
+        container.addSubview(card)
+
+        let cardContent = card.contentView!
+        let clearWidth: CGFloat = 64
+        let fieldWidth = cardContent.frame.width - settingsLabelWidth - 8 - clearWidth - 8
+        styleHotKeyClearButtons = []
+        var rowY = cardContent.frame.height - 26
+        for (index, style) in styles.enumerated() where styleHotKeyFields.indices.contains(index) {
+            let field = styleHotKeyFields[index]
+            let name = "Polish as \(style.displayName)"
+            addRow(to: cardContent, label: style.displayName, y: rowY, control: field, controlWidth: fieldWidth)
+            field.setAccessibilityLabel(name)
+            let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearStyleHotKey(_:)))
+            clearButton.tag = index
+            clearButton.bezelStyle = .rounded
+            clearButton.setAccessibilityLabel("Clear \(name) shortcut")
+            clearButton.frame = NSRect(x: cardContent.frame.width - clearWidth, y: rowY - 1, width: clearWidth, height: 28)
+            clearButton.autoresizingMask = [.minXMargin]
+            cardContent.addSubview(clearButton)
+            styleHotKeyClearButtons.append(clearButton)
+            if index < styles.count - 1 {
+                addSeparator(to: cardContent, y: rowY - (rowPitch - 26) / 2)
+            }
+            rowY -= rowPitch
+        }
+    }
+
+    @objc func clearStyleHotKey(_ sender: NSButton) {
+        let styles = Settings.PolishStyle.allCases
+        guard settings != nil, styles.indices.contains(sender.tag), styleHotKeyFields.indices.contains(sender.tag) else { return }
+        styleHotKeyFields[sender.tag].clearHotKey()
+        settings.styleHotKeys[styles[sender.tag].rawValue] = nil
+        liveSave()
+        syncStyleHotKeyClearButtons()
     }
 
     // MARK: - Advanced Section Layout
@@ -1028,17 +1088,37 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         settings = updated
         liveSave()
+        syncStyleHotKeyClearButtons()
+    }
+
+    /// Clear only does something when the style has a shortcut.
+    private func syncStyleHotKeyClearButtons() {
+        for (button, field) in zip(styleHotKeyClearButtons, styleHotKeyFields) {
+            button.isEnabled = field.hotKey != nil
+        }
     }
 
     private func loadHotKeyFields(from settings: Settings) {
         polishField.loadFromHotKey(settings.hotKeyPolish)
         analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
+            if let hotKey = settings.styleHotKey(for: style) {
+                styleHotKeyFields[index].loadFromHotKey(hotKey)
+            } else {
+                styleHotKeyFields[index].clearHotKey()
+            }
+        }
+        syncStyleHotKeyClearButtons()
     }
 
-    /// Copies the hotkey fields into `settings`; an empty field keeps the existing value.
+    /// Copies the hotkey fields into `settings`. An empty Polish or Analyze Tone field keeps the existing value;
+    /// an empty style field means that style has no shortcut.
     private func applyHotKeyFields(to settings: inout Settings) {
         settings.hotKeyPolish = polishField.hotKey ?? settings.hotKeyPolish
         settings.hotKeyAnalyzeTone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
+        for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
+            settings.styleHotKeys[style.rawValue] = styleHotKeyFields[index].hotKey
+        }
     }
 
     private func saveCurrentProviderApiKey() {
@@ -1352,10 +1432,14 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     // MARK: - Hotkey Validation
 
     private static func namedHotKeys(in settings: Settings) -> [(name: String, value: Settings.HotKey)] {
-        [
+        let main: [(name: String, value: Settings.HotKey)] = [
             ("Polish", settings.hotKeyPolish),
             ("Analyze Tone", settings.hotKeyAnalyzeTone),
         ]
+        let styles = Settings.PolishStyle.allCases.compactMap { style in
+            settings.styleHotKey(for: style).map { (name: "Polish as \(style.displayName)", value: $0) }
+        }
+        return main + styles
     }
 
     private func validateHotKeys(in candidate: Settings, current: Settings) -> String? {

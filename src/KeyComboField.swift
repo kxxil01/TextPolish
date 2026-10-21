@@ -182,6 +182,14 @@ class KeyComboField: NSView {
         keyDownMonitor != nil
     }
 
+    /// Shows the field as unset without reporting a change, for optional shortcuts.
+    func clearHotKey() {
+        let savedCallback = onChange
+        onChange = nil
+        hotKey = nil
+        onChange = savedCallback
+    }
+
     func loadFromHotKey(_ hotKey: Settings.HotKey) {
         let savedCallback = onChange
         onChange = nil
