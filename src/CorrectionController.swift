@@ -138,6 +138,7 @@ final class CorrectionController {
   private nonisolated(unsafe) var localEscapeMonitor: Any?
   private let frontmostApplicationPIDProvider: @MainActor () -> pid_t?
   private let applicationResolver: @MainActor (pid_t) -> NSRunningApplication?
+  private let applicationActivator: @MainActor (NSRunningApplication) -> Void
   private let selectionStateProvider: @MainActor (pid_t?) -> SelectionState
   private let reviewer: PolishReviewing?
 
@@ -154,6 +155,7 @@ final class CorrectionController {
     fallbackCorrectorFactory: (@MainActor () -> GrammarCorrector?)? = nil,
     frontmostApplicationPIDProvider: (@MainActor () -> pid_t?)? = nil,
     applicationResolver: (@MainActor (pid_t) -> NSRunningApplication?)? = nil,
+    applicationActivator: (@MainActor (NSRunningApplication) -> Void)? = nil,
     selectionStateProvider: (@MainActor (pid_t?) -> SelectionState)? = nil,
     reviewer: PolishReviewing? = nil,
     addGlobalKeyMonitor: GlobalKeyMonitorInstaller? = nil,
@@ -178,6 +180,7 @@ final class CorrectionController {
     self.applicationResolver = applicationResolver ?? { pid in
       NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
     }
+    self.applicationActivator = applicationActivator ?? { _ = $0.activate(options: []) }
     // Unknown by default so tests never depend on whichever app is focused; the app injects SelectionProbe.
     self.selectionStateProvider = selectionStateProvider ?? { _ in .unknown }
     self.reviewer = reviewer
@@ -441,9 +444,12 @@ final class CorrectionController {
           throw OperationError.clipboardChanged
         }
         if let targetPID, self.frontmostApplicationPIDProvider() != targetPID {
-          if let appToActivate = self.applicationResolver(targetPID), !appToActivate.isActive {
-            _ = appToActivate.activate(options: [])
-            try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+          if let appToActivate = self.applicationResolver(targetPID) {
+            self.applicationActivator(appToActivate)
+            // Switching back can take longer than one activation delay, for example after the preview panel.
+            for _ in 0..<10 where self.frontmostApplicationPIDProvider() != targetPID {
+              try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+            }
           }
           guard self.frontmostApplicationPIDProvider() == targetPID else {
             throw OperationError.targetApplicationChanged

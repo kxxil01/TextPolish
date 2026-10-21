@@ -615,6 +615,35 @@ final class CorrectionControllerTests: XCTestCase {
   }
 
   @MainActor
+  func testPasteWaitsForTheTargetAppToComeBackToTheFront() async {
+    let completion = expectation(description: "pasted")
+    let feedback = StubFeedback()
+    feedback.onSuccess = { completion.fulfill() }
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [.success("hello")])
+    // Target 101 is frontmost while copying, then the preview panel (202) holds focus for a few checks.
+    var frontmostPIDs: [pid_t?] = [101, 202, 202, 202]
+    var activations = 0
+    let controller = CorrectionController(
+      corrector: AppendCorrector(),
+      feedback: feedback,
+      settings: Settings.loadOrCreateDefault(),
+      timings: Self.fastTimings,
+      keyboard: keyboard,
+      pasteboard: pasteboard,
+      frontmostApplicationPIDProvider: { frontmostPIDs.isEmpty ? 101 : frontmostPIDs.removeFirst() },
+      applicationResolver: { _ in NSRunningApplication.current },
+      applicationActivator: { _ in activations += 1 }
+    )
+
+    controller.polish(style: .minimal)
+
+    await fulfillment(of: [completion], timeout: 1.0)
+    XCTAssertEqual(activations, 1)
+    XCTAssertEqual(keyboard.commandVCount, 1)
+  }
+
+  @MainActor
   func testRecovererUsesFallbackCorrector() async {
     // SKIPPED: This test requires valid API keys to test fallback behavior
     // FallbackControllerTests covers the fallback UI flow without requiring API keys
