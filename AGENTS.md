@@ -10,6 +10,7 @@ Technical documentation for contributors and AI coding agents.
 
 1. **Polish** (`⌃⌥⌘G`): polishes the selection, or the whole field when nothing is selected, in one of five styles: Natural (default), Minimal, Shorter, Formal, Friendly, plus an optional Custom style the user describes.
 2. **Analyze Tone** (`⌃⌥⌘T`): explains how the selected text comes across, in a result window.
+5. **Reply in English** (`⌃⌥⌘R`): the Polish flow with `.reply(to:)`, carrying the last explained message (`ReplyContext`, in memory for 15 minutes) as context; checked like a translation.
 4. **Explain Message** (`⌃⌥⌘U`): copies the selection through `ToneAnalysisController` (a read-only selection job, like Analyze Tone), asks the provider through `MessageExplaining` (built on `TextGenerating`), and shows the meaning, tone, and phrases in a `LearnPanel`.
 3. **Translate to English** (`⌃⌥⌘E`): the Polish flow with the `translateToEnglish` style; the similarity floor is off, the number, placeholder, and layout checks still apply, and Learn mode skips it.
 
@@ -157,6 +158,7 @@ File: `~/Library/Application Support/TextPolish/settings.json` (lessons are save
 | `styleHotKeys` | `{}` | Optional shortcut per style, keyed by style |
 | `hotKeyTranslate` | `⌃⌥⌘E` | Translate to English |
 | `hotKeyExplain` | `⌃⌥⌘U` | Explain Message |
+| `hotKeyReply` | `⌃⌥⌘R` | Reply in English |
 | `explanationLanguage` | `indonesian` | `indonesian` or `simpleEnglish`, the language Explain Message writes in |
 | `protectedTerms` | `[]` | Never Change words |
 | `previewBeforePaste` | `false` | Confirm before pasting |

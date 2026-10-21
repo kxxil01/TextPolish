@@ -176,6 +176,26 @@ final class LivePromptChecks: XCTestCase {
     }
   }
 
+  func testReplyAnswersInEnglishAndKeepsTheDraftsFacts() async throws {
+    let input = "oke nanti gw kirim sebelum jam 3 ya"
+    let output = try await polish(input, style: .reply(answering: "Can you send the deck before the 3pm call?"))
+
+    XCTAssertTrue(output.contains("3"), "Kept the time")
+    XCTAssertTrue(output.lowercased().contains("send"))
+    XCTAssertFalse(output.lowercased().contains("kirim"), "Written in English")
+  }
+
+  func testExplainGivesTheMeaningInIndonesian() async throws {
+    let explainer = try XCTUnwrap(corrector as? MessageExplaining)
+    let message = "Can you ping me EOD with a heads-up if the build slips?"
+    let explanation = try await explainer.explainMessage(message, in: .indonesian)
+    print("[LivePromptChecks] explain\n  in:  \(message)\n  out: \(explanation)")
+
+    XCTAssertFalse(explanation.meaning.isEmpty)
+    XCTAssertNotNil(explanation.tone)
+    XCTAssertFalse(explanation.meaning.lowercased().contains("can you"), "Written in Indonesian")
+  }
+
   func testLearnExplainsTheMainChanges() async throws {
     let explainer = try XCTUnwrap(corrector as? ChangeExplaining)
     let original = "I compiled everything and added status progress, so it can be easier to track"

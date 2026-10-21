@@ -780,9 +780,9 @@ extension CorrectionController {
     }
   }
 
-  /// Styles the preview offers for another try; a translation stays a translation.
+  /// Styles the preview offers for another try; a translation or reply stays one.
   private func previewStyleChoices(for style: CorrectionStyle) -> [PolishStyleChoice] {
-    guard style != .translateToEnglish else { return [] }
+    guard !style.translatesToEnglish else { return [] }
     return settings.availablePolishStyles.map {
       PolishStyleChoice(name: settings.displayName(for: $0), style: settings.correctionStyle(for: $0))
     }

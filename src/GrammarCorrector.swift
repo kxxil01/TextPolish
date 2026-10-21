@@ -14,10 +14,20 @@ enum CorrectionStyle: Sendable, Equatable {
   case custom(String)
   /// Natural English from text in another language, or a mix, as the same person would write it.
   case translateToEnglish
+  /// The writer's draft, in any language, as an English reply to the message they are answering, when known.
+  case reply(answering: String?)
 
   /// Every style except Minimal rewrites wording, so they share the rewrite layout rules and checks.
   var rewritesWording: Bool {
     self != .minimal
+  }
+
+  /// Translate and Reply write English from text that may be in another language, so every word can change.
+  var translatesToEnglish: Bool {
+    switch self {
+    case .translateToEnglish, .reply: return true
+    default: return false
+    }
   }
 
   /// Rewrites change more characters, so they accept lower similarity, but a floor still rejects output that drifts.
@@ -28,7 +38,7 @@ enum CorrectionStyle: Sendable, Equatable {
     // Shortening and changing tone replace more words while keeping the meaning.
     case .shorten, .formal, .friendly, .custom: return min(configured, 0.3)
     // A translation shares few characters with the original, so only the meaning checks apply.
-    case .translateToEnglish: return 0
+    case .translateToEnglish, .reply: return 0
     }
   }
 }
@@ -44,6 +54,7 @@ extension CorrectionStyle: CustomStringConvertible {
     case .friendly: return "friendly"
     case .custom: return "custom"
     case .translateToEnglish: return "translate"
+    case .reply(let message): return message == nil ? "reply" : "reply(context)"
     }
   }
 }
