@@ -42,7 +42,7 @@ final class TranslateTests: XCTestCase {
         original: original, candidate: english.replacingOccurrences(of: "2.500.000", with: "2,500,000"),
         style: .translateToEnglish, minimumSimilarity: 0
       ),
-      .numbersChanged
+      .numbersChanged(["2.500.000"])
     )
     XCTAssertEqual(
       checker.rejectionReason(

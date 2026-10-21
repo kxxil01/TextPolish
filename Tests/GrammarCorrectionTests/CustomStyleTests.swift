@@ -38,7 +38,7 @@ final class CustomStyleTests: XCTestCase {
     let wrongDate = bullets.replacingOccurrences(of: "14", with: "15")
     XCTAssertEqual(
       checker.rejectionReason(original: original, candidate: wrongDate, style: style, minimumSimilarity: 0.3),
-      .numbersChanged
+      .numbersChanged(["14"])
     )
   }
 

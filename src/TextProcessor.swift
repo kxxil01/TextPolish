@@ -264,9 +264,33 @@ extension TextProcessor {
 
   /// Every number in the original appears unchanged in the candidate, so amounts, dates, and times keep their
   /// format: a model rewriting 2.500.000 as 2,500,000 changes how the writer's reader sees it.
-  func keepsNumbers(original: String, candidate: String) -> Bool {
+  func keepsNumbers(original: String, candidate: String, allowsNumberWords: Bool = false) -> Bool {
+    missingNumbers(original: original, candidate: candidate, allowsNumberWords: allowsNumberWords).isEmpty
+  }
+
+  /// The original's numbers that the candidate lost, each once. With `allowsNumberWords`, a small whole number
+  /// written as its word counts as kept: rewording "1 week more" as "one more week" keeps the fact.
+  func missingNumbers(original: String, candidate: String, allowsNumberWords: Bool) -> [String] {
     let candidateNumbers = Set(numberTokens(in: candidate))
-    return numberTokens(in: original).allSatisfy(candidateNumbers.contains)
+    var missing: [String] = []
+    for token in numberTokens(in: original) where !candidateNumbers.contains(token) && !missing.contains(token) {
+      if allowsNumberWords, let word = numberWord(for: token), containsWord(word, in: candidate) {
+        continue
+      }
+      missing.append(token)
+    }
+    return missing
+  }
+
+  /// "one" for "1", up to "ten": the numbers English prose usually spells out.
+  private func numberWord(for token: String) -> String? {
+    let words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+    guard token.allSatisfy(\.isNumber), let value = Int(token), words.indices.contains(value) else { return nil }
+    return words[value]
+  }
+
+  private func containsWord(_ word: String, in text: String) -> Bool {
+    text.range(of: "\\b\(word)\\b", options: [.regularExpression, .caseInsensitive]) != nil
   }
 
   /// Which acceptance check `candidate` fails, or nil when it can be used.
@@ -280,8 +304,9 @@ extension TextProcessor {
     guard keepsLineStructure(original: original, candidate: candidate, style: style) else {
       return .lineStructureChanged
     }
-    guard keepsNumbers(original: original, candidate: candidate) else {
-      return .numbersChanged
+    let missing = missingNumbers(original: original, candidate: candidate, allowsNumberWords: style.rewritesWording)
+    guard missing.isEmpty else {
+      return .numbersChanged(missing)
     }
     guard isSimilarEnough(original: original, candidate: candidate, minimum: minimumSimilarity) else {
       return .overRewrite

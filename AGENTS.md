@@ -192,7 +192,7 @@ The original clipboard is snapshotted before copying and restored afterwards, in
 
 ### Validation and retries
 
-A candidate is rejected when it is a refusal, much longer than the input, drops a placeholder, changes line structure (Minimal keeps every line; other styles may join lines inside a paragraph but must keep blank lines and list items, and add no lines; Custom may change the layout), changes a number, or falls below the similarity floor (configured value for Minimal, at most 0.4 for Natural, 0.3 for Shorter, Formal, Friendly and Custom). The retry prompt names the check that failed. After `maxAttempts`, the paired provider may be tried if fallback is on.
+A candidate is rejected when it is a refusal, much longer than the input, drops a placeholder, changes line structure (Minimal keeps every line; other styles may join lines inside a paragraph but must keep blank lines and list items, and add no lines; Custom may change the layout), changes a number (rewrite styles may spell out 0 to 10 as a word, such as "1 more week" as "one more week"; the retry names the numbers to keep), or falls below the similarity floor (configured value for Minimal, at most 0.4 for Natural, 0.3 for Shorter, Formal, Friendly and Custom). The retry prompt names the check that failed. After `maxAttempts`, the paired provider may be tried if fallback is on.
 
 ### Keychain and the main thread
 

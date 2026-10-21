@@ -7,7 +7,8 @@ enum CorrectionRetryReason: Sendable, Equatable {
   case refusal
   case outputTooLong
   case placeholdersMissing
-  case numbersChanged
+  /// The numbers from the original that the output lost, so the retry can name them.
+  case numbersChanged([String])
 
   func promptInstruction(for style: CorrectionStyle) -> String {
     switch self {
@@ -31,9 +32,24 @@ enum CorrectionRetryReason: Sendable, Equatable {
     case .placeholdersMissing:
       return "IMPORTANT: Your previous output dropped or changed a protected placeholder. "
         + "Copy every ⟦GC_PROTECT_...⟧ token exactly as it appears."
-    case .numbersChanged:
+    case .numbersChanged(let numbers):
       return "IMPORTANT: Your previous output changed a number, amount, date, or time. "
-        + "Copy every number exactly as written in the original, in the same format."
+        + "Copy every number exactly as written in the original, in the same format. "
+        + "Keep these exactly as written: \(numbers.joined(separator: ", "))."
+    }
+  }
+}
+
+extension CorrectionRetryReason: CustomStringConvertible {
+  /// The check's name for logs; the writer's numbers stay out of them.
+  var description: String {
+    switch self {
+    case .overRewrite: return "overRewrite"
+    case .lineStructureChanged: return "lineStructureChanged"
+    case .refusal: return "refusal"
+    case .outputTooLong: return "outputTooLong"
+    case .placeholdersMissing: return "placeholdersMissing"
+    case .numbersChanged: return "numbersChanged"
     }
   }
 }

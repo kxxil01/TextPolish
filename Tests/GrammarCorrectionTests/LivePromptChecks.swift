@@ -87,6 +87,15 @@ final class LivePromptChecks: XCTestCase {
     }
   }
 
+  /// 0.0.79 could not polish this: the model wrote "one more week" and the number check rejected every attempt.
+  func testNaturalPolishesChatWithASmallNumber() async throws {
+    let input = "Gonna extend 1 week more of silence"
+    let output = try await polish(input, style: .clarify)
+
+    XCTAssertTrue(output.contains("1") || output.lowercased().contains("one"), "Kept the number")
+    XCTAssertTrue(output.lowercased().contains("week"))
+  }
+
   func testNaturalKeepsChatAbbreviations() async throws {
     let input = "so please keep future queries to short time ranges with tight filters, ty"
     let output = try await polish(input, style: .clarify)

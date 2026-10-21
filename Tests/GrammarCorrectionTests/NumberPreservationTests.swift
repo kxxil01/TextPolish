@@ -24,7 +24,7 @@ final class NumberPreservationTests: XCTestCase {
     XCTAssertFalse(checker.keepsNumbers(original: original, candidate: reformatted))
     XCTAssertEqual(
       checker.rejectionReason(original: original, candidate: reformatted, style: .clarify, minimumSimilarity: 0.4),
-      .numbersChanged
+      .numbersChanged(["2.500.000"])
     )
   }
 
@@ -33,6 +33,37 @@ final class NumberPreservationTests: XCTestCase {
 
     XCTAssertTrue(checker.keepsNumbers(original: original, candidate: reworded))
     XCTAssertNil(checker.rejectionReason(original: original, candidate: reworded, style: .clarify, minimumSimilarity: 0.4))
+  }
+
+  /// The message that could not be polished in 0.0.79: every rewrite spelled "1" as "one" and was rejected.
+  func testRewritesMaySpellOutASmallNumber() {
+    let message = "Gonna extend 1 week more of silence"
+
+    XCTAssertNil(reason(message, "Gonna extend the silence one more week.", .clarify))
+    XCTAssertNil(reason("back in 5 min", "Back in five minutes.", .friendly))
+    XCTAssertEqual(
+      reason(message, "Gonna extend the silence two more weeks.", .clarify), .numbersChanged(["1"]),
+      "A different number is still a changed fact"
+    )
+    XCTAssertEqual(
+      reason(message, "Gonna extend one week more of silence", .minimal), .numbersChanged(["1"]),
+      "Minimal keeps the digits as written"
+    )
+    XCTAssertEqual(
+      reason("we need 25 seats", "We need twenty-five seats.", .clarify), .numbersChanged(["25"]),
+      "Only small numbers may become words"
+    )
+  }
+
+  private func reason(_ original: String, _ candidate: String, _ style: CorrectionStyle) -> CorrectionRetryReason? {
+    checker.rejectionReason(original: original, candidate: candidate, style: style, minimumSimilarity: 0.2)
+  }
+
+  func testRetryNamesTheNumbersToKeepWithoutLoggingThem() {
+    let reason = CorrectionRetryReason.numbersChanged(["1", "2.500.000"])
+
+    XCTAssertTrue(reason.promptInstruction(for: .clarify).contains("Keep these exactly as written: 1, 2.500.000."))
+    XCTAssertEqual("\(reason)", "numbersChanged", "Logs never carry the writer's numbers")
   }
 
   func testEveryStyleAsksToKeepNumberFormats() {
@@ -74,5 +105,6 @@ extension CorrectorRetryAndPlaceholderTests {
     XCTAssertEqual(result, "pls transfer 2.500.000 rupiah before Friday.")
     XCTAssertEqual(systems.count, 2)
     XCTAssertTrue(systems[1].contains("changed a number, amount, date, or time"))
+    XCTAssertTrue(systems[1].contains("Keep these exactly as written: 2.500.000."))
   }
 }
