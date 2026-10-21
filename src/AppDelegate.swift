@@ -40,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
+    private lazy var servicesProvider = ServicesProvider { [weak self] action, text in
+        self?.handleServiceRequest(action, text: text)
+    }
     private let learnPanel = LearnPanel()
     private let lessonHistory = LessonHistory()
     private var lessonsWindow: LessonsWindow?
@@ -118,6 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback = feedback
         polishUndoer = PolishUndoer(feedback: feedback)
         correctionController = makeCorrectionController(feedback: feedback)
+        NSApp.servicesProvider = servicesProvider
+        NSUpdateDynamicServices()
 
         let toneResultWindow = ToneAnalysisResultWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
@@ -766,6 +771,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Right-click > Services: polish or translate the text macOS handed over, in the app it came from.
+    private func handleServiceRequest(_ action: ServicesProvider.Action, text: String) {
+        captureFrontmostApplication()
+        let target = lastTargetApplication
+        let style: CorrectionStyle = action == .translate
+            ? .translateToEnglish
+            : settings.correctionStyle(for: settings.polishStyle(forApp: target?.bundleIdentifier))
+        correctionController?.polish(
+            style: style,
+            targetApplication: target,
+            timingsOverride: timingsOverride(for: target),
+            text: text
+        )
+    }
+
     @objc private func translateToEnglish() {
         runAfterMenuDismissed { [weak self] in
             guard let self else { return }
@@ -1114,6 +1134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         func debugSelectAppPolishStyle(title: String) {
             guard let item = appPolishStyleItems.first(where: { $0.title == title }) else { return }
             selectAppPolishStyle(item)
+        }
+
+        var debugServicesProvider: ServicesProvider {
+            servicesProvider
         }
 
         @discardableResult
