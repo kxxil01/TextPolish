@@ -192,7 +192,7 @@ extension CorrectionControllerTests {
     controller.polish(style: .minimal)
 
     await fulfillment(of: [finished], timeout: 1.0)
-    XCTAssertEqual(records, [PolishRecord(original: "hello", polished: "hello!", processID: 4242)])
+    XCTAssertEqual(records, [PolishRecord(original: "hello", polished: "hello!", processID: 4242, style: .minimal)])
   }
 }
 

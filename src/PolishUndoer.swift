@@ -5,6 +5,7 @@ struct PolishRecord: Equatable, Sendable {
   let original: String
   let polished: String
   let processID: pid_t?
+  var style: CorrectionStyle = .clarify
 }
 
 /// Reads and selects text in the focused field of another app.

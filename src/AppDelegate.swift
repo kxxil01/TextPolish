@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
 
     private var polishItem: NSMenuItem?
+    private var translateItem: NSMenuItem?
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
@@ -210,6 +211,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             onPolished: { [weak self] record in
                 self?.polishUndoer?.record(record)
+                // Every word of a translation changes, so there are no corrections to explain.
+                guard record.style != .translateToEnglish else { return }
                 self?.explainChangesIfLearning(original: record.original, polished: record.polished)
             }
         )
@@ -306,7 +309,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         analyzeToneItem.target = self
 
+        let translateItem = NSMenuItem(title: "Translate to English", action: #selector(translateToEnglish), keyEquivalent: "")
+        translateItem.target = self
+        translateItem.toolTip = "Rewrites the selected text, or the whole field, in natural English"
+
         self.polishItem = polishItem
+        self.translateItem = translateItem
         self.analyzeToneItem = analyzeToneItem
 
         let undoItem = NSMenuItem(title: "Undo Last Polish", action: nil, keyEquivalent: "")
@@ -316,6 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(polishItem)
         menu.addItem(polishStyleItem)
+        menu.addItem(translateItem)
         menu.addItem(undoItem)
         menu.addItem(analyzeToneItem)
 
@@ -675,7 +684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try hotKeyManager.registerHotKeys(
                 polish: settings.hotKeyPolish,
                 analyzeTone: settings.hotKeyAnalyzeTone,
-                styles: styleHotKeysByID()
+                extras: extraHotKeysByID()
             )
         } catch {
             TPLogger.log("Failed to register hotkeys: \(error)")
@@ -685,14 +694,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let configured = ([
                 "Polish \(settings.hotKeyPolish.displayString)",
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
+                "Translate to English \(settings.hotKeyTranslate.displayString)",
             ] + styleShortcuts).joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
         }
     }
 
-    private func styleHotKeysByID() -> [Int: Settings.HotKey] {
-        var result: [Int: Settings.HotKey] = [:]
+    /// Translate, then one shortcut per style that has one.
+    private func extraHotKeysByID() -> [Int: Settings.HotKey] {
+        var result: [Int: Settings.HotKey] = [HotKeyManager.HotKeyID.translate.rawValue: settings.hotKeyTranslate]
         for (index, style) in Settings.PolishStyle.allCases.enumerated() {
             if let hotKey = settings.styleHotKey(for: style) {
                 result[HotKeyManager.styleHotKeyID(index: index)] = hotKey
@@ -724,6 +735,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
         case HotKeyManager.HotKeyID.analyzeTone.rawValue:
             toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
+        case HotKeyManager.HotKeyID.translate.rawValue:
+            correctionController?.polish(style: .translateToEnglish, targetApplication: target, timingsOverride: correctionTimings)
         default:
             // A style shortcut polishes in that style, whatever style the app normally uses.
             let styles = Settings.PolishStyle.allCases
@@ -749,6 +762,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 style: self.settings.correctionStyle(for: self.settings.polishStyle(forApp: target?.bundleIdentifier)),
                 targetApplication: target,
                 timingsOverride: timings
+            )
+        }
+    }
+
+    @objc private func translateToEnglish() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            self.correctionController?.polish(
+                style: .translateToEnglish,
+                targetApplication: target,
+                timingsOverride: self.timingsOverride(for: target)
             )
         }
     }
@@ -928,6 +953,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "Shortcuts:",
             "• Polish (selection, or the whole field): \(settings.hotKeyPolish.displayString)",
             "• Analyze Tone: \(settings.hotKeyAnalyzeTone.displayString)",
+            "• Translate to English: \(settings.hotKeyTranslate.displayString)",
         ].joined(separator: "\n")
 
         alert.addButton(withTitle: "Open Accessibility Settings")
@@ -977,6 +1003,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             polishStyleItems[index].isHidden = !settings.availablePolishStyles.contains(style)
         }
         rebuildAppPolishStyleItems()
+
+        translateItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: settings.hotKeyTranslate.keyCode)
+        translateItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyTranslate.modifiers)
 
         analyzeToneItem?.title = "Analyze Tone"
         analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)

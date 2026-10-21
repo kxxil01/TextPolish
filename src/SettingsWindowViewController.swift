@@ -63,6 +63,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
     var polishField: KeyComboField!
     var analyzeToneField: KeyComboField!
+    var translateField: KeyComboField!
     /// Optional shortcuts that Polish in one style, in `Settings.PolishStyle.allCases` order.
     var styleHotKeyFields: [KeyComboField] = []
     private var styleHotKeyClearButtons: [NSButton] = []
@@ -200,6 +201,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         // Hotkeys
         polishField = KeyComboField(frame: .zero)
         analyzeToneField = KeyComboField(frame: .zero)
+        translateField = KeyComboField(frame: .zero)
+        translateField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
 
         polishField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
         analyzeToneField.onChange = { [weak self] _ in self?.hotkeyDidChange() }
@@ -622,6 +625,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let rows: [(String, KeyComboField)] = [
             ("Polish", polishField),
             ("Analyze Tone", analyzeToneField),
+            ("Translate to English", translateField),
         ]
         let rowPitch: CGFloat = 44
         let contentHeight = CGFloat(rows.count - 1) * rowPitch + 26
@@ -1157,6 +1161,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     private func loadHotKeyFields(from settings: Settings) {
         polishField.loadFromHotKey(settings.hotKeyPolish)
         analyzeToneField.loadFromHotKey(settings.hotKeyAnalyzeTone)
+        translateField.loadFromHotKey(settings.hotKeyTranslate)
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
             if let hotKey = settings.styleHotKey(for: style) {
                 styleHotKeyFields[index].loadFromHotKey(hotKey)
@@ -1167,11 +1172,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         syncStyleHotKeyClearButtons()
     }
 
-    /// Copies the hotkey fields into `settings`. An empty Polish or Analyze Tone field keeps the existing value;
+    /// Copies the hotkey fields into `settings`. An empty Polish, Analyze Tone, or Translate field keeps the existing value;
     /// an empty style field means that style has no shortcut.
     private func applyHotKeyFields(to settings: inout Settings) {
         settings.hotKeyPolish = polishField.hotKey ?? settings.hotKeyPolish
         settings.hotKeyAnalyzeTone = analyzeToneField.hotKey ?? settings.hotKeyAnalyzeTone
+        settings.hotKeyTranslate = translateField.hotKey ?? settings.hotKeyTranslate
         for (index, style) in Settings.PolishStyle.allCases.enumerated() where styleHotKeyFields.indices.contains(index) {
             settings.styleHotKeys[style.rawValue] = styleHotKeyFields[index].hotKey
         }
@@ -1499,9 +1505,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         let main: [(name: String, value: Settings.HotKey)] = [
             ("Polish", settings.hotKeyPolish),
             ("Analyze Tone", settings.hotKeyAnalyzeTone),
+            ("Translate to English", settings.hotKeyTranslate),
         ]
         let styles = Settings.PolishStyle.allCases.compactMap { style in
-            settings.styleHotKey(for: style).map { (name: "Polish as \(style.displayName)", value: $0) }
+            settings.styleHotKey(for: style).map { (name: "Polish as \(settings.displayName(for: style))", value: $0) }
         }
         return main + styles
     }

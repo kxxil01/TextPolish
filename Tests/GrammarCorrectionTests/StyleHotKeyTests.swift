@@ -41,7 +41,7 @@ final class StyleHotKeyTests: XCTestCase {
     )
     let formalID = HotKeyManager.styleHotKeyID(index: 3)
 
-    try manager.registerHotKeys(polish: .polishDefault, analyzeTone: .analyzeToneDefault, styles: [formalID: formalKey])
+    try manager.registerHotKeys(polish: .polishDefault, analyzeTone: .analyzeToneDefault, extras: [formalID: formalKey])
 
     XCTAssertEqual(registered, [HotKeyManager.HotKeyID.polish.rawValue, HotKeyManager.HotKeyID.analyzeTone.rawValue, formalID])
   }

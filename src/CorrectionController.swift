@@ -312,7 +312,7 @@ final class CorrectionController {
         self.showSuccess(for: style)
         self.recordSuccess(state)
         self.onSuccess?()
-        self.onPolished?(PolishRecord(original: input.text, polished: corrected, processID: target.pid))
+        self.onPolished?(PolishRecord(original: input.text, polished: corrected, processID: target.pid, style: style))
       } catch is CancellationError {
         self.finishCanceled(didPaste: didPaste, style: style, state: state)
       } catch {
