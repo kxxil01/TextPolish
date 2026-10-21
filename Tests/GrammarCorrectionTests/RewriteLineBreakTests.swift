@@ -30,6 +30,18 @@ final class RewriteLineBreakTests: XCTestCase {
     XCTAssertFalse(summary.contains("report"), "The log line must never include the user's text")
   }
 
+  func testCleanupDropsTrailingSpacesTheModelAdded() {
+    let added = "Hi team,\n\nI've updated the report.  \nThe numbers now match.  \nThanks"
+    let original = "Hi team,\n\nI've updated the report.\nThe numbers now match.\nThanks"
+
+    XCTAssertEqual(checker.cleanup(added, original: original), original)
+    XCTAssertEqual(
+      checker.cleanup("a  \nb", original: "a  \nb"),
+      "a  \nb",
+      "Spaces the writer typed before a line break stay"
+    )
+  }
+
   func testCorrectKeepsEveryLine() {
     XCTAssertTrue(checker.keepsLineStructure(original: choppy, candidate: choppy, style: .minimal))
     XCTAssertFalse(checker.keepsLineStructure(original: choppy, candidate: joined, style: .minimal))

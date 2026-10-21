@@ -13,6 +13,17 @@ final class LearnModeTests: XCTestCase {
     XCTAssertTrue(prompt.user.contains("<polished>\nc\n</polished>"))
   }
 
+  func testPromptAsksForShortPairsListedOnce() {
+    let system = ChangeExplanationPrompt.make(original: "a", polished: "b").system
+
+    XCTAssertTrue(system.contains("Quote only the words that changed"))
+    XCTAssertTrue(system.contains("List each change once"))
+  }
+
+  func testParseDropsRepeatedLines() {
+    XCTAssertEqual(ChangeExplanationPrompt.parse("ty → Thanks!: polite\nTy → thanks!: polite"), ["ty → Thanks!: polite"])
+  }
+
   func testParseKeepsChangeLinesAndDropsListMarkers() {
     let output = """
       Here are the changes:

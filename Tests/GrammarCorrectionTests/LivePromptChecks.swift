@@ -65,6 +65,7 @@ final class LivePromptChecks: XCTestCase {
 
     let items = output.split(separator: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
     XCTAssertEqual(items.count, 2, "Each bullet stays on its own line")
+    XCTAssertFalse(output.contains(" \n"), "No trailing spaces added before line breaks")
   }
 
   func testNaturalKeepsCodeAndLinks() async throws {
@@ -83,6 +84,14 @@ final class LivePromptChecks: XCTestCase {
     for fact in ["2.500.000", "budi", "friday", "3pm", "sarah", "14march"] {
       XCTAssertTrue(compact.contains(fact), "Kept \(fact)")
     }
+  }
+
+  func testNaturalKeepsChatAbbreviations() async throws {
+    let input = "so please keep future queries to short time ranges with tight filters, ty"
+    let output = try await polish(input, style: .clarify)
+
+    let words = output.lowercased().split(whereSeparator: { !$0.isLetter })
+    XCTAssertTrue(words.contains("ty"), "Chat abbreviations stay in Natural")
   }
 
   func testNaturalKeepsIndonesianWords() async throws {
@@ -144,6 +153,12 @@ final class LivePromptChecks: XCTestCase {
 
     XCTAssertFalse(lines.isEmpty)
     XCTAssertTrue(lines.allSatisfy { $0.contains("→") })
+    let befores = lines.compactMap { $0.components(separatedBy: "→").first?.trimmingCharacters(in: .whitespaces).lowercased() }
+    for (index, before) in befores.enumerated() {
+      let others = befores.enumerated().filter { $0.offset != index }.map(\.element)
+      XCTAssertFalse(others.contains { $0.contains(before) }, "\"\(before)\" is listed again inside another change")
+      XCTAssertLessThanOrEqual(before.split(separator: " ").count, 8, "\"\(before)\" quotes more than the change")
+    }
   }
 
   // MARK: - Minimal
@@ -161,6 +176,7 @@ final class LivePromptChecks: XCTestCase {
     let output = try await polish(choppy, style: .minimal)
 
     XCTAssertEqual(newlines(in: output), newlines(in: choppy))
+    XCTAssertFalse(output.contains(" \n"), "No trailing spaces added before line breaks")
   }
 
   func testMinimalLeavesCorrectTextAlone() async throws {

@@ -178,6 +178,14 @@ extension TextProcessor {
     return result
   }
 
+  /// Models sometimes end lines with two spaces, Markdown's hard line break. When the original has no spaces
+  /// before its line breaks, they are additions, so remove them.
+  func withoutAddedTrailingSpaces(_ text: String, original: String) -> String {
+    let lineEndSpaces = "[ \\t]+\\n"
+    guard original.range(of: lineEndSpaces, options: .regularExpression) == nil else { return text }
+    return text.replacingOccurrences(of: lineEndSpaces, with: "\n", options: .regularExpression)
+  }
+
   /// Cleans up AI-generated text to match original formatting
   func cleanup(_ string: String, original: String) -> String {
     let (origPrefix, origCore, origSuffix) = splitOuterWhitespace(original)
@@ -206,6 +214,7 @@ extension TextProcessor {
     }
 
     cleanedCore = enforcePunctuationPolicy(cleanedCore, original: origCore)
+    cleanedCore = withoutAddedTrailingSpaces(cleanedCore, original: origCore)
 
     if origCore.isEmpty { return cleanedCore }
     return origPrefix + cleanedCore + origSuffix
