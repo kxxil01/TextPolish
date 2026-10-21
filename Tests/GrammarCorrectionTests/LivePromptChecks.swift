@@ -86,6 +86,14 @@ final class LivePromptChecks: XCTestCase {
     }
   }
 
+  func testNaturalKeepsChatAbbreviations() async throws {
+    let input = "so please keep future queries to short time ranges with tight filters, ty"
+    let output = try await polish(input, style: .clarify)
+
+    let words = output.lowercased().split(whereSeparator: { !$0.isLetter })
+    XCTAssertTrue(words.contains("ty"), "Chat abbreviations stay in Natural")
+  }
+
   func testNaturalKeepsIndonesianWords() async throws {
     let input = "tolong cek ya, I already update the file but the number still not match"
     let output = try await polish(input, style: .clarify)
@@ -145,6 +153,12 @@ final class LivePromptChecks: XCTestCase {
 
     XCTAssertFalse(lines.isEmpty)
     XCTAssertTrue(lines.allSatisfy { $0.contains("→") })
+    let befores = lines.compactMap { $0.components(separatedBy: "→").first?.trimmingCharacters(in: .whitespaces).lowercased() }
+    for (index, before) in befores.enumerated() {
+      let others = befores.enumerated().filter { $0.offset != index }.map(\.element)
+      XCTAssertFalse(others.contains { $0.contains(before) }, "\"\(before)\" is listed again inside another change")
+      XCTAssertLessThanOrEqual(before.split(separator: " ").count, 8, "\"\(before)\" quotes more than the change")
+    }
   }
 
   // MARK: - Minimal

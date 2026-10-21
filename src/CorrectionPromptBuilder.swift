@@ -114,7 +114,8 @@ enum CorrectionPromptBuilder {
     "Break a long run-on sentence into shorter, clear sentences.",
     "Keep the meaning exactly. Do not add, drop, or change facts, requests, names, numbers, dates, or commitments, "
       + "and do not add new ideas, greetings, or sign-offs.",
-    "Keep the tone and formality. Casual stays casual, and slang or abbreviations such as pls, tbh, or btw stay.",
+    "Keep the tone and formality. Casual stays casual, and slang or chat abbreviations such as pls, ty, thx, tbh, "
+      + "or btw stay exactly as written.",
     "Keep it concise and human: do not make it longer or more formal than needed, and do not translate.",
     "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
     // Clean text still gets its paragraph lines joined; without this the model returned it untouched.
@@ -133,7 +134,7 @@ enum CorrectionPromptBuilder {
     "You are an editor. Make the text shorter and easier to read, as if the same person wrote it in fewer words.",
     "Cut filler, repetition, hedging, and long-winded phrases. Prefer short sentences and plain words.",
     "Keep every question and request; shorten how they are said, not what they ask.",
-    "Keep the tone. Casual stays casual, and slang or abbreviations such as pls, tbh, or btw stay.",
+    "Keep the tone. Casual stays casual, and slang or chat abbreviations such as pls, ty, thx, tbh, or btw stay.",
     "Keep the writer's capitalization style: if the text is written all in lowercase, keep it lowercase.",
     "If the text is already short and direct, keep the words unchanged, but still join lines that split a paragraph.",
   ]

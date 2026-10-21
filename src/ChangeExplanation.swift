@@ -15,6 +15,8 @@ enum ChangeExplanationPrompt {
       "Compare the original text with the polished version and pick the changes most worth learning from, "
         + "at most \(maxLines).",
       "Write one change per line in this form: original phrase → new phrase: short reason.",
+      "Quote only the words that changed, with at most two unchanged words around them, so both sides stay short.",
+      "List each change once. If a change is part of a larger one, write a single line that covers it.",
       "Keep each reason under 12 plain words, about grammar, word choice, or natural phrasing.",
       "Skip changes that only fix capitalization, spacing, or line breaks.",
       "If nothing is worth explaining, return nothing.",
@@ -40,7 +42,9 @@ enum ChangeExplanationPrompt {
       guard line.contains("→") else { return nil }
       return line
     }
-    return Array(lines.prefix(maxLines))
+    var seen = Set<String>()
+    let unique = lines.filter { seen.insert($0.lowercased()).inserted }
+    return Array(unique.prefix(maxLines))
   }
 
   /// Drops a leading "- ", "* ", "• ", "1. " or "1) ", but not a number that is part of the change, such as "3pm".
