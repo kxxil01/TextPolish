@@ -126,8 +126,8 @@ final class CorrectionController {
   private let addLocalKeyMonitor: LocalKeyMonitorInstaller
   private let removeEventMonitor: EventMonitorRemover
   private let onSuccess: (@MainActor () -> Void)?
-  /// Gets the original and pasted text after a Polish that changed something, for Learn mode.
-  private let onPolished: (@MainActor (_ original: String, _ polished: String) -> Void)?
+  /// Gets what was replaced after a Polish that changed something, for Learn mode and Undo.
+  private let onPolished: (@MainActor (PolishRecord) -> Void)?
 
   private var timings: Timings
   private var operationTimeout: Duration
@@ -162,7 +162,7 @@ final class CorrectionController {
     addLocalKeyMonitor: LocalKeyMonitorInstaller? = nil,
     removeEventMonitor: EventMonitorRemover? = nil,
     onSuccess: (@MainActor () -> Void)? = nil,
-    onPolished: (@MainActor (_ original: String, _ polished: String) -> Void)? = nil
+    onPolished: (@MainActor (PolishRecord) -> Void)? = nil
   ) {
     self.corrector = corrector
     self.feedback = feedback
@@ -472,7 +472,7 @@ final class CorrectionController {
           fallbackCount: fallbackCount
         )
         self.onSuccess?()
-        self.onPolished?(inputText, corrected)
+        self.onPolished?(PolishRecord(original: inputText, polished: corrected, processID: targetPID))
       } catch is CancellationError {
         if didPaste {
           self.showSuccess(for: style)

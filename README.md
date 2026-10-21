@@ -28,6 +28,7 @@ It currently supports two workflows:
 - One Polish action for the selection, or the whole field when nothing is selected
 - Polish style: Natural (default) improves wording and joins choppy line breaks so text reads naturally, keeping meaning, tone, and slang; Minimal fixes typos and grammar only and preserves voice and formatting; Shorter cuts filler while keeping every point; Formal makes it polite and professional; Friendly makes it warm and casual
 - Style shortcuts (optional, Settings > Hotkeys > Polish with a Style): one shortcut per style, for example ⌃⌥⌘F to Polish as Formal
+- Undo Last Polish (menu bar): puts back the original text, as long as the polished text is still unchanged in that field
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
 - Preview before paste (optional, Settings > Advanced): see the changes highlighted, then press Return to paste or Escape to cancel

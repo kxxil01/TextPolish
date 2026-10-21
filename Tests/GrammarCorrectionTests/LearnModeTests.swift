@@ -153,8 +153,8 @@ extension CorrectionControllerTests {
       timings: Self.fastTimings,
       keyboard: StubKeyboard(isTrusted: true),
       pasteboard: StubPasteboard(waitResults: [.success("hello")]),
-      onPolished: { original, polished in
-        reported.append((original, polished))
+      onPolished: { record in
+        reported.append((record.original, record.polished))
         finished.fulfill()
       }
     )
@@ -179,7 +179,7 @@ extension CorrectionControllerTests {
       timings: Self.fastTimings,
       keyboard: StubKeyboard(isTrusted: true),
       pasteboard: StubPasteboard(waitResults: [.success("hello")]),
-      onPolished: { _, _ in reportCount += 1 }
+      onPolished: { _ in reportCount += 1 }
     )
 
     controller.polish(style: .clarify)
