@@ -26,8 +26,6 @@ extension CorrectionController {
 #endif
 
 @MainActor
-// Legacy hotspot: split this up before removing the suppression.
-// swiftlint:disable:next type_body_length
 final class CorrectionController {
   typealias GlobalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Void) -> Any?
   typealias LocalKeyMonitorInstaller = (@escaping (UInt16, NSEvent.ModifierFlags) -> Bool) -> Any?
@@ -223,8 +221,6 @@ final class CorrectionController {
     run(style: style, targetApplication: targetApplication, timingsOverride: timingsOverride)
   }
 
-  // Legacy hotspot: split this up before removing the suppression.
-  // swiftlint:disable:next function_body_length cyclomatic_complexity
   private func run(
     style: CorrectionStyle,
     targetApplication: NSRunningApplication?,
@@ -239,13 +235,13 @@ final class CorrectionController {
     let timings = timingsOverride ?? timings
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
-      var operationStartedAt = Date()
-      var deadline = ContinuousClock.now + self.operationTimeout
-      var activeProvider = self.settings.provider
-      var activeModel = self.modelName(for: activeProvider)
-      var fallbackCount = 0
-      var usedCorrector = corrector
-      self.updateProviderModel(for: corrector, provider: &activeProvider, model: &activeModel)
+      let state = PolishRunState(
+        corrector: corrector,
+        provider: self.settings.provider,
+        model: self.modelName(for: self.settings.provider),
+        deadline: ContinuousClock.now + self.operationTimeout
+      )
+      self.updateProviderModel(for: corrector, provider: &state.provider, model: &state.model)
       defer {
         self.isRunning = false
         self.currentTask = nil
@@ -253,16 +249,7 @@ final class CorrectionController {
 
       guard self.keyboard.isAccessibilityTrusted(prompt: true) else {
         self.feedback.showError("Enable Accessibility")
-        DiagnosticsStore.shared.recordFailure(
-          operation: .correction,
-          provider: activeProvider,
-          model: activeModel,
-          latencySeconds: nil,
-          retryCount: 0,
-          fallbackCount: 0,
-          message: "Accessibility permission required",
-          error: nil
-        )
+        self.recordFailure(state, message: "Accessibility permission required", measuresLatency: false, retryCount: 0)
         return
       }
 
@@ -272,28 +259,11 @@ final class CorrectionController {
       }
 
       var didPaste = false
-
       do {
-        let currentPid = ProcessInfo.processInfo.processIdentifier
-        let targetPID: pid_t? = {
-          if let targetApplication, targetApplication.processIdentifier != currentPid {
-            return targetApplication.processIdentifier
-          }
-          if let frontmostPID = self.frontmostApplicationPIDProvider(), frontmostPID != currentPid {
-            return frontmostPID
-          }
-          return nil
-        }()
-        let appToActivate: NSRunningApplication? = {
-          if let targetApplication, targetApplication.processIdentifier != currentPid {
-            return targetApplication
-          }
-          guard let targetPID else { return nil }
-          return self.applicationResolver(targetPID)
-        }()
-        if let appToActivate, !appToActivate.isActive {
-          _ = appToActivate.activate(options: [])
-          try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
+        let target = self.resolveTarget(targetApplication)
+        if let app = target.app, !app.isActive {
+          _ = app.activate(options: [])
+          try await self.sleepRespectingDeadline(timings.activationDelay, until: state.deadline)
         }
 
         let snapshot = self.pasteboard.snapshot()
@@ -306,239 +276,56 @@ final class CorrectionController {
           }
         }
 
-        let selection = self.selectionStateProvider(targetPID)
-        var selectedWholeField = selection == .nothingSelected
-        if selection == .nothingSelected {
-          self.keyboard.sendCommandA()
-          try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
-        }
-
-        let inputText: String
-        do {
-          inputText = try await self.copySelectedText(
-            timings: timings,
-            deadline: deadline,
-            updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
-          )
-        } catch where selection == .unknown && self.shouldRetryCopy(error) {
-          // Nothing could be copied and Accessibility could not tell why, so polish the whole field.
-          selectedWholeField = true
-          self.keyboard.sendCommandA()
-          try await self.sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
-          inputText = try await self.attemptCopy(
-            excluding: self.copySentinel(),
-            timings: timings,
-            deadline: deadline,
-            updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
-          )
+        let input = try await self.copyInput(targetPID: target.pid, timings: timings, deadline: state.deadline) {
+          ownedClipboardChangeCount = $0
         }
         try Task.checkCancellation()
-        let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedInput.isEmpty else {
+        guard !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           self.feedback.showError("No text selected")
-          DiagnosticsStore.shared.recordFailure(
-            operation: .correction,
-            provider: activeProvider,
-            model: activeModel,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: 0,
-            fallbackCount: fallbackCount,
-            message: "No text selected",
-            error: nil
-          )
+          self.recordFailure(state, message: "No text selected", retryCount: 0)
           return
         }
         TPLogger.log(
-          "Polish input: app=\(appToActivate?.bundleIdentifier ?? "unknown") style=\(style) "
-            + "selection=\(selection) wholeField=\(selectedWholeField) chars=\(inputText.count)"
+          "Polish input: app=\(target.app?.bundleIdentifier ?? "unknown") style=\(style) "
+            + "selection=\(input.selection) wholeField=\(input.wholeField) chars=\(input.text.count)"
         )
 
-        var corrected: String?
-        do {
-          corrected = try await self.runCorrector(corrector, text: inputText, style: style, deadline: deadline)
-        } catch {
-          let primaryError = error
-          var unresolvedError: Error? = primaryError
-
-          // Check if we should try fallback provider
-          if shouldAttemptFallback?(primaryError) == true,
-             let fallbackCorrector = createFallbackCorrector()
-          {
-            self.feedback.showInfo("Primary provider failed, trying fallback provider...")
-            do {
-              fallbackCount += 1
-              usedCorrector = fallbackCorrector
-              self.updateProviderModel(for: fallbackCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(fallbackCorrector, text: inputText, style: style, deadline: deadline)
-              unresolvedError = nil
-            } catch {
-              unresolvedError = error
-            }
-          }
-
-          // Use recoverer if available
-          if let unresolvedError {
-            if let recoverer, let action = await recoverer(unresolvedError) {
-              self.feedback.showInfo(action.message)
-              let retryCorrector = action.corrector ?? self.corrector
-              usedCorrector = retryCorrector
-              self.updateProviderModel(for: retryCorrector, provider: &activeProvider, model: &activeModel)
-              corrected = try await self.runCorrector(retryCorrector, text: inputText, style: style, deadline: deadline)
-            } else {
-              throw unresolvedError
-            }
-          }
-        }
-        guard let corrected else {
-          throw NSError(
-            domain: "TextPolish",
-            code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "Correction failed before producing output"]
-          )
-        }
-        guard corrected != inputText else {
+        let corrected = try await self.correctWithRecovery(input.text, style: style, corrector: corrector, state: state)
+        guard corrected != input.text else {
           self.feedback.showInfo("No changes")
-          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-          DiagnosticsStore.shared.recordSuccess(
-            operation: .correction,
-            provider: activeProvider,
-            model: activeModel,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: retryCount,
-            fallbackCount: fallbackCount,
-            note: "No changes"
-          )
+          self.recordSuccess(state, note: "No changes")
+          return
+        }
+        guard try await self.confirmInPreviewIfNeeded(original: input.text, polished: corrected, state: state) else {
           return
         }
 
-        if self.settings.previewBeforePaste, let reviewer = self.reviewer {
-          TPLogger.log("Polish preview: waiting for Paste or Cancel")
-          let reviewStartedAt = Date()
-          let approved = await reviewer.review(original: inputText, polished: corrected)
-          // Diagnostics latency measures Polish, not how long the user read the preview.
-          operationStartedAt += Date().timeIntervalSince(reviewStartedAt)
-          try Task.checkCancellation()
-          guard approved else {
-            self.feedback.showInfo("Canceled")
-            DiagnosticsStore.shared.recordNote(
-              operation: .correction,
-              provider: activeProvider,
-              model: activeModel,
-              latencySeconds: Date().timeIntervalSince(operationStartedAt),
-              retryCount: (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0,
-              fallbackCount: fallbackCount,
-              message: "Canceled in preview",
-              updateHealth: false
-            )
-            return
-          }
-          // Time spent reading the preview does not count against the operation timeout.
-          deadline = ContinuousClock.now + self.operationTimeout
-        }
-        let newlinesIn = inputText.filter(\.isNewline).count
+        let newlinesIn = input.text.filter(\.isNewline).count
         let newlinesOut = corrected.filter(\.isNewline).count
         TPLogger.log("Polish output: chars=\(corrected.count) newlines=\(newlinesIn)->\(newlinesOut), pasting")
         try Task.checkCancellation()
-        self.pasteboard.setString(corrected)
-        ownedClipboardChangeCount = self.pasteboard.changeCount
-        try await self.sleepRespectingDeadline(timings.pasteSettleDelay, until: deadline)
-        try Task.checkCancellation()
-        guard self.pasteboard.changeCount == ownedClipboardChangeCount else {
-          throw OperationError.clipboardChanged
+        try await self.paste(corrected, into: target.pid, timings: timings, deadline: state.deadline) {
+          ownedClipboardChangeCount = $0
         }
-        if let targetPID, self.frontmostApplicationPIDProvider() != targetPID {
-          if let appToActivate = self.applicationResolver(targetPID) {
-            self.applicationActivator(appToActivate)
-            // Switching back can take longer than one activation delay, for example after the preview panel.
-            for _ in 0..<10 where self.frontmostApplicationPIDProvider() != targetPID {
-              try await self.sleepRespectingDeadline(timings.activationDelay, until: deadline)
-            }
-          }
-          guard self.frontmostApplicationPIDProvider() == targetPID else {
-            throw OperationError.targetApplicationChanged
-          }
-        }
-        self.keyboard.sendCommandV()
         didPaste = true
-        try await self.sleepRespectingDeadline(timings.postPasteDelay, until: deadline)
+        try await self.sleepRespectingDeadline(timings.postPasteDelay, until: state.deadline)
         self.showSuccess(for: style)
-        let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-        DiagnosticsStore.shared.recordSuccess(
-          operation: .correction,
-          provider: activeProvider,
-          model: activeModel,
-          latencySeconds: Date().timeIntervalSince(operationStartedAt),
-          retryCount: retryCount,
-          fallbackCount: fallbackCount
-        )
+        self.recordSuccess(state)
         self.onSuccess?()
-        self.onPolished?(PolishRecord(original: inputText, polished: corrected, processID: targetPID))
+        self.onPolished?(PolishRecord(original: input.text, polished: corrected, processID: target.pid))
       } catch is CancellationError {
-        if didPaste {
-          self.showSuccess(for: style)
-          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-          DiagnosticsStore.shared.recordSuccess(
-            operation: .correction,
-            provider: activeProvider,
-            model: activeModel,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: retryCount,
-            fallbackCount: fallbackCount,
-            note: "Canceled after paste"
-          )
-          self.onSuccess?()
-        } else {
-          self.feedback.showInfo("Canceled")
-          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-          DiagnosticsStore.shared.recordNote(
-            operation: .correction,
-            provider: activeProvider,
-            model: activeModel,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: retryCount,
-            fallbackCount: fallbackCount,
-            message: "Canceled",
-            updateHealth: false
-          )
-        }
+        self.finishCanceled(didPaste: didPaste, style: style, state: state)
       } catch {
-        if didPaste, let operationError = error as? OperationError, case .timedOut = operationError {
-          self.showSuccess(for: style)
-          let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-          DiagnosticsStore.shared.recordSuccess(
-            operation: .correction,
-            provider: activeProvider,
-            model: activeModel,
-            latencySeconds: Date().timeIntervalSince(operationStartedAt),
-            retryCount: retryCount,
-            fallbackCount: fallbackCount,
-            note: "Timed out after paste"
-          )
-          self.onSuccess?()
-          return
-        }
-
-        let message =
-          (error as? LocalizedError)?.errorDescription ??
-          (error as NSError).localizedDescription
-        self.feedback.showError(message)
-        let retryCount = (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
-        DiagnosticsStore.shared.recordFailure(
-          operation: .correction,
-          provider: activeProvider,
-          model: activeModel,
-          latencySeconds: Date().timeIntervalSince(operationStartedAt),
-          retryCount: retryCount,
-          fallbackCount: fallbackCount,
-          message: message,
-          error: error
-        )
-        TPLogger.log("\(error)")
+        self.finishFailed(error, didPaste: didPaste, style: style, state: state)
       }
     }
     currentTask = task
   }
+}
 
+// MARK: - Copy, correct, and timing helpers
+
+extension CorrectionController {
   private func installEscapeCancellationMonitors() {
     if globalEscapeMonitor == nil {
       globalEscapeMonitor = addGlobalKeyMonitor { [weak self] keyCode, modifiers in
@@ -821,5 +608,239 @@ final class CorrectionController {
       provider = reporting.diagnosticsProvider
       model = reporting.diagnosticsModel
     }
+  }
+}
+
+// MARK: - Polish steps
+
+/// What one Polish has used so far, for Diagnostics and the operation deadline.
+@MainActor
+private final class PolishRunState {
+  var startedAt = Date()
+  var deadline: ContinuousClock.Instant
+  var provider: Settings.Provider
+  var model: String
+  var fallbackCount = 0
+  var usedCorrector: GrammarCorrector
+
+  init(corrector: GrammarCorrector, provider: Settings.Provider, model: String, deadline: ContinuousClock.Instant) {
+    usedCorrector = corrector
+    self.provider = provider
+    self.model = model
+    self.deadline = deadline
+  }
+
+  var retryCount: Int {
+    (usedCorrector as? RetryReporting)?.lastRetryCount ?? 0
+  }
+
+  var latency: Double {
+    Date().timeIntervalSince(startedAt)
+  }
+}
+
+private struct CopiedInput {
+  let text: String
+  let selection: SelectionState
+  let wholeField: Bool
+}
+
+extension CorrectionController {
+  /// The app to paste back into: the one Polish was started for, else whatever is frontmost, never TextPolish.
+  private func resolveTarget(_ targetApplication: NSRunningApplication?) -> (pid: pid_t?, app: NSRunningApplication?) {
+    let currentPid = ProcessInfo.processInfo.processIdentifier
+    if let targetApplication, targetApplication.processIdentifier != currentPid {
+      return (targetApplication.processIdentifier, targetApplication)
+    }
+    guard let frontmostPID = frontmostApplicationPIDProvider(), frontmostPID != currentPid else {
+      return (nil, nil)
+    }
+    return (frontmostPID, applicationResolver(frontmostPID))
+  }
+
+  /// Copies the selection, or the whole field when nothing is selected or nothing could be copied.
+  private func copyInput(
+    targetPID: pid_t?,
+    timings: Timings,
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: @escaping (Int) -> Void
+  ) async throws -> CopiedInput {
+    let selection = selectionStateProvider(targetPID)
+    if selection == .nothingSelected {
+      keyboard.sendCommandA()
+      try await sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
+    }
+    do {
+      let text = try await copySelectedText(
+        timings: timings,
+        deadline: deadline,
+        updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+      )
+      return CopiedInput(text: text, selection: selection, wholeField: selection == .nothingSelected)
+    } catch where selection == .unknown && shouldRetryCopy(error) {
+      // Nothing could be copied and Accessibility could not tell why, so polish the whole field.
+      keyboard.sendCommandA()
+      try await sleepRespectingDeadline(timings.selectAllDelay, until: deadline)
+      let text = try await attemptCopy(
+        excluding: copySentinel(),
+        timings: timings,
+        deadline: deadline,
+        updateOwnedClipboardChangeCount: updateOwnedClipboardChangeCount
+      )
+      return CopiedInput(text: text, selection: selection, wholeField: true)
+    }
+  }
+
+  /// Runs the corrector, then the fallback provider, then the recoverer, until one produces text.
+  private func correctWithRecovery(
+    _ text: String,
+    style: CorrectionStyle,
+    corrector: GrammarCorrector,
+    state: PolishRunState
+  ) async throws -> String {
+    do {
+      return try await runCorrector(corrector, text: text, style: style, deadline: state.deadline)
+    } catch {
+      var unresolvedError = error
+      if shouldAttemptFallback?(error) == true, let fallbackCorrector = createFallbackCorrector() {
+        feedback.showInfo("Primary provider failed, trying fallback provider...")
+        state.fallbackCount += 1
+        state.usedCorrector = fallbackCorrector
+        updateProviderModel(for: fallbackCorrector, provider: &state.provider, model: &state.model)
+        do {
+          return try await runCorrector(fallbackCorrector, text: text, style: style, deadline: state.deadline)
+        } catch {
+          unresolvedError = error
+        }
+      }
+      guard let recoverer, let action = await recoverer(unresolvedError) else {
+        throw unresolvedError
+      }
+      feedback.showInfo(action.message)
+      let retryCorrector = action.corrector ?? self.corrector
+      state.usedCorrector = retryCorrector
+      updateProviderModel(for: retryCorrector, provider: &state.provider, model: &state.model)
+      return try await runCorrector(retryCorrector, text: text, style: style, deadline: state.deadline)
+    }
+  }
+
+  /// With Preview on, waits for Paste or Cancel. Returns false when the user canceled.
+  private func confirmInPreviewIfNeeded(original: String, polished: String, state: PolishRunState) async throws -> Bool {
+    guard settings.previewBeforePaste, let reviewer else { return true }
+    TPLogger.log("Polish preview: waiting for Paste or Cancel")
+    let reviewStartedAt = Date()
+    let approved = await reviewer.review(original: original, polished: polished)
+    // Diagnostics latency measures Polish, not how long the user read the preview.
+    state.startedAt += Date().timeIntervalSince(reviewStartedAt)
+    try Task.checkCancellation()
+    guard approved else {
+      feedback.showInfo("Canceled")
+      recordNote(state, message: "Canceled in preview")
+      return false
+    }
+    // Time spent reading the preview does not count against the operation timeout.
+    state.deadline = ContinuousClock.now + operationTimeout
+    return true
+  }
+
+  /// Puts the result on the clipboard, returns to the target app, and sends ⌘V.
+  private func paste(
+    _ text: String,
+    into targetPID: pid_t?,
+    timings: Timings,
+    deadline: ContinuousClock.Instant,
+    updateOwnedClipboardChangeCount: (Int) -> Void
+  ) async throws {
+    pasteboard.setString(text)
+    let ownedChangeCount = pasteboard.changeCount
+    updateOwnedClipboardChangeCount(ownedChangeCount)
+    try await sleepRespectingDeadline(timings.pasteSettleDelay, until: deadline)
+    try Task.checkCancellation()
+    guard pasteboard.changeCount == ownedChangeCount else {
+      throw OperationError.clipboardChanged
+    }
+    if let targetPID, frontmostApplicationPIDProvider() != targetPID {
+      if let appToActivate = applicationResolver(targetPID) {
+        applicationActivator(appToActivate)
+        // Switching back can take longer than one activation delay, for example after the preview panel.
+        for _ in 0..<10 where frontmostApplicationPIDProvider() != targetPID {
+          try await sleepRespectingDeadline(timings.activationDelay, until: deadline)
+        }
+      }
+      guard frontmostApplicationPIDProvider() == targetPID else {
+        throw OperationError.targetApplicationChanged
+      }
+    }
+    keyboard.sendCommandV()
+  }
+
+  private func finishCanceled(didPaste: Bool, style: CorrectionStyle, state: PolishRunState) {
+    guard didPaste else {
+      feedback.showInfo("Canceled")
+      recordNote(state, message: "Canceled")
+      return
+    }
+    showSuccess(for: style)
+    recordSuccess(state, note: "Canceled after paste")
+    onSuccess?()
+  }
+
+  private func finishFailed(_ error: Error, didPaste: Bool, style: CorrectionStyle, state: PolishRunState) {
+    if didPaste, let operationError = error as? OperationError, case .timedOut = operationError {
+      showSuccess(for: style)
+      recordSuccess(state, note: "Timed out after paste")
+      onSuccess?()
+      return
+    }
+    let message = (error as? LocalizedError)?.errorDescription ?? (error as NSError).localizedDescription
+    feedback.showError(message)
+    recordFailure(state, message: message, error: error)
+    TPLogger.log("\(error)")
+  }
+
+  // MARK: Diagnostics
+
+  private func recordSuccess(_ state: PolishRunState, note: String? = nil) {
+    DiagnosticsStore.shared.recordSuccess(
+      operation: .correction,
+      provider: state.provider,
+      model: state.model,
+      latencySeconds: state.latency,
+      retryCount: state.retryCount,
+      fallbackCount: state.fallbackCount,
+      note: note
+    )
+  }
+
+  private func recordNote(_ state: PolishRunState, message: String) {
+    DiagnosticsStore.shared.recordNote(
+      operation: .correction,
+      provider: state.provider,
+      model: state.model,
+      latencySeconds: state.latency,
+      retryCount: state.retryCount,
+      fallbackCount: state.fallbackCount,
+      message: message,
+      updateHealth: false
+    )
+  }
+
+  private func recordFailure(
+    _ state: PolishRunState,
+    message: String,
+    error: Error? = nil,
+    measuresLatency: Bool = true,
+    retryCount: Int? = nil
+  ) {
+    DiagnosticsStore.shared.recordFailure(
+      operation: .correction,
+      provider: state.provider,
+      model: state.model,
+      latencySeconds: measuresLatency ? state.latency : nil,
+      retryCount: retryCount ?? state.retryCount,
+      fallbackCount: state.fallbackCount,
+      message: message,
+      error: error
+    )
   }
 }
