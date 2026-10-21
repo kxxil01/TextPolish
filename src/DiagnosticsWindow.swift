@@ -4,7 +4,8 @@ import AppKit
 final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
   private let textView = NSTextView()
   private let runButton = NSButton(title: "Run Diagnostic", target: nil, action: nil)
-  private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
+  private let copyButton = NSButton(title: "Copy Summary", target: nil, action: nil)
+  private let copyLogsButton = NSButton(title: "Copy Logs", target: nil, action: nil)
   private let closeButton = NSButton(title: "Close", target: nil, action: nil)
   private let spinner = NSProgressIndicator()
   private var localMonitor: Any?
@@ -120,12 +121,17 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     copyButton.action = #selector(copyClicked)
     copyButton.bezelStyle = .rounded
 
+    copyLogsButton.target = self
+    copyLogsButton.action = #selector(copyLogsClicked)
+    copyLogsButton.bezelStyle = .rounded
+    copyLogsButton.toolTip = "Copies TextPolish's log lines since launch. They never include your text."
+
     closeButton.target = self
     closeButton.action = #selector(closeClicked)
     closeButton.keyEquivalent = "\r"
     closeButton.bezelStyle = .rounded
 
-    let buttonStack = NSStackView(views: [runButton, spinner, copyButton, closeButton])
+    let buttonStack = NSStackView(views: [runButton, spinner, copyButton, copyLogsButton, closeButton])
     buttonStack.orientation = .horizontal
     buttonStack.alignment = .centerY
     buttonStack.spacing = 8
@@ -155,6 +161,21 @@ final class DiagnosticsWindow: NSPanel, NSWindowDelegate {
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     pasteboard.setString(textView.string, forType: .string)
+  }
+
+  @objc private func copyLogsClicked() {
+    copyLogsButton.isEnabled = false
+    Task { [weak self] in
+      let logs = await Task.detached { RecentLogs.text() }.value
+      guard let self else { return }
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      pasteboard.setString(logs, forType: .string)
+      self.copyLogsButton.title = "Copied"
+      try? await Task.sleep(for: .seconds(1.5))
+      self.copyLogsButton.title = "Copy Logs"
+      self.copyLogsButton.isEnabled = true
+    }
   }
 
   @objc private func closeClicked() {
