@@ -36,6 +36,8 @@ extension AppDelegate {
             lines.append(contentsOf: await diagnoseOpenAI())
         case .anthropic:
             lines.append(contentsOf: await diagnoseAnthropic())
+        case .custom:
+            lines.append(contentsOf: await diagnoseCustomProvider())
         }
 
         let result = lines.joined(separator: "\n")
@@ -51,7 +53,33 @@ extension AppDelegate {
         case .openRouter: return "OpenRouter"
         case .openAI: return "OpenAI"
         case .anthropic: return "Anthropic"
+        case .custom: return "Custom (OpenAI-compatible)"
         }
+    }
+
+    /// Shows the address and model, then sends one short correction, since compatible servers differ in what else they offer.
+    private func diagnoseCustomProvider() async -> [String] {
+        let custom = settings.customProvider
+        var lines = [
+            "Base URL: \(custom.baseURL.isEmpty ? "✗ Not set" : custom.baseURL)",
+            "Model: \(custom.model.isEmpty ? "✗ Not set" : custom.model)",
+        ]
+        guard custom.isConfigured else {
+            lines += ["", "Set the base URL and model in Settings > Provider > Custom.", "", "Status: ✗ Not configured"]
+            return lines
+        }
+        lines += ["", "Test request:"]
+        var hasFailure = false
+        do {
+            let corrector = try OpenAICorrector(endpoint: .custom(settings), settings: settings)
+            let output = try await corrector.correct("Ths is a test.", style: .minimal)
+            lines.append("  ✓ The model responds: \(output)")
+        } catch {
+            lines.append("  ✗ \(error.localizedDescription)")
+            hasFailure = true
+        }
+        lines += ["", "Status: \(hasFailure ? "✗ Failing checks" : "✓ Healthy")"]
+        return lines
     }
 
     private func diagnoseGemini() async -> [String] {

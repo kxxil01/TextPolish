@@ -991,6 +991,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 setOpenAIApiKey()
             } else if settings.provider == .anthropic {
                 setAnthropicApiKey()
+            } else if settings.provider == .custom {
+                openSettingsWindow(nil)
             } else {
                 setGeminiApiKey()
             }
@@ -1054,6 +1056,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .anthropic:
             providerName = "Anthropic"
             model = settings.anthropicModel
+        case .custom:
+            providerName = "Custom"
+            model = settings.customProvider.model
         }
         return "\(appDisplayName) (\(providerName): \(model))"
     }

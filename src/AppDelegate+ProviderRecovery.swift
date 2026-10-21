@@ -59,7 +59,7 @@ extension AppDelegate {
             }
         case .openAI:
             return nil
-        case .anthropic:
+        case .anthropic, .custom:
             return nil
         }
     }
@@ -80,6 +80,8 @@ extension AppDelegate {
             fallbackProvider = .anthropic
         case .anthropic:
             fallbackProvider = .openAI
+        case .custom:
+            return false
         }
         return ProviderCredentials.isConfigured(for: fallbackProvider, settings: settings)
     }

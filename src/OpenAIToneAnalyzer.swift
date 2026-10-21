@@ -1,12 +1,10 @@
 import Foundation
 
 final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProviderReporting {
+  private let endpoint: OpenAICompatibleEndpoint
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let keychainAccount = "openAIApiKey"
-  private let keyFromSettings: String?
-  private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
   private let ownsSession: Bool
@@ -15,23 +13,31 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
   private(set) var lastRetryCount: Int = 0
   private var lastRateLimitRetryAfterSeconds: Double?
 
-  var diagnosticsProvider: Settings.Provider { .openAI }
+  var diagnosticsProvider: Settings.Provider { endpoint.provider }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
-    keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-    keyFromEnv = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
+  convenience init(settings: Settings, config: ToneAnalysisConfig = .default, session: URLSession? = nil) throws {
+    try self.init(endpoint: .openAI(settings), settings: settings, config: config, session: session)
+  }
+
+  init(
+    endpoint: OpenAICompatibleEndpoint,
+    settings: Settings,
+    config: ToneAnalysisConfig = .default,
+    session: URLSession? = nil
+  ) throws {
+    self.endpoint = endpoint
     keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
-    guard let baseURL = URL(string: settings.openAIBaseURL) else {
+    guard !endpoint.baseURL.isEmpty, let baseURL = URL(string: endpoint.baseURL) else {
       throw ToneAnalysisError.invalidBaseURL
     }
 
     self.baseURL = baseURL
-    self.model = settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.model = endpoint.model.trimmingCharacters(in: .whitespacesAndNewlines)
 
     // Validate model name
     if self.model.isEmpty {
-      throw ToneAnalysisError.invalidModelName(settings.openAIModel)
+      throw ToneAnalysisError.invalidModelName(endpoint.model)
     }
 
     self.timeoutSeconds = settings.requestTimeoutSeconds
@@ -69,23 +75,13 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     return try ToneAnalysisJSONParser.parseResponse(output)
   }
 
-  private func resolveApiKey() throws -> String {
-    do {
-      if let key = try Keychain.getConfiguredPassword(
-        primaryService: keychainService,
-        account: keychainAccount
-      ), !key.isEmpty {
-        return key
-      }
-    } catch {
-      TPLogger.log("Failed to read OpenAI keychain: \(error)")
+  /// Nil only when the endpoint works without a key.
+  private func resolveApiKey() throws -> String? {
+    if let key = endpoint.apiKey(keychainService: keychainService) {
+      return key
     }
-
-    if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
-    let env = keyFromEnv?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !env.isEmpty { return env }
-
-    throw ToneAnalysisError.missingApiKey("OpenAI")
+    guard !endpoint.requiresApiKey else { throw ToneAnalysisError.missingApiKey(endpoint.name) }
+    return nil
   }
 
   private func makeChatCompletionsURL() throws -> URL {
@@ -109,7 +105,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     return url
   }
 
-  private func generate(prompt: PromptPair, apiKey: String) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String?) async throws -> String {
     var retryCount = 0
     lastRateLimitRetryAfterSeconds = nil
     defer { lastRetryCount = retryCount }
@@ -173,7 +169,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
 
   private func sendRequest(
     prompt: PromptPair,
-    apiKey: String,
+    apiKey: String?,
     useMaxCompletionTokens: Bool
   ) async throws -> String {
     let url = try makeChatCompletionsURL()
@@ -181,7 +177,9 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     request.httpMethod = "POST"
     request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
     request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    if let apiKey {
+      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    }
 
     let body = OpenAIToneRequest(
       model: model,
@@ -211,7 +209,7 @@ final class OpenAIToneAnalyzer: ToneAnalyzer, RetryReporting, DiagnosticsProvide
     let message = parseErrorMessage(data: data)
     lastRateLimitRetryAfterSeconds =
       http.statusCode == 429 ? RetryAfterParser.retryAfterSeconds(from: http, data: data) : nil
-    TPLogger.log("OpenAI Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    TPLogger.log("\(endpoint.name) Tone HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw ToneAnalysisError.requestFailed(http.statusCode, message)
   }
 

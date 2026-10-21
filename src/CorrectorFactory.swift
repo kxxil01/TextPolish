@@ -44,6 +44,16 @@ enum CorrectorFactory {
           diagnosticsModel: settings.anthropicModel
         )
       }
+    case .custom:
+      do {
+        return try OpenAICorrector(endpoint: .custom(settings), settings: settings)
+      } catch {
+        return FailingCorrector(
+          underlyingError: error,
+          diagnosticsProvider: .custom,
+          diagnosticsModel: settings.customProvider.model
+        )
+      }
     }
   }
 }

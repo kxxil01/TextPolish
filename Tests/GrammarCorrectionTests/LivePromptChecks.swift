@@ -7,7 +7,8 @@ import XCTest
 ///
 ///     TEXTPOLISH_LIVE_CHECKS=1 OPENAI_API_KEY=sk-... swift test --filter LivePromptChecks
 ///
-/// Optional: TEXTPOLISH_LIVE_PROVIDER (openai, gemini, anthropic, openrouter) and TEXTPOLISH_LIVE_MODEL.
+/// Optional: TEXTPOLISH_LIVE_PROVIDER (openai, gemini, anthropic, openrouter, custom) and TEXTPOLISH_LIVE_MODEL.
+/// Custom needs TEXTPOLISH_LIVE_BASE_URL and TEXTPOLISH_LIVE_MODEL; TEXTPOLISH_CUSTOM_API_KEY is optional.
 /// Model output varies between runs, so read the printed outputs when a check fails.
 @MainActor
 final class LivePromptChecks: XCTestCase {
@@ -231,7 +232,7 @@ final class LivePromptChecks: XCTestCase {
   private static func makeCorrector(environment: [String: String]) throws -> GrammarCorrector {
     let provider = (environment["TEXTPOLISH_LIVE_PROVIDER"] ?? "openai").lowercased()
     // Providers check the keychain before the key passed here; clear any test-run keys so the real one is used.
-    for account in ["openAIApiKey", "geminiApiKey", "anthropicApiKey", "openRouterApiKey"] {
+    for account in ["openAIApiKey", "geminiApiKey", "anthropicApiKey", "openRouterApiKey", "customApiKey"] {
       try? Keychain.deleteConfiguredPassword(primaryService: Keychain.testPrimaryService, account: account)
     }
     let model = environment["TEXTPOLISH_LIVE_MODEL"]
@@ -253,8 +254,15 @@ final class LivePromptChecks: XCTestCase {
       settings.provider = .openRouter
       settings.openRouterApiKey = try requiredKey("OPENROUTER_API_KEY", in: environment)
       settings.openRouterModel = model ?? settings.openRouterModel
+    case "custom":
+      settings.provider = .custom
+      settings.customProvider = Settings.CustomProvider(
+        baseURL: try requiredKey("TEXTPOLISH_LIVE_BASE_URL", in: environment),
+        model: try requiredKey("TEXTPOLISH_LIVE_MODEL", in: environment),
+        apiKey: environment["TEXTPOLISH_CUSTOM_API_KEY"]
+      )
     default:
-      throw XCTSkip("Unknown TEXTPOLISH_LIVE_PROVIDER \"\(provider)\"; use openai, gemini, anthropic or openrouter.")
+      throw XCTSkip("Unknown TEXTPOLISH_LIVE_PROVIDER \"\(provider)\"; use openai, gemini, anthropic, openrouter or custom.")
     }
     return CorrectorFactory.make(settings: settings)
   }

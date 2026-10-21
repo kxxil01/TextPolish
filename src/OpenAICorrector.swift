@@ -10,31 +10,36 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case overRewrite
 
     var errorDescription: String? {
+      message(for: "OpenAI")
+    }
+
+    /// The error worded for the service that returned it: OpenAI, or the Custom provider.
+    func message(for name: String) -> String {
       switch self {
       case .missingApiKey:
-        return "Missing OpenAI API key"
+        return "Missing \(name) API key"
       case .invalidBaseURL:
-        return "Invalid OpenAI base URL"
+        return "Invalid \(name) base URL"
       case .invalidModel:
-        return "Invalid OpenAI model"
+        return "Invalid \(name) model"
       case .requestFailed(let status, let message):
         if status == 401 {
-          return "OpenAI unauthorized (401) — check API key"
+          return "\(name) unauthorized (401): check the API key"
         }
         if status == 402 {
-          return "OpenAI payment required (402) — check billing"
+          return "\(name) payment required (402): check billing"
         }
         if status == 429 {
-          return "OpenAI rate limited (429) — try again later"
+          return "\(name) rate limited (429): try again later"
         }
         if let message, !message.isEmpty {
-          return "OpenAI request failed (\(status)): \(message)"
+          return "\(name) request failed (\(status)): \(message)"
         }
-        return "OpenAI request failed (\(status))"
+        return "\(name) request failed (\(status))"
       case .emptyResponse:
-        return "OpenAI returned no text"
+        return "\(name) returned no text"
       case .overRewrite:
-        return "OpenAI changed too much and was rejected. Lower OpenAI Min Similarity or simplify extra instruction."
+        return "\(name) changed too much and was rejected. Lower Min Similarity or simplify the extra instruction."
       }
     }
   }
@@ -43,12 +48,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   let minSimilarity: Double
 
+  private let endpoint: OpenAICompatibleEndpoint
   private let baseURL: URL
   private let model: String
   private let keychainService: String
-  private let keychainAccount = "openAIApiKey"
-  private let keyFromSettings: String?
-  private let keyFromEnv: String?
   private let timeoutSeconds: Double
   private let session: URLSession
   private let ownsSession: Bool
@@ -60,19 +63,25 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private(set) var lastRetryCount: Int = 0
   private var lastRateLimitRetryAfterSeconds: Double?
 
-  var diagnosticsProvider: Settings.Provider { .openAI }
+  var diagnosticsProvider: Settings.Provider { endpoint.provider }
   var diagnosticsModel: String { model }
 
-  init(settings: Settings, session: URLSession? = nil) throws {
-    keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-    keyFromEnv = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
+  convenience init(settings: Settings, session: URLSession? = nil) throws {
+    try self.init(endpoint: .openAI(settings), settings: settings, session: session)
+  }
+
+  /// `endpoint` says where requests go and how they sign in; `settings` supplies the shared Polish options.
+  init(endpoint: OpenAICompatibleEndpoint, settings: Settings, session: URLSession? = nil) throws {
+    self.endpoint = endpoint
     keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
-    guard let baseURL = URL(string: settings.openAIBaseURL) else { throw OpenAIError.invalidBaseURL }
+    guard !endpoint.baseURL.isEmpty, let baseURL = URL(string: endpoint.baseURL) else {
+      throw Self.error(.invalidBaseURL, for: endpoint)
+    }
 
     self.baseURL = baseURL
-    let trimmedModel = settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedModel = endpoint.model.trimmingCharacters(in: .whitespacesAndNewlines)
     self.model = trimmedModel
-    guard !trimmedModel.isEmpty else { throw OpenAIError.invalidModel }
+    guard !trimmedModel.isEmpty else { throw Self.error(.invalidModel, for: endpoint) }
     self.timeoutSeconds = settings.requestTimeoutSeconds
     if let session {
       self.session = session
@@ -85,10 +94,10 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       self.session = URLSession(configuration: configuration)
       self.ownsSession = true
     }
-    self.maxAttempts = max(1, settings.openAIMaxAttempts)
+    self.maxAttempts = max(1, endpoint.maxAttempts)
     self.retryPolicy = RetryPolicy()
-    self.minSimilarity = max(0.0, min(1.0, settings.openAIMinSimilarity))
-    self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.openAIExtraInstruction)
+    self.minSimilarity = max(0.0, min(1.0, endpoint.minSimilarity))
+    self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(endpoint.extraInstruction)
     self.protectedTerms = settings.protectedTerms
     self.correctionLanguage = settings.correctionLanguage
   }
@@ -104,6 +113,19 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   }
 
   func correct(_ text: String, style: CorrectionStyle) async throws -> String {
+    do {
+      return try await correctWithChecks(text, style: style)
+    } catch let error as OpenAIError {
+      throw Self.error(error, for: endpoint)
+    }
+  }
+
+  /// The Custom provider's errors carry its name; OpenAI's stay `OpenAIError` for the fallback rules.
+  private static func error(_ error: OpenAIError, for endpoint: OpenAICompatibleEndpoint) -> Error {
+    endpoint.provider == .custom ? CustomProviderError(underlying: error) : error
+  }
+
+  private func correctWithChecks(_ text: String, style: CorrectionStyle) async throws -> String {
     lastRetryCount = 0
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
@@ -126,12 +148,12 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       guard !cleaned.isEmpty else { throw OpenAIError.emptyResponse }
       if PromptGuardrails.detectRefusal(cleaned) {
         retryReason = .refusal
-        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: refusal")
+        TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: refusal")
         continue
       }
       if !PromptGuardrails.validateOutputLength(input: text, output: cleaned) {
         retryReason = .outputTooLong
-        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: outputTooLong")
+        TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: outputTooLong")
         continue
       }
 
@@ -139,7 +161,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
          !placeholdersAllPresent(in: cleaned, placeholders: protected.placeholders)
       {
         retryReason = .placeholdersMissing
-        TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: placeholdersMissing")
+        TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: placeholdersMissing")
         continue
       }
 
@@ -155,29 +177,19 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       }
       retryReason = rejection
       let summary = rejectionSummary(original: text, candidate: restored, minimumSimilarity: minimum)
-      TPLogger.log("OpenAI attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
+      TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
     throw OpenAIError.overRewrite
   }
 
-  private func resolveApiKey() throws -> String {
-    do {
-      if let key = try Keychain.getConfiguredPassword(
-        primaryService: keychainService,
-        account: keychainAccount
-      ), !key.isEmpty {
-        return key
-      }
-    } catch {
-      TPLogger.log("Failed to read OpenAI keychain: \(error)")
+  /// Nil only when the endpoint works without a key.
+  private func resolveApiKey() throws -> String? {
+    if let key = endpoint.apiKey(keychainService: keychainService) {
+      return key
     }
-
-    if let keyFromSettings, !keyFromSettings.isEmpty { return keyFromSettings }
-    let env = keyFromEnv?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !env.isEmpty { return env }
-
-    throw OpenAIError.missingApiKey
+    guard !endpoint.requiresApiKey else { throw OpenAIError.missingApiKey }
+    return nil
   }
 
   private func makeChatCompletionsURL() throws -> URL {
@@ -201,7 +213,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     return url
   }
 
-  private func generate(prompt: PromptPair, apiKey: String, style: CorrectionStyle) async throws -> String {
+  private func generate(prompt: PromptPair, apiKey: String?, style: CorrectionStyle) async throws -> String {
     let maxNetworkAttempts = retryPolicy.maxNetworkAttempts
     var lastError: Error?
     var retryCount = 0
@@ -276,7 +288,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   private func sendRequest(
     prompt: PromptPair,
-    apiKey: String,
+    apiKey: String?,
     style: CorrectionStyle,
     useMaxCompletionTokens: Bool
   ) async throws -> String {
@@ -285,7 +297,9 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     request.httpMethod = "POST"
     request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
     request.setValue("TextPolish/0.1", forHTTPHeaderField: "User-Agent")
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    if let apiKey {
+      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    }
 
     let body = OpenAIChatCompletionsRequest(
       model: model,
@@ -315,7 +329,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     let message = parseErrorMessage(data: data)
     lastRateLimitRetryAfterSeconds =
       http.statusCode == 429 ? RetryAfterParser.retryAfterSeconds(from: http, data: data) : nil
-    TPLogger.log("OpenAI HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
+    TPLogger.log("\(endpoint.name) HTTP \(http.statusCode) model=\(model) message=\(message ?? "nil")")
     throw OpenAIError.requestFailed(http.statusCode, message)
   }
 
@@ -411,11 +425,15 @@ extension OpenAICorrector: @unchecked Sendable {}
 
 extension OpenAICorrector: ChangeExplaining {
   func explainChanges(original: String, polished: String) async throws -> [String] {
-    let output = try await generate(
-      prompt: ChangeExplanationPrompt.make(original: original, polished: polished),
-      apiKey: try resolveApiKey(),
-      style: .minimal
-    )
-    return ChangeExplanationPrompt.parse(output)
+    do {
+      let output = try await generate(
+        prompt: ChangeExplanationPrompt.make(original: original, polished: polished),
+        apiKey: try resolveApiKey(),
+        style: .minimal
+      )
+      return ChangeExplanationPrompt.parse(output)
+    } catch let error as OpenAIError {
+      throw Self.error(error, for: endpoint)
+    }
   }
 }

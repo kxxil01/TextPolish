@@ -8,6 +8,9 @@ enum ProviderCredentials {
 
     let credentialSource: (account: String, envKeys: [String], settingsValue: String?)
     switch provider {
+    case .custom:
+      // A key is optional for the Custom provider; its address and model are what it needs.
+      return settings.customProvider.isConfigured
     case .gemini:
       credentialSource = ("geminiApiKey", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], settings.geminiApiKey)
     case .openRouter:

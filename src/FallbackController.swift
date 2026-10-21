@@ -87,6 +87,8 @@ final class FallbackController {
             return "OpenAI"
         case .anthropic:
             return "Anthropic"
+        case .custom:
+            return "Custom"
         }
     }
 }

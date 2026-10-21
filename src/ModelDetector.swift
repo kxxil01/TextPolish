@@ -152,11 +152,19 @@ enum ModelDetector {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DetectorError.noApiKey
         }
+        return try await detectCompatibleModel(apiKey: apiKey, baseURL: baseURL)
+    }
 
+    /// Any OpenAI-compatible server: lists `/models` and picks one. An empty key sends no Authorization header,
+    /// since local servers often need none.
+    static func detectCompatibleModel(apiKey: String, baseURL: String) async throws -> String {
         let requestURL = try makeOpenAIModelsURL(baseURL: baseURL)
         var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedKey.isEmpty {
+            request.setValue("Bearer \(trimmedKey)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("TextPolish/1.0", forHTTPHeaderField: "User-Agent")
 
         do {
