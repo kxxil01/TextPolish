@@ -36,7 +36,7 @@ It currently supports two workflows:
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
 - Preview before paste (optional, Settings > Advanced): see the changes highlighted, then press Return to paste or Escape to cancel. Not quite right? Click Try Again for another version, or pick another style in the panel to polish the original again without selecting it again
 - Learn mode (optional, Settings > Advanced): after each Polish, a small panel explains the main changes, such as "status progress → a progress status: adjective comes before the noun"
-- Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button
+- Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button. Changes Learn has explained more than once, such as "needsed → needed (3 times)", are listed first under Watch Out For
 - Usage and cost (Diagnostics): this month's requests and tokens per model, with an estimate in dollars at list prices for common models. Counted on this Mac only
 - Diagnostics > Copy Logs copies TextPolish's log lines since launch for a bug report; they never include your text
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens

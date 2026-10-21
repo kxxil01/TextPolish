@@ -31,11 +31,12 @@ final class LessonsWindow: NSPanel {
   }
 
   func reload() {
-    textView.textStorage?.setAttributedString(Self.formatted(history.lessons))
+    textView.textStorage?.setAttributedString(Self.formatted(history.lessons, repeated: history.repeatedMistakes()))
   }
 
-  /// Each lesson's time as a heading, then its changes in Learn panel colors.
-  static func formatted(_ lessons: [Lesson], now: Date = Date()) -> NSAttributedString {
+  /// Repeated mistakes first, under "Watch Out For", then each lesson's time as a heading and its changes,
+  /// all in Learn panel colors.
+  static func formatted(_ lessons: [Lesson], repeated: [RepeatedMistake] = [], now: Date = Date()) -> NSAttributedString {
     guard !lessons.isEmpty else {
       return NSAttributedString(
         string: "No lessons yet. Turn on Learn in Settings > Advanced, then Polish some text.",
@@ -47,13 +48,21 @@ final class LessonsWindow: NSPanel {
     let headingStyle = NSMutableParagraphStyle()
     headingStyle.paragraphSpacingBefore = 14
     let result = NSMutableAttributedString()
+    if !repeated.isEmpty {
+      result.append(NSAttributedString(string: "Watch Out For\n", attributes: [
+        .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+        .foregroundColor: NSColor.secondaryLabelColor,
+      ]))
+      result.append(LearnPanel.formatted(repeated.map(\.line)))
+      result.append(NSAttributedString(string: "\n"))
+    }
     for (index, lesson) in lessons.enumerated() {
       let heading = formatter.localizedString(for: lesson.date, relativeTo: now).capitalizedFirstLetter
       var headingAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
         .foregroundColor: NSColor.secondaryLabelColor,
       ]
-      if index > 0 {
+      if index > 0 || !repeated.isEmpty {
         headingAttributes[.paragraphStyle] = headingStyle
       }
       result.append(NSAttributedString(string: (index > 0 ? "\n" : "") + heading + "\n", attributes: headingAttributes))
