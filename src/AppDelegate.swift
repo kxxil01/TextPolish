@@ -37,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var polishItem: NSMenuItem?
     private var translateItem: NSMenuItem?
+    private var explainItem: NSMenuItem?
+    private let explanationPanel = LearnPanel()
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
@@ -282,6 +284,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastTargetApplication = frontmost
     }
 
+    private func makeMenuItem(_ title: String, action: Selector?, toolTip: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.toolTip = toolTip
+        return item
+    }
+
     private func setupMenu() {
         let menu = NSMenu()
         menu.delegate = self
@@ -314,23 +323,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         analyzeToneItem.target = self
 
-        let translateItem = NSMenuItem(title: "Translate to English", action: #selector(translateToEnglish), keyEquivalent: "")
-        translateItem.target = self
-        translateItem.toolTip = "Rewrites the selected text, or the whole field, in natural English"
+        let translateItem = makeMenuItem(
+            "Translate to English", action: #selector(translateToEnglish),
+            toolTip: "Rewrites the selected text, or the whole field, in natural English"
+        )
+        let explainItem = makeMenuItem(
+            "Explain Message", action: #selector(explainMessage),
+            toolTip: "Shows what the selected message means and how it sounds, without changing it"
+        )
 
         self.polishItem = polishItem
         self.translateItem = translateItem
+        self.explainItem = explainItem
         self.analyzeToneItem = analyzeToneItem
 
-        let undoItem = NSMenuItem(title: "Undo Last Polish", action: nil, keyEquivalent: "")
-        undoItem.target = self
-        undoItem.toolTip = "Puts back the text from before the last Polish, if it is still unchanged"
+        let undoItem = makeMenuItem(
+            "Undo Last Polish", action: nil,
+            toolTip: "Puts back the text from before the last Polish, if it is still unchanged"
+        )
         self.undoItem = undoItem
 
         menu.addItem(polishItem)
         menu.addItem(polishStyleItem)
         menu.addItem(translateItem)
         menu.addItem(undoItem)
+        menu.addItem(explainItem)
         menu.addItem(analyzeToneItem)
 
         let cancelItem = NSMenuItem(
@@ -359,6 +376,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
 
+        menu.addItem(makeUpdatesItem())
+        menu.addItem(.separator())
+
+        // Settings
+        let settingsItem = NSMenuItem(
+            title: "Settings\u{2026}",
+            action: #selector(openSettingsWindow),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(settingsItem)
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        quitItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(quitItem)
+
+        statusMenu = menu
+        syncHotKeyMenuItems()
+        syncCancelMenuState()
+        syncUpdateMenuItems()
+    }
+
+    /// Check for Updates, with the update status and last check time below it.
+    private func makeUpdatesItem() -> NSMenuItem {
         let updatesItem = NSMenuItem(title: "Check for Updates", action: nil, keyEquivalent: "")
         let updatesMenu = NSMenu()
 
@@ -382,29 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updatesMenu.addItem(updateLastCheckedItem)
 
         updatesItem.submenu = updatesMenu
-        menu.addItem(updatesItem)
-        menu.addItem(.separator())
-
-        // Settings
-        let settingsItem = NSMenuItem(
-            title: "Settings\u{2026}",
-            action: #selector(openSettingsWindow),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        settingsItem.keyEquivalentModifierMask = [.command]
-        menu.addItem(settingsItem)
-
-        // Quit
-        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        quitItem.keyEquivalentModifierMask = [.command]
-        menu.addItem(quitItem)
-
-        statusMenu = menu
-        syncHotKeyMenuItems()
-        syncCancelMenuState()
-        syncUpdateMenuItems()
+        return updatesItem
     }
 
     func menuWillOpen(_: NSMenu) {
@@ -700,6 +722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "Polish \(settings.hotKeyPolish.displayString)",
                 "Analyze Tone \(settings.hotKeyAnalyzeTone.displayString)",
                 "Translate to English \(settings.hotKeyTranslate.displayString)",
+                "Explain Message \(settings.hotKeyExplain.displayString)",
             ] + styleShortcuts).joined(separator: " • ")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             feedback?.showError("Some shortcuts could not be registered. \(message) Configured: \(configured)")
@@ -708,7 +731,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Translate, then one shortcut per style that has one.
     private func extraHotKeysByID() -> [Int: Settings.HotKey] {
-        var result: [Int: Settings.HotKey] = [HotKeyManager.HotKeyID.translate.rawValue: settings.hotKeyTranslate]
+        var result: [Int: Settings.HotKey] = [
+            HotKeyManager.HotKeyID.translate.rawValue: settings.hotKeyTranslate,
+            HotKeyManager.HotKeyID.explain.rawValue: settings.hotKeyExplain,
+        ]
         for (index, style) in Settings.PolishStyle.allCases.enumerated() {
             if let hotKey = settings.styleHotKey(for: style) {
                 result[HotKeyManager.styleHotKeyID(index: index)] = hotKey
@@ -742,6 +768,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             toneAnalysisController?.analyzeSelection(targetApplication: target, timingsOverride: toneTimings)
         case HotKeyManager.HotKeyID.translate.rawValue:
             correctionController?.polish(style: .translateToEnglish, targetApplication: target, timingsOverride: correctionTimings)
+        case HotKeyManager.HotKeyID.explain.rawValue:
+            explainSelection(in: target, timings: toneTimings)
         default:
             // A style shortcut polishes in that style, whatever style the app normally uses.
             let styles = Settings.PolishStyle.allCases
@@ -783,6 +811,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             targetApplication: target,
             timingsOverride: timingsOverride(for: target),
             text: text
+        )
+    }
+
+    @objc private func explainMessage() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            let target = self.lastTargetApplication
+            self.explainSelection(in: target, timings: self.toneTimingsOverride(for: target))
+        }
+    }
+
+    /// Explain Message runs on the current provider, like Learn mode, and shows the result without taking focus.
+    private func explainSelection(in target: NSRunningApplication?, timings: ToneAnalysisController.Timings?) {
+        guard let explainer = CorrectorFactory.make(settings: settings) as? MessageExplaining else { return }
+        toneAnalysisController?.explainSelection(
+            explainer: explainer,
+            language: settings.explanationLanguage,
+            presenter: explanationPanel,
+            targetApplication: target,
+            timingsOverride: timings
         )
     }
 
@@ -974,6 +1022,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "• Polish (selection, or the whole field): \(settings.hotKeyPolish.displayString)",
             "• Analyze Tone: \(settings.hotKeyAnalyzeTone.displayString)",
             "• Translate to English: \(settings.hotKeyTranslate.displayString)",
+            "• Explain Message: \(settings.hotKeyExplain.displayString)",
         ].joined(separator: "\n")
 
         alert.addButton(withTitle: "Open Accessibility Settings")
@@ -1028,6 +1077,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         translateItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: settings.hotKeyTranslate.keyCode)
         translateItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyTranslate.modifiers)
+        explainItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: settings.hotKeyExplain.keyCode)
+        explainItem?.keyEquivalentModifierMask = Settings.HotKey.modifierMask(modifiers: settings.hotKeyExplain.modifiers)
 
         analyzeToneItem?.title = "Analyze Tone"
         analyzeToneItem?.keyEquivalent = Settings.HotKey.keyEquivalentString(keyCode: analyzeToneHotKey.keyCode)

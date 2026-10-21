@@ -30,6 +30,7 @@ It currently supports two workflows:
 - Custom style (optional, Settings > Advanced > Custom Style): describe a style in your own words, such as "short and direct, as a status update to my manager", and give it a name. It joins the Polish Style menu, can be chosen per app, and can have its own shortcut. It may change the layout, for example into bullet points, but never what the text says
 - Style shortcuts (optional, Settings > Hotkeys > Polish with a Style): one shortcut per style, for example ⌃⌥⌘F to Polish as Formal
 - Translate to English (`⌃⌥⌘E`): write in Indonesian or any other language, or a mix, and get natural English back with the same meaning, tone, names, and numbers. Preview and Undo work with it too
+- Explain Message (`⌃⌥⌘U`): select a message someone sent you to see what it means in Indonesian (or simple English, Settings > Advanced), how it sounds, and any slang or idioms in it. Nothing is changed or pasted
 - Right-click menu: select text, then right-click > Services > Polish with TextPolish, or Translate to English with TextPolish. It works in any app with Services, without remembering a shortcut. If the items are missing, turn them on in System Settings > Keyboard > Keyboard Shortcuts > Services > Text
 - Undo Last Polish (menu bar): puts back the original text, as long as the polished text is still unchanged in that field
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
@@ -65,6 +66,7 @@ Shortcuts app: add a "Run Shell Script" action, set Pass Input to "to stdin", an
 - Polish: `Ctrl+Option+Command+G` (`⌃⌥⌘G`)
 - Analyze Tone: `Ctrl+Option+Command+T` (`⌃⌥⌘T`)
 - Translate to English: `Ctrl+Option+Command+E` (`⌃⌥⌘E`)
+- Explain Message: `Ctrl+Option+Command+U` (`⌃⌥⌘U`)
 
 Hotkeys are configurable from the menu and settings window.
 

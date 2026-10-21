@@ -99,3 +99,32 @@ extension Settings {
     minimalStyleApps.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
   }
 }
+
+// MARK: - Explain Message
+
+extension Settings {
+  /// The language Explain Message writes in.
+  enum ExplanationLanguage: String, Codable, Sendable, CaseIterable {
+    case indonesian
+    case simpleEnglish
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.singleValueContainer()
+      self = ExplanationLanguage(rawValue: try container.decode(String.self)) ?? .indonesian
+    }
+
+    var displayName: String {
+      switch self {
+      case .indonesian: return "Indonesian"
+      case .simpleEnglish: return "Simple English"
+      }
+    }
+
+    var promptName: String {
+      switch self {
+      case .indonesian: return "Indonesian"
+      case .simpleEnglish: return "simple, plain English"
+      }
+    }
+  }
+}

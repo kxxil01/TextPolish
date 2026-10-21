@@ -6,9 +6,18 @@ protocol ChangeExplanationPresenting: AnyObject {
   func show(lines: [String])
 }
 
+/// Shows what a received message means, without taking focus from the app it is in.
 @MainActor
-final class LearnPanel: ChangeExplanationPresenting {
+protocol MessageExplanationPresenting: AnyObject {
+  func show(explanation: MessageExplanation)
+}
+
+/// A small floating panel for Learn mode and Explain Message. It hides after a reading time, stays while hovered,
+/// and scrolls when the text is long.
+@MainActor
+final class LearnPanel: ChangeExplanationPresenting, MessageExplanationPresenting {
   private var panel: NSPanel?
+  private var textView: NSTextView?
   private var hideTask: Task<Void, Never>?
   private let fixedVisibleDuration: Duration?
   private let afterHoverDelay: Duration
@@ -25,21 +34,58 @@ final class LearnPanel: ChangeExplanationPresenting {
   }
 
   func show(lines: [String]) {
-    close()
-    guard !lines.isEmpty else { return }
+    guard !lines.isEmpty else {
+      close()
+      return
+    }
+    show(
+      title: "What changed",
+      text: Self.formatted(lines),
+      accessibilityLabel: "What Polish changed",
+      visibleFor: fixedVisibleDuration ?? Self.readingTime(lineCount: lines.count)
+    )
+  }
 
+  func show(explanation: MessageExplanation) {
+    show(
+      title: "What it means",
+      text: Self.formatted(explanation),
+      accessibilityLabel: "What the message means",
+      visibleFor: fixedVisibleDuration ?? Self.readingTime(for: explanation)
+    )
+  }
+
+  /// Eight seconds plus one per 40 characters of meaning and three per phrase, at most 45.
+  nonisolated static func readingTime(for explanation: MessageExplanation) -> Duration {
+    .seconds(min(8 + explanation.meaning.count / 40 + 3 * explanation.phrases.count, 45))
+  }
+
+  private func show(title: String, text: NSAttributedString, accessibilityLabel: String, visibleFor duration: Duration) {
+    close()
     let width: CGFloat = 400
     let padding: CGFloat = 14
-    let label = NSTextField(wrappingLabelWithString: "")
-    label.attributedStringValue = Self.formatted(lines)
-    label.isSelectable = true
-    label.setAccessibilityLabel("What Polish changed")
-    let textHeight = ceil(label.attributedStringValue.boundingRect(
-      with: NSSize(width: width - padding * 2, height: .greatestFiniteMagnitude),
+    let textWidth = width - padding * 2
+    let measuredHeight = ceil(text.boundingRect(
+      with: NSSize(width: textWidth - 10, height: .greatestFiniteMagnitude),
       options: [.usesLineFragmentOrigin, .usesFontLeading]
     ).height)
+    // Long explanations scroll instead of growing past the screen.
+    let textHeight = min(measuredHeight + 4, 360)
     let height = textHeight + padding * 2
-    label.frame = NSRect(x: padding, y: padding, width: width - padding * 2, height: textHeight)
+
+    let scrollView = NSScrollView(frame: NSRect(x: padding, y: padding, width: textWidth, height: textHeight))
+    scrollView.drawsBackground = false
+    scrollView.hasVerticalScroller = measuredHeight + 4 > textHeight
+    let textView = NSTextView(frame: scrollView.bounds)
+    textView.isEditable = false
+    textView.isSelectable = true
+    textView.drawsBackground = false
+    textView.textContainerInset = .zero
+    textView.textContainer?.lineFragmentPadding = 0
+    textView.autoresizingMask = [.width]
+    textView.textStorage?.setAttributedString(text)
+    textView.setAccessibilityLabel(accessibilityLabel)
+    scrollView.documentView = textView
 
     let panel = NSPanel(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
@@ -47,7 +93,7 @@ final class LearnPanel: ChangeExplanationPresenting {
       backing: .buffered,
       defer: false
     )
-    panel.title = "What changed"
+    panel.title = title
     panel.isFloatingPanel = true
     panel.level = .floating
     panel.hidesOnDeactivate = false
@@ -64,7 +110,8 @@ final class LearnPanel: ChangeExplanationPresenting {
       }
     }
     panel.contentView = content
-    panel.contentView?.addSubview(label)
+    panel.contentView?.addSubview(scrollView)
+    self.textView = textView
 
     if let screen = NSScreen.main {
       let visible = screen.visibleFrame
@@ -73,7 +120,7 @@ final class LearnPanel: ChangeExplanationPresenting {
     panel.orderFrontRegardless()
     self.panel = panel
 
-    scheduleHide(after: fixedVisibleDuration ?? Self.readingTime(lineCount: lines.count))
+    scheduleHide(after: duration)
   }
 
   private func cancelHide() {
@@ -95,6 +142,44 @@ final class LearnPanel: ChangeExplanationPresenting {
     hideTask = nil
     panel?.orderOut(nil)
     panel = nil
+    textView = nil
+  }
+
+  /// The meaning first, then the tone, then each phrase with what it means.
+  static func formatted(_ explanation: MessageExplanation) -> NSAttributedString {
+    let body = NSFont.systemFont(ofSize: 13)
+    let small = NSFont.systemFont(ofSize: 12)
+    let heading = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    let spaced = NSMutableParagraphStyle()
+    spaced.paragraphSpacingBefore = 8
+    let result = NSMutableAttributedString(
+      string: explanation.meaning,
+      attributes: [.font: body, .foregroundColor: NSColor.labelColor]
+    )
+    if let tone = explanation.tone {
+      result.append(NSAttributedString(
+        string: "\nTone: \(tone)",
+        attributes: [.font: small, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: spaced]
+      ))
+    }
+    guard !explanation.phrases.isEmpty else { return result }
+    result.append(NSAttributedString(
+      string: "\nPhrases",
+      attributes: [.font: heading, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: spaced]
+    ))
+    for phrase in explanation.phrases {
+      let parts = phrase.components(separatedBy: "→")
+      let term = parts[0].trimmingCharacters(in: .whitespaces)
+      result.append(NSAttributedString(string: "\n" + term, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]))
+      if parts.count > 1 {
+        let meaning = parts.dropFirst().joined(separator: "→").trimmingCharacters(in: .whitespaces)
+        result.append(NSAttributedString(
+          string: " → " + meaning,
+          attributes: [.font: body, .foregroundColor: NSColor.labelColor]
+        ))
+      }
+    }
+    return result
   }
 
   /// "before → after: reason" becomes the old words in red, the new words in green, and the reason in grey.
@@ -143,6 +228,14 @@ final class LearnPanel: ChangeExplanationPresenting {
   #if DEBUG
     var debugIsShowing: Bool {
       panel != nil
+    }
+
+    var debugTitle: String? {
+      panel?.title
+    }
+
+    var debugText: String? {
+      textView?.string
     }
 
     func debugSimulateHover(inside: Bool) {

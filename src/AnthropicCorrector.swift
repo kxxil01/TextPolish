@@ -357,6 +357,12 @@ struct AnthropicMessagesResponse: Decodable {
 // `CorrectionController` serializes execution (`isRunning`) so this type is not used concurrently.
 extension AnthropicCorrector: @unchecked Sendable {}
 
+extension AnthropicCorrector: TextGenerating, MessageExplaining {
+  func generateText(_ prompt: PromptPair) async throws -> String {
+    try await generate(prompt: prompt, apiKey: try resolveApiKey())
+  }
+}
+
 extension AnthropicCorrector: ChangeExplaining {
   func explainChanges(original: String, polished: String) async throws -> [String] {
     let output = try await generate(

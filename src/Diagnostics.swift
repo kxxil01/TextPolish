@@ -3,6 +3,7 @@ import Foundation
 enum DiagnosticsOperation: String, Sendable {
   case correction = "Correction"
   case toneAnalysis = "Tone Analysis"
+  case messageExplanation = "Explain Message"
 }
 
 enum DiagnosticsStatus: String, Sendable {

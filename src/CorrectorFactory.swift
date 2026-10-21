@@ -67,3 +67,10 @@ struct FailingCorrector: GrammarCorrector, DiagnosticsProviderReporting, @unchec
     throw underlyingError
   }
 }
+
+/// A provider that could not be set up reports why when asked to explain a message too.
+extension FailingCorrector: MessageExplaining {
+  func explainMessage(_ text: String, in language: Settings.ExplanationLanguage) async throws -> MessageExplanation {
+    throw underlyingError
+  }
+}

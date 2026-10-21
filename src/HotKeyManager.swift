@@ -10,6 +10,7 @@ final class HotKeyManager {
     case polish = 1
     case analyzeTone = 3
     case translate = 5
+    case explain = 6
   }
 
   /// Style shortcuts use IDs from here up, one per `Settings.PolishStyle` in `allCases` order.

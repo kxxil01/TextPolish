@@ -316,6 +316,12 @@ private struct OpenRouterChatCompletionsResponse: Decodable {
 
 extension OpenRouterCorrector: @unchecked Sendable {}
 
+extension OpenRouterCorrector: TextGenerating, MessageExplaining {
+  func generateText(_ prompt: PromptPair) async throws -> String {
+    try await generate(prompt: prompt, apiKey: try resolveApiKey())
+  }
+}
+
 extension OpenRouterCorrector: ChangeExplaining {
   func explainChanges(original: String, polished: String) async throws -> [String] {
     let output = try await generate(
