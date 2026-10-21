@@ -175,6 +175,14 @@ extension TextProcessor {
     if !original.contains("—") {
       result = result.replacingOccurrences(of: "—", with: "-")
     }
+    // Models like curly quotes; a writer who typed none keeps straight ones.
+    if !original.contains(where: { "‘’“”".contains($0) }) {
+      result = result
+        .replacingOccurrences(of: "‘", with: "'")
+        .replacingOccurrences(of: "’", with: "'")
+        .replacingOccurrences(of: "“", with: "\"")
+        .replacingOccurrences(of: "”", with: "\"")
+    }
     return result
   }
 

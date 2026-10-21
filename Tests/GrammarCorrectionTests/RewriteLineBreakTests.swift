@@ -30,6 +30,18 @@ final class RewriteLineBreakTests: XCTestCase {
     XCTAssertFalse(summary.contains("report"), "The log line must never include the user's text")
   }
 
+  func testCleanupKeepsQuotesStraightUnlessTheWriterUsedCurlyOnes() {
+    XCTAssertEqual(
+      checker.cleanup("Please don’t say “maybe”.", original: "Do not say \"maybe\"."),
+      "Please don't say \"maybe\"."
+    )
+    XCTAssertEqual(
+      checker.cleanup("Please don’t.", original: "Don’t do it."),
+      "Please don’t.",
+      "Curly quotes the writer typed stay curly"
+    )
+  }
+
   func testCleanupDropsTrailingSpacesTheModelAdded() {
     let added = "Hi team,\n\nI've updated the report.  \nThe numbers now match.  \nThanks"
     let original = "Hi team,\n\nI've updated the report.\nThe numbers now match.\nThanks"
