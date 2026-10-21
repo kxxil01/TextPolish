@@ -47,6 +47,17 @@ final class SettingsWindowEditingTests: XCTestCase {
   }
 
   @MainActor
+  func testNeverChangeFieldSavesTermsLive() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let field = try XCTUnwrap(viewController.protectedTermsField)
+
+    field.stringValue = "TextPolish, Budi"
+    viewController.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: field))
+
+    XCTAssertEqual(Settings.loadOrCreateDefault().protectedTerms, ["TextPolish", "Budi"])
+  }
+
+  @MainActor
   func testPolishHotkeyFieldSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
     let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))

@@ -69,6 +69,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var requestTimeoutField: NSTextField!
     var languagePopup: NSPopUpButton!
     var polishStylePopup: NSPopUpButton!
+    var protectedTermsField: NSTextField!
     var extraInstructionField: NSTextField!
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
@@ -210,6 +211,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         polishStylePopup.addItems(withTitles: Settings.PolishStyle.allCases.map(Self.polishStyleTitle))
         polishStylePopup.target = self
         polishStylePopup.action = #selector(polishStyleChanged(_:))
+
+        protectedTermsField = NSTextField()
+        protectedTermsField.placeholderString = "Names or terms to keep exactly, separated by commas"
+        protectedTermsField.toolTip = "Polish never changes these words, for example names, product terms, or Indonesian words"
+        protectedTermsField.delegate = self
 
         // Keep the default bezeled cell so the field reads as editable; just let it wrap.
         extraInstructionField = NSTextField()
@@ -616,11 +622,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 98 + 24
+        let generalHeight: CGFloat = 134 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
-        addRow(to: general, label: "Polish Style", y: 72, control: polishStylePopup, controlWidth: nil)
+        addRow(to: general, label: "Polish Style", y: 108, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 103)
+        addRow(to: general, label: "Never Change", y: 72, control: protectedTermsField, controlWidth: nil)
         addSeparator(to: general, y: 67)
         addRow(to: general, label: "Request Timeout", y: 36, control: requestTimeoutField, controlWidth: 80, hint: "seconds, 1 to 120")
         addSeparator(to: general, y: 31)
@@ -707,6 +715,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     private func loadAdvancedFields() {
         requestTimeoutField.stringValue = String(format: "%.0f", settings.requestTimeoutSeconds)
         polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
+        protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
 
         switch settings.correctionLanguage {
         case .auto: languagePopup.selectItem(at: 0)
@@ -948,6 +957,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         }
         if field === requestTimeoutField {
             settings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
+            liveSave()
+            return
+        }
+        if field === protectedTermsField {
+            settings.protectedTerms = Settings.parseProtectedTerms(protectedTermsField.stringValue)
             liveSave()
             return
         }
@@ -1250,6 +1264,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
 
         // Advanced
         newSettings.requestTimeoutSeconds = Double(requestTimeoutField.stringValue) ?? 20
+        newSettings.protectedTerms = Settings.parseProtectedTerms(protectedTermsField.stringValue)
         if Settings.PolishStyle.allCases.indices.contains(polishStylePopup.indexOfSelectedItem) {
             newSettings.polishStyle = Settings.PolishStyle.allCases[polishStylePopup.indexOfSelectedItem]
         }

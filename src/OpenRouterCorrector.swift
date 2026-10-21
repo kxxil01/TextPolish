@@ -58,6 +58,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   private let maxAttempts: Int
   private let retryPolicy: RetryPolicy
   private let extraInstruction: String?
+  private let protectedTerms: [String]
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
 
@@ -82,6 +83,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     self.retryPolicy = RetryPolicy(maxNetworkAttempts: 2, maxRateLimitBackoffSeconds: 12)
     self.minSimilarity = max(0.0, min(1.0, settings.openRouterMinSimilarity))
     self.extraInstruction = PromptGuardrails.sanitizeExtraInstruction(settings.openRouterExtraInstruction)
+    self.protectedTerms = settings.protectedTerms
     self.correctionLanguage = settings.correctionLanguage
   }
 
@@ -100,7 +102,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
 
     let apiKey = try resolveApiKey()
-    let protected = protect(text)
+    let protected = protect(text, terms: protectedTerms)
 
     var retryReason: CorrectionRetryReason?
     for attempt in 1...maxAttempts {

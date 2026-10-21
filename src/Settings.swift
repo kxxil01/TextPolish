@@ -307,6 +307,8 @@ struct Settings: Codable {
   var timingProfiles: [String: TimingProfile]
   var correctionLanguage: CorrectionLanguage
   var polishStyle: PolishStyle
+  /// Words Polish must keep exactly as written, such as names, product terms, or words in another language.
+  var protectedTerms: [String]
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
   var enableGeminiOpenRouterFallback: Bool
@@ -359,6 +361,7 @@ struct Settings: Codable {
     timingProfiles: [String: TimingProfile] = [:],
     correctionLanguage: CorrectionLanguage = .auto,
     polishStyle: PolishStyle = .natural,
+    protectedTerms: [String] = [],
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     enableGeminiOpenRouterFallback: Bool = false,
@@ -398,6 +401,7 @@ struct Settings: Codable {
     self.timingProfiles = timingProfiles
     self.correctionLanguage = correctionLanguage
     self.polishStyle = polishStyle
+    self.protectedTerms = protectedTerms
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
@@ -441,6 +445,7 @@ struct Settings: Codable {
     timingProfiles = try container.decodeIfPresent([String: TimingProfile].self, forKey: .timingProfiles) ?? [:]
     correctionLanguage = try container.decodeIfPresent(CorrectionLanguage.self, forKey: .correctionLanguage) ?? .auto
     polishStyle = (try? container.decode(PolishStyle.self, forKey: .polishStyle)) ?? .natural
+    protectedTerms = (try? container.decodeIfPresent([String].self, forKey: .protectedTerms)) ?? []
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     enableGeminiOpenRouterFallback =
@@ -489,6 +494,7 @@ struct Settings: Codable {
     try container.encode(timingProfiles, forKey: .timingProfiles)
     try container.encode(correctionLanguage, forKey: .correctionLanguage)
     try container.encode(polishStyle, forKey: .polishStyle)
+    try container.encode(protectedTerms, forKey: .protectedTerms)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
@@ -578,6 +584,24 @@ struct Settings: Codable {
     openAIExtraInstruction = Self.nilIfEmpty(openAIExtraInstruction)
     anthropicExtraInstruction = Self.nilIfEmpty(anthropicExtraInstruction)
 
+    protectedTerms = Self.normalizedTerms(protectedTerms)
+  }
+
+  /// Splits the Settings field into terms: one per comma or line.
+  static func parseProtectedTerms(_ text: String) -> [String] {
+    normalizedTerms(text.components(separatedBy: CharacterSet(charactersIn: ",\n")))
+  }
+
+  /// Trimmed, non-empty, without case-insensitive duplicates, and capped so prompts stay small.
+  private static func normalizedTerms(_ terms: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for term in terms {
+      let trimmedTerm = String(trimmed(term).prefix(100))
+      guard !trimmedTerm.isEmpty, seen.insert(trimmedTerm.lowercased()).inserted else { continue }
+      result.append(trimmedTerm)
+    }
+    return Array(result.prefix(100))
   }
 
   private static func clamped(_ value: Int, min lowerBound: Int, max upperBound: Int) -> Int {
@@ -624,6 +648,7 @@ struct Settings: Codable {
     case timingProfiles
     case correctionLanguage
     case polishStyle
+    case protectedTerms
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
     case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone
