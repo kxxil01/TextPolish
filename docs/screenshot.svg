@@ -1,7 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="470" viewBox="0 0 640 470">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="510" viewBox="0 0 720 510">
   <defs>
     <style>
       .menu-item { font: 500 15px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #ffffff; }
+      .header { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #8e8e93; }
       .shortcut { font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #8e8e93; }
       .arrow { font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #8e8e93; }
       .check { font: 600 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; fill: #ffffff; }
@@ -9,7 +10,7 @@
   </defs>
 
   <!-- Menu bar background -->
-  <rect x="0" y="0" width="640" height="36" fill="#2d2d2d" />
+  <rect x="0" y="0" width="720" height="36" fill="#2d2d2d" />
 
   <!-- Menu bar icons (simplified) -->
   <circle cx="40" cy="18" r="8" fill="#4a4a4a" />
@@ -19,48 +20,63 @@
   <circle cx="160" cy="18" r="8" fill="#4a4a4a" />
 
   <!-- Dropdown menu -->
-  <rect x="20" y="50" width="440" height="400" rx="12" fill="#3a3a3c" />
+  <rect x="20" y="50" width="420" height="440" rx="12" fill="#3a3a3c" />
 
   <!-- Polish -->
   <text x="40" y="90" class="menu-item">Polish</text>
-  <text x="360" y="90" class="shortcut">⌃⌥⌘G</text>
+  <text x="340" y="90" class="shortcut">⌃⌥⌘G</text>
 
   <!-- Polish Style (hovered, submenu open) -->
-  <rect x="28" y="110" width="424" height="30" rx="6" fill="#0a64d6" />
+  <rect x="28" y="110" width="404" height="30" rx="6" fill="#0a64d6" />
   <text x="40" y="130" class="menu-item">Polish Style</text>
-  <text x="430" y="130" class="menu-item">›</text>
+  <text x="410" y="130" class="menu-item">›</text>
 
   <!-- Analyze Tone -->
   <text x="40" y="170" class="menu-item">Analyze Tone</text>
-  <text x="361" y="170" class="shortcut">⌃⌥⌘T</text>
+  <text x="341" y="170" class="shortcut">⌃⌥⌘T</text>
 
   <!-- Cancel Active Operation -->
   <text x="40" y="210" class="menu-item">Cancel Active Operation</text>
 
   <!-- Separator -->
-  <line x1="30" y1="235" x2="450" y2="235" stroke="#545458" stroke-opacity="0.6" />
+  <line x1="30" y1="235" x2="430" y2="235" stroke="#545458" stroke-opacity="0.6" />
+
+  <!-- Recent Lessons -->
+  <text x="40" y="270" class="menu-item">Recent Lessons…</text>
 
   <!-- Diagnostics -->
-  <text x="40" y="270" class="menu-item">Diagnostics…</text>
+  <text x="40" y="310" class="menu-item">Diagnostics…</text>
 
   <!-- Check for Updates -->
-  <text x="40" y="310" class="menu-item">Check for Updates</text>
-  <text x="430" y="310" class="arrow">›</text>
+  <text x="40" y="350" class="menu-item">Check for Updates</text>
+  <text x="410" y="350" class="arrow">›</text>
 
   <!-- Separator -->
-  <line x1="30" y1="335" x2="450" y2="335" stroke="#545458" stroke-opacity="0.6" />
+  <line x1="30" y1="375" x2="430" y2="375" stroke="#545458" stroke-opacity="0.6" />
 
   <!-- Settings -->
-  <text x="40" y="370" class="menu-item">Settings…</text>
-  <text x="404" y="370" class="shortcut">⌘,</text>
+  <text x="40" y="410" class="menu-item">Settings…</text>
+  <text x="384" y="410" class="shortcut">⌘,</text>
 
   <!-- Quit -->
-  <text x="40" y="410" class="menu-item">Quit</text>
-  <text x="400" y="410" class="shortcut">⌘Q</text>
+  <text x="40" y="450" class="menu-item">Quit</text>
+  <text x="380" y="450" class="shortcut">⌘Q</text>
 
-  <!-- Polish Style submenu -->
-  <rect x="466" y="104" width="160" height="88" rx="10" fill="#3a3a3c" />
-  <text x="482" y="138" class="check">✓</text>
-  <text x="502" y="138" class="menu-item">Natural</text>
-  <text x="502" y="172" class="menu-item">Minimal</text>
+  <!-- Polish Style submenu: default style, then the app being polished -->
+  <rect x="446" y="104" width="258" height="390" rx="10" fill="#3a3a3c" />
+  <text x="462" y="134" class="check">✓</text>
+  <text x="482" y="134" class="menu-item">Natural</text>
+  <text x="482" y="164" class="menu-item">Minimal</text>
+  <text x="482" y="194" class="menu-item">Shorter</text>
+  <text x="482" y="224" class="menu-item">Formal</text>
+  <text x="482" y="254" class="menu-item">Friendly</text>
+  <line x1="456" y1="270" x2="694" y2="270" stroke="#545458" stroke-opacity="0.6" />
+  <text x="482" y="294" class="header">In Discord</text>
+  <text x="478" y="322" class="check">✓</text>
+  <text x="498" y="322" class="menu-item">Default (Natural)</text>
+  <text x="498" y="352" class="menu-item">Natural</text>
+  <text x="498" y="382" class="menu-item">Minimal</text>
+  <text x="498" y="412" class="menu-item">Shorter</text>
+  <text x="498" y="442" class="menu-item">Formal</text>
+  <text x="498" y="472" class="menu-item">Friendly</text>
 </svg>
