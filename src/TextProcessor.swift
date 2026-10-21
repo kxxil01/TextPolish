@@ -238,6 +238,25 @@ extension TextProcessor {
       && listItemCount(in: candidate) == listItemCount(in: original)
   }
 
+  /// Numbers as written, with their separators: "2.500.000", "07:11", "14", "3" from "3pm".
+  func numberTokens(in text: String) -> [String] {
+    let pattern = "[0-9]+(?:[.,:/][0-9]+)*"
+    var tokens: [String] = []
+    var searchRange = text.startIndex..<text.endIndex
+    while let range = text.range(of: pattern, options: .regularExpression, range: searchRange) {
+      tokens.append(String(text[range]))
+      searchRange = range.upperBound..<text.endIndex
+    }
+    return tokens
+  }
+
+  /// Every number in the original appears unchanged in the candidate, so amounts, dates, and times keep their
+  /// format: a model rewriting 2.500.000 as 2,500,000 changes how the writer's reader sees it.
+  func keepsNumbers(original: String, candidate: String) -> Bool {
+    let candidateNumbers = Set(numberTokens(in: candidate))
+    return numberTokens(in: original).allSatisfy(candidateNumbers.contains)
+  }
+
   /// Which acceptance check `candidate` fails, or nil when it can be used.
   func rejectionReason(
     original: String,
@@ -248,6 +267,9 @@ extension TextProcessor {
     guard candidate != original else { return nil }
     guard keepsLineStructure(original: original, candidate: candidate, style: style) else {
       return .lineStructureChanged
+    }
+    guard keepsNumbers(original: original, candidate: candidate) else {
+      return .numbersChanged
     }
     guard isSimilarEnough(original: original, candidate: candidate, minimum: minimumSimilarity) else {
       return .overRewrite

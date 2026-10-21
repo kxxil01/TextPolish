@@ -7,6 +7,7 @@ enum CorrectionRetryReason: Sendable, Equatable {
   case refusal
   case outputTooLong
   case placeholdersMissing
+  case numbersChanged
 
   func promptInstruction(for style: CorrectionStyle) -> String {
     switch self {
@@ -30,6 +31,9 @@ enum CorrectionRetryReason: Sendable, Equatable {
     case .placeholdersMissing:
       return "IMPORTANT: Your previous output dropped or changed a protected placeholder. "
         + "Copy every ⟦GC_PROTECT_...⟧ token exactly as it appears."
+    case .numbersChanged:
+      return "IMPORTANT: Your previous output changed a number, amount, date, or time. "
+        + "Copy every number exactly as written in the original, in the same format."
     }
   }
 }
@@ -175,6 +179,8 @@ enum CorrectionPromptBuilder {
       "Do not replace commas with semicolons and do not introduce em dashes, double hyphens, or semicolons "
         + "unless they already appear in the original text.",
       "Keep the original quote and apostrophe style: straight quotes stay straight, curly quotes stay curly.",
+      "Keep numbers, amounts, dates, and times exactly as written, in the same format: "
+        + "2.500.000 stays 2.500.000 and 14 March stays 14 March.",
     ] + layoutRules + [
       "Tokens like ⟦GC_PROTECT_XXXX_0⟧ are protected placeholders and must remain unchanged.",
     ]
