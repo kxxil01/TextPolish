@@ -12,6 +12,8 @@ enum CorrectionStyle: Sendable, Equatable {
   case friendly
   /// The writer's own style, described in their words, such as "short bullet points for a status update".
   case custom(String)
+  /// Natural English from text in another language, or a mix, as the same person would write it.
+  case translateToEnglish
 
   /// Every style except Minimal rewrites wording, so they share the rewrite layout rules and checks.
   var rewritesWording: Bool {
@@ -25,6 +27,8 @@ enum CorrectionStyle: Sendable, Equatable {
     case .clarify: return min(configured, 0.4)
     // Shortening and changing tone replace more words while keeping the meaning.
     case .shorten, .formal, .friendly, .custom: return min(configured, 0.3)
+    // A translation shares few characters with the original, so only the meaning checks apply.
+    case .translateToEnglish: return 0
     }
   }
 }
@@ -39,6 +43,7 @@ extension CorrectionStyle: CustomStringConvertible {
     case .formal: return "formal"
     case .friendly: return "friendly"
     case .custom: return "custom"
+    case .translateToEnglish: return "translate"
     }
   }
 }

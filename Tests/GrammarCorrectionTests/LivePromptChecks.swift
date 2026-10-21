@@ -144,6 +144,28 @@ final class LivePromptChecks: XCTestCase {
 
   // MARK: - Learn mode
 
+  func testCustomStyleFollowsTheWritersInstruction() async throws {
+    let input = "I finished the report and also the deck, and I sent both of them to Sam on 14 March."
+    let output = try await polish(input, style: .custom("A short status update as bullet points, one per task"))
+
+    XCTAssertTrue(output.contains("- ") || output.contains("• "), "Bullet points as asked")
+    for word in ["report", "deck", "Sam", "14 March"] {
+      XCTAssertTrue(output.contains(word), "Kept \(word)")
+    }
+  }
+
+  func testTranslateWritesNaturalEnglishAndKeepsFacts() async throws {
+    let input = "tolong cek laporan yang gw kirim kemarin ya, totalnya Rp 2.500.000 dan deadline 14 Maret"
+    let output = try await polish(input, style: .translateToEnglish)
+
+    for word in ["report", "Rp 2.500.000", "14"] {
+      XCTAssertTrue(output.contains(word), "Has \(word)")
+    }
+    for word in ["tolong", "laporan", "kemarin"] {
+      XCTAssertFalse(output.lowercased().contains(word), "Translated \(word)")
+    }
+  }
+
   func testLearnExplainsTheMainChanges() async throws {
     let explainer = try XCTUnwrap(corrector as? ChangeExplaining)
     let original = "I compiled everything and added status progress, so it can be easier to track"

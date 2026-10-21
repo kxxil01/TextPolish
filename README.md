@@ -29,6 +29,7 @@ It currently supports two workflows:
 - Polish style: Natural (default) improves wording and joins choppy line breaks so text reads naturally, keeping meaning, tone, and slang; Minimal fixes typos and grammar only and preserves voice and formatting; Shorter cuts filler while keeping every point; Formal makes it polite and professional; Friendly makes it warm and casual
 - Custom style (optional, Settings > Advanced > Custom Style): describe a style in your own words, such as "short and direct, as a status update to my manager", and give it a name. It joins the Polish Style menu, can be chosen per app, and can have its own shortcut. It may change the layout, for example into bullet points, but never what the text says
 - Style shortcuts (optional, Settings > Hotkeys > Polish with a Style): one shortcut per style, for example ⌃⌥⌘F to Polish as Formal
+- Translate to English (`⌃⌥⌘E`): write in Indonesian or any other language, or a mix, and get natural English back with the same meaning, tone, names, and numbers. Preview and Undo work with it too
 - Undo Last Polish (menu bar): puts back the original text, as long as the polished text is still unchanged in that field
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
@@ -46,6 +47,7 @@ It currently supports two workflows:
 
 - Polish: `Ctrl+Option+Command+G` (`⌃⌥⌘G`)
 - Analyze Tone: `Ctrl+Option+Command+T` (`⌃⌥⌘T`)
+- Translate to English: `Ctrl+Option+Command+E` (`⌃⌥⌘E`)
 
 Hotkeys are configurable from the menu and settings window.
 

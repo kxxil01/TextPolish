@@ -9,6 +9,7 @@ final class HotKeyManager {
   enum HotKeyID: Int {
     case polish = 1
     case analyzeTone = 3
+    case translate = 5
   }
 
   /// Style shortcuts use IDs from here up, one per `Settings.PolishStyle` in `allCases` order.
@@ -34,7 +35,7 @@ final class HotKeyManager {
   private var hotKeyRefs: [Int: EventHotKeyRef] = [:]
   private var registeredPolish: Settings.HotKey?
   private var registeredAnalyzeTone: Settings.HotKey?
-  private var registeredStyles: [Int: Settings.HotKey] = [:]
+  private var registeredExtras: [Int: Settings.HotKey] = [:]
 
   private static let signature: OSType = 0x47434F52 // 'GCOR'
   private static let eventHotKeyDuplicateErr: OSStatus = -9962
@@ -55,15 +56,15 @@ final class HotKeyManager {
   func registerHotKeys(
     polish: Settings.HotKey,
     analyzeTone: Settings.HotKey,
-    styles: [Int: Settings.HotKey] = [:]
+    extras: [Int: Settings.HotKey] = [:]
   ) throws {
     try installHandlerIfNeeded()
     if registeredPolish == polish,
        registeredAnalyzeTone == analyzeTone,
-       registeredStyles == styles,
+       registeredExtras == extras,
        hotKeyRefs[HotKeyID.polish.rawValue] != nil,
        hotKeyRefs[HotKeyID.analyzeTone.rawValue] != nil,
-       styles.keys.allSatisfy({ hotKeyRefs[$0] != nil })
+       extras.keys.allSatisfy({ hotKeyRefs[$0] != nil })
     {
       return
     }
@@ -107,12 +108,12 @@ final class HotKeyManager {
     registeredPolish = registerWithFallback(id: polishID, desired: polish, previous: previousPolish)
     registeredAnalyzeTone = registerWithFallback(id: analyzeToneID, desired: analyzeTone, previous: previousAnalyzeTone)
 
-    // Style shortcuts are optional extras: one that fails is skipped without touching the others.
-    registeredStyles = [:]
-    for (id, hotKey) in styles.sorted(by: { $0.key < $1.key }) {
+    // Translate and style shortcuts are extras: one that fails is skipped without touching the others.
+    registeredExtras = [:]
+    for (id, hotKey) in extras.sorted(by: { $0.key < $1.key }) {
       do {
         try registerHotKey(id: id, keyCode: hotKey.keyCode, modifiers: hotKey.modifiers)
-        registeredStyles[id] = hotKey
+        registeredExtras[id] = hotKey
       } catch {
         if firstError == nil {
           firstError = error

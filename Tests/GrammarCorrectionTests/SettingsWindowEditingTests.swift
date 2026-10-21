@@ -82,11 +82,30 @@ final class SettingsWindowEditingTests: XCTestCase {
   @MainActor
   func testPolishHotkeyFieldSavesLive() throws {
     let (_, viewController, _) = try makeSettingsWindow()
-    let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
+    let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_J), modifiers: UInt32(controlKey | optionKey | cmdKey))
 
     viewController.polishField.hotKey = custom
 
     XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyPolish, custom)
+  }
+
+  @MainActor
+  func testPolishHotkeyCannotTakeTheTranslateShortcut() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+
+    viewController.polishField.hotKey = .translateDefault
+
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyPolish, .polishDefault)
+  }
+
+  @MainActor
+  func testTranslateHotkeyFieldSavesLive() throws {
+    let (_, viewController, _) = try makeSettingsWindow()
+    let custom = Settings.HotKey(keyCode: UInt32(kVK_ANSI_J), modifiers: UInt32(controlKey | optionKey | cmdKey))
+
+    viewController.translateField.hotKey = custom
+
+    XCTAssertEqual(Settings.loadOrCreateDefault().hotKeyTranslate, custom)
   }
 
   @MainActor

@@ -14,6 +14,7 @@ struct Settings: Codable {
 
     static let polishDefault = HotKey(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let analyzeToneDefault = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey))
+    static let translateDefault = HotKey(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(controlKey | optionKey | cmdKey))
 
     var displayString: String {
       var parts: [String] = []
@@ -290,6 +291,7 @@ struct Settings: Codable {
   var learnMode: Bool
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
+  var hotKeyTranslate: HotKey
   /// Optional shortcuts that Polish in one style, keyed by `PolishStyle` raw value. None by default.
   var styleHotKeys: [String: HotKey]
   /// The Custom style's name in menus.
@@ -353,6 +355,7 @@ struct Settings: Codable {
     learnMode: Bool = false,
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
+    hotKeyTranslate: HotKey = .translateDefault,
     styleHotKeys: [String: HotKey] = [:],
     customStyleName: String = "Custom",
     customStyleInstruction: String? = nil,
@@ -399,6 +402,7 @@ struct Settings: Codable {
     self.learnMode = learnMode
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
+    self.hotKeyTranslate = hotKeyTranslate
     self.styleHotKeys = styleHotKeys
     self.customStyleName = customStyleName
     self.customStyleInstruction = customStyleInstruction
@@ -452,6 +456,7 @@ struct Settings: Codable {
     customStyleInstruction = try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
+    hotKeyTranslate = (try? container.decode(HotKey.self, forKey: .hotKeyTranslate)) ?? .translateDefault
     enableGeminiOpenRouterFallback =
       try container.decodeIfPresent(Bool.self, forKey: .enableGeminiOpenRouterFallback)
       ?? container.decodeIfPresent(Bool.self, forKey: .fallbackToOpenRouterOnGeminiError)
@@ -507,6 +512,7 @@ struct Settings: Codable {
     try container.encodeIfPresent(customStyleInstruction, forKey: .customStyleInstruction)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
+    try container.encode(hotKeyTranslate, forKey: .hotKeyTranslate)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .enableGeminiOpenRouterFallback)
     try container.encode(enableGeminiOpenRouterFallback, forKey: .fallbackToOpenRouterOnGeminiError)
     try container.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
@@ -681,6 +687,7 @@ struct Settings: Codable {
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.
     case hotKeyPolish = "hotKeyCorrectSelection"
     case hotKeyAnalyzeTone
+    case hotKeyTranslate
     case enableGeminiOpenRouterFallback
     case fallbackToOpenRouterOnGeminiError
     case geminiApiKey
