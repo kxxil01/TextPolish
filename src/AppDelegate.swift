@@ -40,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
     private let learnPanel = LearnPanel()
+    private let lessonHistory = LessonHistory()
+    private var lessonsWindow: LessonsWindow?
+    private var recentLessonsItem: NSMenuItem?
     private var explanationTask: Task<Void, Never>?
     private var appPolishStyleItems: [NSMenuItem] = []
     private var appPolishStyleTarget: (bundleID: String, name: String)?
@@ -207,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func statusItemClicked(_: Any?) {
         captureFrontmostApplication()
         syncAppPolishStyleItems()
+        syncRecentLessonsItem()
         refreshCorrectionCountIfNewDay()
         refreshToneAnalysisCountIfNewDay()
         updateStatusItemIcon()
@@ -311,6 +315,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         // Info & tools
+        let recentLessonsItem = NSMenuItem(title: "Recent Lessons\u{2026}", action: nil, keyEquivalent: "")
+        recentLessonsItem.target = self
+        recentLessonsItem.toolTip = "Explanations from Learn mode, saved on this Mac"
+        self.recentLessonsItem = recentLessonsItem
+        menu.addItem(recentLessonsItem)
+        syncRecentLessonsItem()
+
         let diagnosticsItem = NSMenuItem(
             title: "Diagnostics\u{2026}",
             action: #selector(openDiagnostics),
@@ -918,6 +929,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard !Task.isCancelled, let self else { return }
                 TPLogger.log("Learn: \(lines.count) explanations")
                 self.learnPanel.show(lines: lines)
+                self.lessonHistory.add(lines)
+                self.lessonsWindow?.reload()
+                self.syncRecentLessonsItem()
             } catch {
                 TPLogger.log("Learn explanation failed: \(error)")
             }
@@ -1161,6 +1175,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Disabled until Learn mode has saved a lesson; a menu item without an action is shown disabled.
+    private func syncRecentLessonsItem() {
+        recentLessonsItem?.action = lessonHistory.lessons.isEmpty ? nil : #selector(showRecentLessons)
+    }
+
+    @objc private func showRecentLessons() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            if self.lessonsWindow == nil {
+                self.lessonsWindow = LessonsWindow(history: self.lessonHistory)
+            }
+            self.lessonsWindow?.show()
+        }
     }
 
     @objc private func openDiagnostics() {
@@ -2392,6 +2421,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugSelectedPolishStyleTitle: String? {
             polishStyleItems.first { $0.state == .on }?.title
+        }
+
+        var debugRecentLessonsEnabled: Bool {
+            recentLessonsItem?.action != nil
+        }
+
+        func debugRecordLesson(_ lines: [String]) {
+            lessonHistory.add(lines)
+            syncRecentLessonsItem()
         }
 
         func debugShowAppPolishStyles(bundleID: String, name: String) {
