@@ -220,11 +220,16 @@ final class SettingsHotKeyTests: XCTestCase {
   }
 
   func testKeychainPrimaryServiceUsesCanonicalServiceName() {
-    XCTAssertEqual(Keychain.primaryService(bundleIdentifier: nil), Keychain.defaultPrimaryService)
+    XCTAssertEqual(Keychain.primaryService(bundleIdentifier: nil, isTestRun: false), Keychain.defaultPrimaryService)
     XCTAssertEqual(
-      Keychain.primaryService(bundleIdentifier: "com.example.SomeDebugHost"),
+      Keychain.primaryService(bundleIdentifier: "com.example.SomeDebugHost", isTestRun: false),
       Keychain.defaultPrimaryService
     )
+  }
+
+  func testTestRunsUseTheirOwnKeychainServiceWithoutLegacyFallback() {
+    XCTAssertEqual(Keychain.primaryService(bundleIdentifier: nil), Keychain.testPrimaryService)
+    XCTAssertEqual(Keychain.configuredServices(primaryService: Keychain.testPrimaryService), [Keychain.testPrimaryService])
   }
 
   func testKeychainConfiguredServicesIncludesLegacyFallback() {

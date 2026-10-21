@@ -66,7 +66,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   init(settings: Settings, session: URLSession? = nil) throws {
     keyFromSettings = settings.openAIApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
-    keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     guard let baseURL = URL(string: settings.openAIBaseURL) else { throw OpenAIError.invalidBaseURL }
 
     self.baseURL = baseURL

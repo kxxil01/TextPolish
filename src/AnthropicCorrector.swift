@@ -65,7 +65,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
   init(settings: Settings, session: URLSession? = nil) throws {
     keyFromSettings = settings.anthropicApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
-    keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     guard let baseURL = URL(string: settings.anthropicBaseURL) else { throw AnthropicError.invalidBaseURL }
 
     self.baseURL = baseURL

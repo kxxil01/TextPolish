@@ -68,7 +68,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
   init(settings: Settings) throws {
     keyFromSettings = settings.openRouterApiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     keyFromEnv = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
-    keychainService = Bundle.main.bundleIdentifier ?? "com.kxxil01.TextPolish"
+    keychainService = Keychain.primaryService(bundleIdentifier: Bundle.main.bundleIdentifier)
     guard let baseURL = URL(string: settings.openRouterBaseURL) else { throw OpenRouterError.invalidBaseURL }
 
     self.baseURL = baseURL

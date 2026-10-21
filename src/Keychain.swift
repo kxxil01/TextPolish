@@ -9,14 +9,18 @@ enum Keychain {
 
   static let defaultPrimaryService = "com.kxxil01.TextPolish"
   static let legacyPrimaryService = "com.ilham.GrammarCorrection"
+  /// Test runs use their own service, so they can never read or overwrite the user's real API keys.
+  static let testPrimaryService = "com.kxxil01.TextPolish.tests"
 
-  static func primaryService(bundleIdentifier: String?) -> String {
-    defaultPrimaryService
+  /// The one service the app, the Settings window, and every provider use, whatever process is running.
+  static func primaryService(bundleIdentifier: String?, isTestRun: Bool = TPLogger.isRunningTests) -> String {
+    isTestRun ? testPrimaryService : defaultPrimaryService
   }
 
+  /// The real service also reads keys saved under the app's old name; any other service stands alone.
   static func configuredServices(primaryService: String) -> [String] {
     let normalizedPrimaryService = trim(primaryService).isEmpty ? defaultPrimaryService : trim(primaryService)
-    if normalizedPrimaryService == legacyPrimaryService {
+    guard normalizedPrimaryService == defaultPrimaryService else {
       return [normalizedPrimaryService]
     }
     return [normalizedPrimaryService, legacyPrimaryService]
