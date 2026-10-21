@@ -136,6 +136,7 @@ final class LivePromptChecks: XCTestCase {
     let output = try await polish(input, style: .friendly)
 
     XCTAssertNotEqual(output, input)
+    XCTAssertFalse(output.contains("’"), "Straight apostrophes in, straight apostrophes out")
     for word in ["files", "today", "contract"] {
       XCTAssertTrue(output.lowercased().contains(word), "Kept \(word)")
     }
