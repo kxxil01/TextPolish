@@ -109,7 +109,7 @@ extension AppDelegate {
         switch error {
         case .missingApiKey, .invalidBaseURL:
             return false
-        case .blocked, .emptyResponse, .overRewrite:
+        case .blocked, .emptyResponse, .overRewrite, .numbersChanged:
             // Provider returned an unusable response; fallback can still salvage the user flow.
             return true
         case let .requestFailed(status, _):
@@ -130,7 +130,7 @@ extension AppDelegate {
         switch error {
         case .missingApiKey, .invalidBaseURL:
             return false
-        case .emptyResponse, .overRewrite:
+        case .emptyResponse, .overRewrite, .numbersChanged:
             return true
         case let .requestFailed(status, _):
             if status == 401 || status == 403 || status == 402 {
@@ -150,7 +150,7 @@ extension AppDelegate {
         switch error {
         case .missingApiKey, .invalidBaseURL, .invalidModel:
             return false
-        case .emptyResponse, .overRewrite:
+        case .emptyResponse, .overRewrite, .numbersChanged:
             return true
         case let .requestFailed(status, _):
             if status == 401 || status == 403 || status == 402 {
@@ -170,7 +170,7 @@ extension AppDelegate {
         switch error {
         case .missingApiKey, .invalidBaseURL, .invalidModel:
             return false
-        case .emptyResponse, .overRewrite:
+        case .emptyResponse, .overRewrite, .numbersChanged:
             return true
         case let .requestFailed(status, _):
             if status == 401 || status == 403 {

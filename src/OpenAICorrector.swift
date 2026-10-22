@@ -8,6 +8,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
+    case numbersChanged
 
     var errorDescription: String? {
       message(for: "OpenAI")
@@ -40,6 +41,8 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return "\(name) returned no text"
       case .overRewrite:
         return "\(name) changed too much and was rejected. Lower Min Similarity or simplify the extra instruction."
+      case .numbersChanged:
+        return "\(name) kept changing a number, so your text was left as it was"
       }
     }
   }
@@ -120,6 +123,14 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     }
   }
 
+  /// Why the last attempt was rejected, so the message names the real cause.
+  private static func finalError(_ reason: CorrectionRetryReason) -> OpenAIError {
+    if case .numbersChanged = reason {
+      return .numbersChanged
+    }
+    return .overRewrite
+  }
+
   /// The Custom provider's errors carry its name; OpenAI's stay `OpenAIError` for the fallback rules.
   private static func error(_ error: OpenAIError, for endpoint: OpenAICompatibleEndpoint) -> Error {
     endpoint.provider == .custom ? CustomProviderError(underlying: error) : error
@@ -180,7 +191,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
-    throw OpenAIError.overRewrite
+    throw retryReason.map(Self.finalError) ?? OpenAIError.overRewrite
   }
 
   /// Nil only when the endpoint works without a key.

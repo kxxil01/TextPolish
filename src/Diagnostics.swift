@@ -278,7 +278,7 @@ final class DiagnosticsStore {
         return ProviderHealthStatus(state: .error, message: "Blocked by provider", updatedAt: now)
       case .requestFailed(let status, _):
         return statusHealth(status: status, updatedAt: now)
-      case .emptyResponse, .overRewrite:
+      case .emptyResponse, .overRewrite, .numbersChanged:
         return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
       }
     }
@@ -300,7 +300,7 @@ final class DiagnosticsStore {
           return ProviderHealthStatus(state: .error, message: "Model not found", updatedAt: now)
         }
         return statusHealth(status: status, updatedAt: now)
-      case .emptyResponse, .overRewrite:
+      case .emptyResponse, .overRewrite, .numbersChanged:
         return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
       }
     }
@@ -324,7 +324,7 @@ final class DiagnosticsStore {
           return ProviderHealthStatus(state: .error, message: "Model not found", updatedAt: now)
         }
         return statusHealth(status: status, updatedAt: now)
-      case .emptyResponse, .overRewrite:
+      case .emptyResponse, .overRewrite, .numbersChanged:
         return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
       }
     }
@@ -345,7 +345,7 @@ final class DiagnosticsStore {
           return ProviderHealthStatus(state: .error, message: "Model not found", updatedAt: now)
         }
         return statusHealth(status: status, updatedAt: now)
-      case .emptyResponse, .overRewrite:
+      case .emptyResponse, .overRewrite, .numbersChanged:
         return ProviderHealthStatus(state: .error, message: "Invalid response", updatedAt: now)
       }
     }

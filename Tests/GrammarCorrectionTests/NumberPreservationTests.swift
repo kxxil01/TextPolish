@@ -59,6 +59,20 @@ final class NumberPreservationTests: XCTestCase {
     checker.rejectionReason(original: original, candidate: candidate, style: style, minimumSimilarity: 0.2)
   }
 
+  /// The message that could not be polished in 0.0.82: both providers fixed the typo "everytgh8ng",
+  /// and the 8 inside the word counted as a lost number.
+  func testDigitsInsideAWordAreTyposNotNumbers() {
+    let message = "its not being used anymore after i migrate everytgh8ng to WIF = keyless auth"
+
+    XCTAssertNil(reason(message, "It's not being used anymore after I migrated everything to WIF = keyless auth.", .clarify))
+    XCTAssertNil(reason(message, "its not being used anymore after i migrate everything to WIF = keyless auth", .minimal))
+    XCTAssertEqual(
+      checker.numberTokens(in: "everytgh8ng l8r b4 3pm Rp2.500.000 covid19 14th"),
+      ["4", "3", "2.500.000", "19", "14"],
+      "Digits with letters on both sides are part of the word; numbers next to a unit or prefix still count"
+    )
+  }
+
   func testRetryNamesTheNumbersToKeepWithoutLoggingThem() {
     let reason = CorrectionRetryReason.numbersChanged(["1", "2.500.000"])
 
@@ -77,6 +91,28 @@ final class NumberPreservationTests: XCTestCase {
 }
 
 extension CorrectorRetryAndPlaceholderTests {
+  func testANumberChangedOnEveryAttemptSaysSoInsteadOfChangedTooMuch() async throws {
+    MockURLProtocol.handler = { request in
+      let responseBody = #"{"choices":[{"message":{"content":"pls transfer 2,500,000 rupiah before Friday."}}]}"#
+      return Self.httpResponse(for: request, statusCode: 200, body: responseBody)
+    }
+    let settings = Settings(
+      provider: .openAI,
+      requestTimeoutSeconds: 1,
+      openAIApiKey: "test-key",
+      openAIBaseURL: "https://mock.local",
+      openAIMaxAttempts: 2
+    )
+    let corrector = try OpenAICorrector(settings: settings, session: Self.makeMockSession())
+
+    do {
+      _ = try await corrector.correct("pls transfer 2.500.000 rupiah before Friday", style: .clarify)
+      XCTFail("Expected an error")
+    } catch {
+      XCTAssertEqual(error.localizedDescription, "OpenAI kept changing a number, so your text was left as it was")
+    }
+  }
+
   func testChangedNumberFormatRetriesWithTheNumbersInstruction() async throws {
     let input = "pls transfer 2.500.000 rupiah before Friday"
     var systems: [String] = []
