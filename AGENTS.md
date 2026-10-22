@@ -11,7 +11,7 @@ Technical documentation for contributors and AI coding agents.
 1. **Polish** (`⌃⌥⌘G`): polishes the selection, or the whole field when nothing is selected, in one of five styles: Natural (default), Minimal, Shorter, Formal, Friendly, plus an optional Custom style the user describes.
 2. **Analyze Tone** (`⌃⌥⌘T`): explains how the selected text comes across, in a result window.
 5. **Reply in English** (`⌃⌥⌘R`): the Polish flow with `.reply(to:)`, carrying the last explained message (`ReplyContext`, in memory for 15 minutes) as context; checked like a translation.
-4. **Explain Message** (`⌃⌥⌘U`): copies the selection through `ToneAnalysisController` (a read-only selection job, like Analyze Tone), asks the provider through `MessageExplaining` (built on `TextGenerating`), and shows the meaning, tone, and phrases in a `LearnPanel`.
+4. **Explain Message** (`⌃⌥⌘U`): copies the selection through `ToneAnalysisController` (a read-only selection job, like Analyze Tone), asks the provider through `MessageExplaining` (built on `TextGenerating`), and shows the meaning, tone, and phrases in `ExplainPanel`, which opens while the provider answers. The panel answers too: `ReplyIntent` quick replies (`ReplySuggestionPrompt`, placeholders instead of invented facts) or the writer's own words (`.reply(answering:)`), shown editable, then `CorrectionController.insert` pastes it into the explained app.
 3. **Translate to English** (`⌃⌥⌘E`): the Polish flow with the `translateToEnglish` style; the similarity floor is off, the number, placeholder, and layout checks still apply, and Learn mode skips it.
 
 Optional extras: a style per app, a shortcut per style, Never Change words, Preview before paste, and Learn mode with Recent Lessons.

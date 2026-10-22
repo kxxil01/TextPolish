@@ -39,9 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var translateItem: NSMenuItem?
     private var explainItem: NSMenuItem?
     private var replyItem: NSMenuItem?
-    private let explanationPanel = LearnPanel()
+    private let explanationPanel = ExplainPanel()
     /// The last message Explain Message showed, so Reply in English can answer it.
     private var replyContext = ReplyContext()
+    /// The app the explained message is in, where the Explain panel pastes its reply.
+    private var explainedApplication: NSRunningApplication?
+    private var replyTask: Task<Void, Never>?
     private var polishStyleItems: [NSMenuItem] = []
     private var polishStyleMenu: NSMenu?
     private let polishReviewPanel = PolishReviewPanel()
@@ -126,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.feedback = feedback
         polishUndoer = PolishUndoer(feedback: feedback)
         correctionController = makeCorrectionController(feedback: feedback)
+        setupExplanationPanel()
         NSApp.servicesProvider = servicesProvider
         NSUpdateDynamicServices()
 
@@ -860,6 +864,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.replyContext.remember(message)
             }
         )
+        explainedApplication = target
+    }
+
+    /// The Explain panel's answers: quick replies, the writer's own words, then Paste or Copy.
+    private func setupExplanationPanel() {
+        explanationPanel.onIntent = { [weak self] intent in
+            self?.writeReply(log: "Reply suggestion: intent=\(intent.rawValue)") { corrector, message in
+                guard let generator = corrector as? TextGenerating else { throw ReplyError.unavailable }
+                let reply = ReplySuggestionPrompt.clean(
+                    try await generator.generateText(ReplySuggestionPrompt.make(message: message, intent: intent))
+                )
+                guard !reply.isEmpty, !PromptGuardrails.detectRefusal(reply) else { throw ReplyError.noReply }
+                return reply
+            }
+        }
+        explanationPanel.onDraft = { [weak self] draft in
+            self?.writeReply(log: "Reply draft: chars=\(draft.count)") { corrector, message in
+                try await corrector.correct(draft, style: .reply(answering: message))
+            }
+        }
+        explanationPanel.onPaste = { [weak self] reply in
+            guard let self else { return }
+            self.correctionController?.insert(reply, into: self.explainedApplication)
+        }
+        explanationPanel.onCopy = { reply in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(reply, forType: .string)
+        }
+    }
+
+    /// Writes a reply to the explained message with the current provider and shows it in the panel.
+    private func writeReply(
+        log: String,
+        _ make: @escaping @Sendable (GrammarCorrector, String) async throws -> String
+    ) {
+        guard let message = replyContext.recentMessage() else {
+            explanationPanel.showReplyError("Explain the message again, then answer it.")
+            return
+        }
+        TPLogger.log(log)
+        let corrector = CorrectorFactory.make(settings: settings)
+        replyTask?.cancel()
+        explanationPanel.showWritingReply()
+        replyTask = Task { [weak self] in
+            do {
+                let reply = try await make(corrector, message)
+                guard !Task.isCancelled else { return }
+                self?.explanationPanel.showReply(reply)
+            } catch {
+                guard !Task.isCancelled else { return }
+                let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                TPLogger.log("Reply failed: \(error)")
+                self?.explanationPanel.showReplyError(text)
+            }
+        }
+    }
+
+    private enum ReplyError: LocalizedError {
+        case unavailable
+        case noReply
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable: return "This provider can't write replies yet."
+            case .noReply: return "No reply came back. Try again."
+            }
+        }
     }
 
     @objc private func replyInEnglish() {
@@ -1249,6 +1320,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         /// The menu's item titles, with "---" for each separator.
         var debugMenuTitles: [String] {
             statusMenu?.items.map { $0.isSeparatorItem ? "---" : $0.title } ?? []
+        }
+
+        var debugExplanationPanel: ExplainPanel {
+            explanationPanel
         }
 
         func debugRememberExplainedMessage(_ message: String) {
