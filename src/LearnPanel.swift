@@ -6,16 +6,10 @@ protocol ChangeExplanationPresenting: AnyObject {
   func show(lines: [String])
 }
 
-/// Shows what a received message means, without taking focus from the app it is in.
-@MainActor
-protocol MessageExplanationPresenting: AnyObject {
-  func show(explanation: MessageExplanation)
-}
-
-/// A small floating panel for Learn mode and Explain Message. It hides after a reading time, stays while hovered,
+/// A small floating panel for Learn mode. It hides after a reading time, stays while hovered,
 /// and scrolls when the text is long.
 @MainActor
-final class LearnPanel: ChangeExplanationPresenting, MessageExplanationPresenting {
+final class LearnPanel: ChangeExplanationPresenting {
   private var panel: NSPanel?
   private var textView: NSTextView?
   private var hideTask: Task<Void, Never>?
@@ -44,20 +38,6 @@ final class LearnPanel: ChangeExplanationPresenting, MessageExplanationPresentin
       accessibilityLabel: "What Polish changed",
       visibleFor: fixedVisibleDuration ?? Self.readingTime(lineCount: lines.count)
     )
-  }
-
-  func show(explanation: MessageExplanation) {
-    show(
-      title: "What it means",
-      text: Self.formatted(explanation),
-      accessibilityLabel: "What the message means",
-      visibleFor: fixedVisibleDuration ?? Self.readingTime(for: explanation)
-    )
-  }
-
-  /// Eight seconds plus one per 40 characters of meaning and three per phrase, at most 45.
-  nonisolated static func readingTime(for explanation: MessageExplanation) -> Duration {
-    .seconds(min(8 + explanation.meaning.count / 40 + 3 * explanation.phrases.count, 45))
   }
 
   private func show(title: String, text: NSAttributedString, accessibilityLabel: String, visibleFor duration: Duration) {
@@ -143,43 +123,6 @@ final class LearnPanel: ChangeExplanationPresenting, MessageExplanationPresentin
     panel?.orderOut(nil)
     panel = nil
     textView = nil
-  }
-
-  /// The meaning first, then the tone, then each phrase with what it means.
-  static func formatted(_ explanation: MessageExplanation) -> NSAttributedString {
-    let body = NSFont.systemFont(ofSize: 13)
-    let small = NSFont.systemFont(ofSize: 12)
-    let heading = NSFont.systemFont(ofSize: 11, weight: .semibold)
-    let spaced = NSMutableParagraphStyle()
-    spaced.paragraphSpacingBefore = 8
-    let result = NSMutableAttributedString(
-      string: explanation.meaning,
-      attributes: [.font: body, .foregroundColor: NSColor.labelColor]
-    )
-    if let tone = explanation.tone {
-      result.append(NSAttributedString(
-        string: "\nTone: \(tone)",
-        attributes: [.font: small, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: spaced]
-      ))
-    }
-    guard !explanation.phrases.isEmpty else { return result }
-    result.append(NSAttributedString(
-      string: "\nPhrases",
-      attributes: [.font: heading, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: spaced]
-    ))
-    for phrase in explanation.phrases {
-      let parts = phrase.components(separatedBy: "→")
-      let term = parts[0].trimmingCharacters(in: .whitespaces)
-      result.append(NSAttributedString(string: "\n" + term, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]))
-      if parts.count > 1 {
-        let meaning = parts.dropFirst().joined(separator: "→").trimmingCharacters(in: .whitespaces)
-        result.append(NSAttributedString(
-          string: " → " + meaning,
-          attributes: [.font: body, .foregroundColor: NSColor.labelColor]
-        ))
-      }
-    }
-    return result
   }
 
   /// "before → after: reason" becomes the old words in red, the new words in green, and the reason in grey.

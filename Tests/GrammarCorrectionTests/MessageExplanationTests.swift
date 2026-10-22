@@ -59,18 +59,32 @@ final class MessageExplanationTests: XCTestCase {
   }
 
   @MainActor
-  func testPanelShowsTheExplanationAndScalesItsReadingTime() {
-    let panel = LearnPanel(visibleDuration: .seconds(5))
-    let explanation = MessageExplanation(meaning: "Tolong kabari saya.", tone: "urgent", phrases: ["asap → secepatnya"])
+  func testPanelOpensWhileExplainingThenShowsTheMeaningAndAnswers() {
+    let panel = ExplainPanel()
+    panel.showLoading()
+    XCTAssertTrue(panel.debugIsShowing, "Opens right away")
+    XCTAssertEqual(panel.debugExplanationText, "Explaining\u{2026}")
+    XCTAssertFalse(panel.debugShowsAnswerSection)
 
-    panel.show(explanation: explanation)
+    panel.show(explanation: MessageExplanation(meaning: "Tolong kabari saya.", tone: "urgent", phrases: ["asap → secepatnya"]))
 
-    XCTAssertEqual(panel.debugTitle, "What it means")
-    XCTAssertEqual(panel.debugText, "Tolong kabari saya.\nTone: urgent\nPhrases\nasap → secepatnya")
+    XCTAssertEqual(panel.debugExplanationText, "Tolong kabari saya.\nTone: urgent\nPhrases\nasap → secepatnya")
+    XCTAssertTrue(panel.debugShowsAnswerSection)
+    XCTAssertEqual(panel.debugIntentTitles, ["Agree", "More Time", "Ask", "Decline", "Thanks"])
     panel.close()
-    XCTAssertEqual(LearnPanel.readingTime(for: explanation), .seconds(11))
-    let long = MessageExplanation(meaning: String(repeating: "a", count: 4000), tone: nil, phrases: [])
-    XCTAssertEqual(LearnPanel.readingTime(for: long), .seconds(45))
+    XCTAssertFalse(panel.debugIsShowing)
+  }
+
+  @MainActor
+  func testPanelShowsErrorsInPlace() {
+    let panel = ExplainPanel()
+    panel.showLoading()
+
+    panel.showError("Missing OpenAI API key")
+
+    XCTAssertEqual(panel.debugExplanationText, "Couldn't explain this message: Missing OpenAI API key")
+    XCTAssertFalse(panel.debugShowsAnswerSection)
+    panel.close()
   }
 
   @MainActor
@@ -84,11 +98,23 @@ extension CorrectionControllerTests {
   @MainActor
   final class StubExplanationPresenter: MessageExplanationPresenting {
     private(set) var shown: [MessageExplanation] = []
+    private(set) var loadingCount = 0
+    private(set) var errors: [String] = []
     var onShow: (() -> Void)?
+    var onError: (() -> Void)?
+
+    func showLoading() {
+      loadingCount += 1
+    }
 
     func show(explanation: MessageExplanation) {
       shown.append(explanation)
       onShow?()
+    }
+
+    func showError(_ message: String) {
+      errors.append(message)
+      onError?()
     }
   }
 
@@ -119,6 +145,7 @@ extension CorrectionControllerTests {
     for _ in 0..<100 where controller.isBusy {
       await Task.yield()
     }
+    XCTAssertEqual(presenter.loadingCount, 1)
     XCTAssertEqual(presenter.shown.first?.meaning, "Tolong kabari saya secepatnya. (indonesian)")
     XCTAssertEqual(explained, ["pls ping me asap"])
     XCTAssertEqual(pasteboard.restoreCallCount, 1, "The clipboard goes back to what it held")
@@ -126,10 +153,11 @@ extension CorrectionControllerTests {
   }
 
   @MainActor
-  func testExplainReportsAProviderErrorInTheMenuBar() async {
+  func testExplainReportsAProviderErrorInThePanel() async {
     let failed = expectation(description: "error shown")
     let feedback = StubFeedback()
-    feedback.onError = { _ in failed.fulfill() }
+    let presenter = StubExplanationPresenter()
+    presenter.onError = { failed.fulfill() }
     let controller = ToneAnalysisController(
       analyzer: FailingToneAnalyzer(underlyingError: CancellationError(), diagnosticsProvider: .openAI, diagnosticsModel: "x"),
       feedback: feedback,
@@ -142,10 +170,11 @@ extension CorrectionControllerTests {
       underlyingError: OpenAICorrector.OpenAIError.missingApiKey, diagnosticsProvider: .openAI, diagnosticsModel: "m"
     )
 
-    controller.explainSelection(explainer: failing, language: .indonesian, presenter: StubExplanationPresenter())
+    controller.explainSelection(explainer: failing, language: .indonesian, presenter: presenter)
 
     await fulfillment(of: [failed], timeout: 1.0)
-    XCTAssertEqual(feedback.errorMessages, ["Missing OpenAI API key"])
+    XCTAssertEqual(presenter.loadingCount, 1, "The panel opened before the provider answered")
+    XCTAssertEqual(presenter.errors, ["Missing OpenAI API key"])
   }
 }
 

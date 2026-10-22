@@ -141,13 +141,14 @@ final class ToneAnalysisController {
       retryReporting: explainer as? RetryReporting,
       perform: { [weak self] text, deadline in
         guard let self else { return }
+        presenter.showLoading()
         let explanation = try await self.runWithDeadline(deadline) { try await explainer.explainMessage(text, in: language) }
         presenter.show(explanation: explanation)
         TPLogger.log("Explain: chars=\(text.count) phrases=\(explanation.phrases.count)")
         onExplained?(text)
       },
-      showError: { [weak self] message in
-        self?.feedback.showError(message)
+      showError: { message in
+        presenter.showError(message)
       }
     )
     run(job, targetApplication: targetApplication, timingsOverride: timingsOverride, providedText: text)

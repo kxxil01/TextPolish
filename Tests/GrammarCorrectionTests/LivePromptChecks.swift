@@ -185,6 +185,18 @@ final class LivePromptChecks: XCTestCase {
     XCTAssertFalse(output.lowercased().contains("kirim"), "Written in English")
   }
 
+  func testQuickReplyNeverInventsATime() async throws {
+    let generator = try XCTUnwrap(corrector as? TextGenerating)
+    let message = "Can you send the updated deck today?"
+    let reply = ReplySuggestionPrompt.clean(
+      try await generator.generateText(ReplySuggestionPrompt.make(message: message, intent: .moreTime))
+    )
+    print("[LivePromptChecks] quick reply moreTime\n  in:  \(message)\n  out: \(reply)")
+
+    XCTAssertFalse(reply.isEmpty)
+    XCTAssertFalse(reply.contains(where: \.isNumber), "No invented times or dates")
+  }
+
   func testExplainGivesTheMeaningInIndonesian() async throws {
     let explainer = try XCTUnwrap(corrector as? MessageExplaining)
     let message = "Can you ping me EOD with a heads-up if the build slips?"
