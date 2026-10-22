@@ -17,10 +17,11 @@ final class ServicesProviderTests: XCTestCase {
 
     provider.polishService(pasteboard, userData: nil, error: &error)
     provider.translateService(pasteboard, userData: nil, error: &error)
+    provider.explainService(pasteboard, userData: nil, error: &error)
 
     XCTAssertNil(error)
-    XCTAssertEqual(requests.map(\.0), [.polish, .translate])
-    XCTAssertEqual(requests.map(\.1), ["pls check", "pls check"])
+    XCTAssertEqual(requests.map(\.0), [.polish, .translate, .explain])
+    XCTAssertEqual(requests.map(\.1), ["pls check", "pls check", "pls check"])
   }
 
   @MainActor
@@ -48,12 +49,13 @@ final class ServicesProviderTests: XCTestCase {
     let contents = try String(contentsOf: script, encoding: .utf8)
     let provider = ServicesProvider { _, _ in }
 
-    for message in ["polishService", "translateService"] {
+    for message in ["polishService", "translateService", "explainService"] {
       XCTAssertTrue(contents.contains("<string>\(message)</string>"), message)
       XCTAssertTrue(provider.responds(to: NSSelectorFromString("\(message):userData:error:")), message)
     }
     XCTAssertTrue(contents.contains("<string>Polish with ${APP_NAME}</string>"))
     XCTAssertTrue(contents.contains("<string>Translate to English with ${APP_NAME}</string>"))
+    XCTAssertTrue(contents.contains("<string>Explain with ${APP_NAME}</string>"))
     XCTAssertTrue(contents.contains("<key>NSRequiredContext</key>"), "Without it macOS leaves the services off")
   }
 

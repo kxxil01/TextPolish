@@ -34,7 +34,8 @@ enum MessageExplanationPrompt {
       "You help someone who reads English as a second language understand a message they received.",
       "Write your explanation in \(language.promptName).",
       "Reply in exactly this form:",
-      "Meaning: what the message says, written naturally in \(language.promptName), complete, with nothing added",
+      "Meaning: what the message says, written naturally in \(language.promptName), complete, with nothing added, "
+        + "and about as long as the message",
       "Tone: how the message sounds, in a few words, such as friendly, urgent, annoyed, or joking",
       "Phrases:",
       "- phrase from the message → what it means",

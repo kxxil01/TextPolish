@@ -181,3 +181,50 @@ private struct StubExplainer: MessageExplaining {
     MessageExplanation(meaning: "Tolong kabari saya secepatnya. (\(language.rawValue))", tone: "urgent", phrases: [])
   }
 }
+
+extension CorrectionControllerTests {
+  @MainActor
+  func testHandedOverTextIsExplainedWithoutCopying() async {
+    let shown = expectation(description: "explanation shown")
+    let presenter = StubExplanationPresenter()
+    presenter.onShow = { shown.fulfill() }
+    let keyboard = StubKeyboard(isTrusted: true)
+    let pasteboard = StubPasteboard(waitResults: [])
+    let controller = ToneAnalysisController(
+      analyzer: FailingToneAnalyzer(underlyingError: CancellationError(), diagnosticsProvider: .openAI, diagnosticsModel: "x"),
+      feedback: StubFeedback(),
+      resultPresenter: NoToneResults(),
+      timings: .init(activationDelay: .zero, copySettleDelay: .zero, copyTimeout: .milliseconds(900)),
+      keyboard: keyboard,
+      pasteboard: pasteboard
+    )
+    var explained: [String] = []
+
+    controller.explainSelection(
+      explainer: StubExplainer(), language: .indonesian, presenter: presenter, text: "pls ping me asap",
+      onExplained: { explained.append($0) }
+    )
+
+    await fulfillment(of: [shown], timeout: 1.0)
+    XCTAssertEqual(keyboard.commandCCount, 0, "macOS already handed over the selection")
+    XCTAssertTrue(pasteboard.setStringCalls.isEmpty, "The clipboard is never touched")
+    XCTAssertEqual(explained, ["pls ping me asap"])
+  }
+}
+
+final class MenuGroupingTests: XCTestCase {
+  @MainActor
+  func testWritingAndReadingActionsAreGroupedApart() throws {
+    _ = NSApplication.shared
+    UserDefaults.standard.set(true, forKey: "didShowWelcome_0_1")
+    try Settings.save(Settings())
+    addTeardownBlock { try? Settings.save(Settings()) }
+    let delegate = AppDelegate()
+    delegate.debugFinishLaunching()
+
+    XCTAssertEqual(Array(delegate.debugMenuTitles.prefix(10)), [
+      "Polish", "Polish Style", "Translate to English", "Undo Last Polish", "---",
+      "Explain Message", "Reply in English", "Analyze Tone", "---", "Cancel Active Operation",
+    ])
+  }
+}
