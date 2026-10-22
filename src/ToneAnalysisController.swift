@@ -124,12 +124,14 @@ final class ToneAnalysisController {
   }
 
   /// Explain Message: copies the selection and shows what it means. `onExplained` gets the message, for Reply.
+  /// `text` is the selection when the caller already has it, as a Services request does; nothing is copied then.
   func explainSelection(
     explainer: MessageExplaining,
     language: Settings.ExplanationLanguage,
     presenter: MessageExplanationPresenting,
     targetApplication: NSRunningApplication? = nil,
     timingsOverride: Timings? = nil,
+    text: String? = nil,
     onExplained: (@MainActor (String) -> Void)? = nil
   ) {
     let job = SelectionJob(
@@ -148,7 +150,7 @@ final class ToneAnalysisController {
         self?.feedback.showError(message)
       }
     )
-    run(job, targetApplication: targetApplication, timingsOverride: timingsOverride)
+    run(job, targetApplication: targetApplication, timingsOverride: timingsOverride, providedText: text)
   }
 
   /// One read-only use of the selection: Analyze Tone or Explain Message.
@@ -170,7 +172,12 @@ final class ToneAnalysisController {
   }
 
   /// Copies the selection, runs the job on it, and restores the clipboard, recording the outcome for Diagnostics.
-  private func run(_ job: SelectionJob, targetApplication: NSRunningApplication?, timingsOverride: Timings?) {
+  private func run(
+    _ job: SelectionJob,
+    targetApplication: NSRunningApplication?,
+    timingsOverride: Timings?,
+    providedText: String? = nil
+  ) {
     guard !isRunning else {
       maybeShowBusyFeedback()
       return
@@ -193,22 +200,30 @@ final class ToneAnalysisController {
       }
 
       do {
-        try await self.activate(targetApplication, timings: timings, deadline: deadline)
-        let snapshot = self.pasteboard.snapshot()
+        // Handed-over text needs no copy, so the clipboard is never touched.
+        if providedText == nil {
+          try await self.activate(targetApplication, timings: timings, deadline: deadline)
+        }
+        let snapshot = providedText == nil ? self.pasteboard.snapshot() : nil
         var ownedClipboardChangeCount: Int?
         defer {
-          if let ownedClipboardChangeCount,
+          if let snapshot, let ownedClipboardChangeCount,
              self.pasteboard.changeCount == ownedClipboardChangeCount
           {
             self.pasteboard.restore(snapshot)
           }
         }
 
-        let inputText = try await self.copySelectedText(
-          timings: timings,
-          deadline: deadline,
-          updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
-        )
+        let inputText: String
+        if let providedText {
+          inputText = providedText
+        } else {
+          inputText = try await self.copySelectedText(
+            timings: timings,
+            deadline: deadline,
+            updateOwnedClipboardChangeCount: { ownedClipboardChangeCount = $0 }
+          )
+        }
         try Task.checkCancellation()
 
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

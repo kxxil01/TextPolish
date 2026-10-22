@@ -351,13 +351,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         self.undoItem = undoItem
 
+        // Writing your own text, then reading and answering someone else's, then stopping either.
         menu.addItem(polishItem)
         menu.addItem(polishStyleItem)
         menu.addItem(translateItem)
         menu.addItem(undoItem)
+        menu.addItem(.separator())
         menu.addItem(explainItem)
         menu.addItem(replyItem)
         menu.addItem(analyzeToneItem)
+        menu.addItem(.separator())
 
         let cancelItem = NSMenuItem(
             title: "Cancel Active Operation",
@@ -816,6 +819,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func handleServiceRequest(_ action: ServicesProvider.Action, text: String) {
         captureFrontmostApplication()
         let target = lastTargetApplication
+        if action == .explain {
+            explainSelection(in: target, timings: toneTimingsOverride(for: target), text: text)
+            return
+        }
         let style: CorrectionStyle = action == .translate
             ? .translateToEnglish
             : settings.correctionStyle(for: settings.polishStyle(forApp: target?.bundleIdentifier))
@@ -836,7 +843,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Explain Message runs on the current provider, like Learn mode, and shows the result without taking focus.
-    private func explainSelection(in target: NSRunningApplication?, timings: ToneAnalysisController.Timings?) {
+    private func explainSelection(
+        in target: NSRunningApplication?,
+        timings: ToneAnalysisController.Timings?,
+        text: String? = nil
+    ) {
         guard let explainer = CorrectorFactory.make(settings: settings) as? MessageExplaining else { return }
         toneAnalysisController?.explainSelection(
             explainer: explainer,
@@ -844,6 +855,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             presenter: explanationPanel,
             targetApplication: target,
             timingsOverride: timings,
+            text: text,
             onExplained: { [weak self] message in
                 self?.replyContext.remember(message)
             }
@@ -1232,6 +1244,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugServicesProvider: ServicesProvider {
             servicesProvider
+        }
+
+        /// The menu's item titles, with "---" for each separator.
+        var debugMenuTitles: [String] {
+            statusMenu?.items.map { $0.isSeparatorItem ? "---" : $0.title } ?? []
         }
 
         func debugRememberExplainedMessage(_ message: String) {
