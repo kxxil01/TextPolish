@@ -7,6 +7,7 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
+    case numbersChanged
 
     var errorDescription: String? {
       switch self {
@@ -39,6 +40,8 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
         return "OpenRouter returned no text"
       case .overRewrite:
         return "OpenRouter changed too much and was rejected. Lower OpenRouter Min Similarity or simplify extra instruction."
+      case .numbersChanged:
+        return "OpenRouter kept changing a number, so your text was left as it was"
       }
     }
   }
@@ -150,6 +153,9 @@ final class OpenRouterCorrector: GrammarCorrector, TextProcessor, RetryReporting
       TPLogger.log("OpenRouter attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
+    if case .numbersChanged = retryReason {
+      throw OpenRouterError.numbersChanged
+    }
     throw OpenRouterError.overRewrite
   }
 

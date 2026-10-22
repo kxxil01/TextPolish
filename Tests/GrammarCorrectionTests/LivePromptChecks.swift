@@ -96,6 +96,14 @@ final class LivePromptChecks: XCTestCase {
     XCTAssertTrue(output.lowercased().contains("week"))
   }
 
+  /// 0.0.82 could not polish this: fixing the typo "everytgh8ng" dropped the 8, which counted as a lost number.
+  func testNaturalFixesATypoWithADigitInIt() async throws {
+    let output = try await polish("its not being used anymore after i migrate everytgh8ng to WIF = keyless auth", style: .clarify)
+
+    XCTAssertTrue(output.lowercased().contains("everything"))
+    XCTAssertTrue(output.contains("WIF"))
+  }
+
   func testNaturalKeepsChatAbbreviations() async throws {
     let input = "so please keep future queries to short time ranges with tight filters, ty"
     let output = try await polish(input, style: .clarify)

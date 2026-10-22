@@ -8,6 +8,7 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
+    case numbersChanged
 
     var errorDescription: String? {
       switch self {
@@ -35,6 +36,8 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return "Gemini returned no text"
       case .overRewrite:
         return "Gemini changed too much and was rejected. Lower Gemini Min Similarity or clear Gemini Extra Instruction."
+      case .numbersChanged:
+        return "Gemini kept changing a number, so your text was left as it was"
       }
     }
   }
@@ -162,6 +165,9 @@ final class GeminiCorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
       TPLogger.log("Gemini attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
+    if case .numbersChanged = retryReason {
+      throw GeminiError.numbersChanged
+    }
     throw GeminiError.overRewrite
   }
 

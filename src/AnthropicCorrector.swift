@@ -8,6 +8,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
     case requestFailed(Int, String?)
     case emptyResponse
     case overRewrite
+    case numbersChanged
 
     var errorDescription: String? {
       switch self {
@@ -35,6 +36,8 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         return "Anthropic returned no text"
       case .overRewrite:
         return "Anthropic changed too much and was rejected. Lower Anthropic Min Similarity or simplify extra instruction."
+      case .numbersChanged:
+        return "Anthropic kept changing a number, so your text was left as it was"
       }
     }
   }
@@ -157,6 +160,9 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
       TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
 
+    if case .numbersChanged = retryReason {
+      throw AnthropicError.numbersChanged
+    }
     throw AnthropicError.overRewrite
   }
 

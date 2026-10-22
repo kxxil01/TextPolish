@@ -251,12 +251,17 @@ extension TextProcessor {
   }
 
   /// Numbers as written, with their separators: "2.500.000", "07:11", "14", "3" from "3pm".
+  /// Digits with letters on both sides, as in the typo "everytgh8ng" or "l8r", are part of a word, not a number.
   func numberTokens(in text: String) -> [String] {
     let pattern = "[0-9]+(?:[.,:/][0-9]+)*"
     var tokens: [String] = []
     var searchRange = text.startIndex..<text.endIndex
     while let range = text.range(of: pattern, options: .regularExpression, range: searchRange) {
-      tokens.append(String(text[range]))
+      let letterBefore = range.lowerBound > text.startIndex && text[text.index(before: range.lowerBound)].isLetter
+      let letterAfter = range.upperBound < text.endIndex && text[range.upperBound].isLetter
+      if !(letterBefore && letterAfter) {
+        tokens.append(String(text[range]))
+      }
       searchRange = range.upperBound..<text.endIndex
     }
     return tokens
