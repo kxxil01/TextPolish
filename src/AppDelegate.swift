@@ -55,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let lessonHistory = LessonHistory()
     private var lessonsWindow: LessonsWindow?
     private var recentLessonsItem: NSMenuItem?
+    private var practiceItem: NSMenuItem?
+    private var practiceWindow: PracticeWindow?
     private var polishUndoer: PolishUndoer?
     private var undoItem: NSMenuItem?
     private var explanationTask: Task<Void, Never>?
@@ -376,22 +378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(cancelItem)
         menu.addItem(.separator())
 
-        // Info & tools
-        let recentLessonsItem = NSMenuItem(title: "Recent Lessons\u{2026}", action: nil, keyEquivalent: "")
-        recentLessonsItem.target = self
-        recentLessonsItem.toolTip = "Explanations from Learn mode, saved on this Mac"
-        self.recentLessonsItem = recentLessonsItem
-        menu.addItem(recentLessonsItem)
-        syncRecentLessonsItem()
-
-        let diagnosticsItem = NSMenuItem(
-            title: "Diagnostics\u{2026}",
-            action: #selector(openDiagnostics),
-            keyEquivalent: ""
-        )
-        diagnosticsItem.target = self
-        menu.addItem(diagnosticsItem)
-
+        addLessonAndToolItems(to: menu)
         menu.addItem(makeUpdatesItem())
         menu.addItem(.separator())
 
@@ -415,6 +402,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         syncHotKeyMenuItems()
         syncCancelMenuState()
         syncUpdateMenuItems()
+    }
+
+    /// Recent Lessons, Practice, and Diagnostics.
+    private func addLessonAndToolItems(to menu: NSMenu) {
+        let recentLessonsItem = NSMenuItem(title: "Recent Lessons\u{2026}", action: nil, keyEquivalent: "")
+        recentLessonsItem.target = self
+        recentLessonsItem.toolTip = "Explanations from Learn mode, saved on this Mac"
+        self.recentLessonsItem = recentLessonsItem
+        menu.addItem(recentLessonsItem)
+        let practiceItem = makeMenuItem(
+            "Practice\u{2026}", action: nil, toolTip: "A short quiz from the changes Learn mode explained to you"
+        )
+        self.practiceItem = practiceItem
+        menu.addItem(practiceItem)
+        syncRecentLessonsItem()
+
+        let diagnosticsItem = NSMenuItem(
+            title: "Diagnostics\u{2026}",
+            action: #selector(openDiagnostics),
+            keyEquivalent: ""
+        )
+        diagnosticsItem.target = self
+        menu.addItem(diagnosticsItem)
     }
 
     /// Check for Updates, with the update status and last check time below it.
@@ -1103,6 +1113,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Disabled until Learn mode has saved a lesson; a menu item without an action is shown disabled.
     private func syncRecentLessonsItem() {
         recentLessonsItem?.action = lessonHistory.lessons.isEmpty ? nil : #selector(showRecentLessons)
+        practiceItem?.action = lessonHistory.practiceItems(limit: 1).isEmpty ? nil : #selector(showPractice)
+    }
+
+    @objc private func showPractice() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            if self.practiceWindow == nil {
+                self.practiceWindow = PracticeWindow(history: self.lessonHistory)
+            }
+            self.practiceWindow?.show()
+        }
     }
 
     @objc private func showRecentLessons() {
@@ -1291,6 +1312,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugRecentLessonsEnabled: Bool {
             recentLessonsItem?.action != nil
+        }
+
+        var debugPracticeEnabled: Bool {
+            practiceItem?.action != nil
         }
 
         func debugRecordLesson(_ lines: [String]) {

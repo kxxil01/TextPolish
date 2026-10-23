@@ -42,6 +42,7 @@ It currently supports two workflows:
 - Learn mode (optional, Settings > Advanced): after each Polish, a small panel explains the main changes, such as "status progress → a progress status: adjective comes before the noun"
 - Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button. Changes Learn has explained more than once, such as "needsed → needed (3 times)", are listed first under Watch Out For. At the top, This Week shows how many messages Learn explained, the changes per message compared with last week, and your most repeated change
 - Usage and cost (Diagnostics): this month's requests and tokens per model, with an estimate in dollars at list prices for common models. Counted on this Mac only
+- Practice (menu bar): a short quiz from your own mistakes. TextPolish shows a phrase you wrote before, such as "already check", you type how you'd write it now, and it shows the fix and why. Repeated mistakes come first
 - Diagnostics > Copy Logs copies TextPolish's log lines since launch for a bug report; they never include your text
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens
 - Retry logic and timeout bounds for provider requests
