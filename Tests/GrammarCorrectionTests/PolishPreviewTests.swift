@@ -161,6 +161,7 @@ extension CorrectionControllerTests {
     private var decisions: [PolishReviewDecision]
     private(set) var reviewed: [(original: String, polished: String, style: CorrectionStyle)] = []
     private(set) var offeredChoices: [[PolishStyleChoice]] = []
+    private(set) var warnings: [String?] = []
     private(set) var dismissCount = 0
 
     init(approve: Bool) {
@@ -171,11 +172,16 @@ extension CorrectionControllerTests {
       self.decisions = decisions
     }
 
-    func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
-      -> PolishReviewDecision
-    {
+    func review(
+      original: String,
+      polished: String,
+      style: CorrectionStyle,
+      choices: [PolishStyleChoice],
+      warning: String?
+    ) async -> PolishReviewDecision {
       reviewed.append((original, polished, style))
       offeredChoices.append(choices)
+      warnings.append(warning)
       return decisions.isEmpty ? .cancel : decisions.removeFirst()
     }
 

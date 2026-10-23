@@ -61,6 +61,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
   private let protectedTerms: [String]
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
+  private(set) var lastRejected: RejectedCandidate?
 
   var diagnosticsProvider: Settings.Provider { .anthropic }
   var diagnosticsModel: String { model }
@@ -107,6 +108,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
 
   func correct(_ text: String, style: CorrectionStyle) async throws -> String {
     lastRetryCount = 0
+    lastRejected = nil
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
     try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
@@ -156,6 +158,7 @@ final class AnthropicCorrector: GrammarCorrector, TextProcessor, RetryReporting,
         return restored
       }
       retryReason = rejection
+      lastRejected = RejectedCandidate(text: restored, reason: rejection) ?? lastRejected
       let summary = rejectionSummary(original: text, candidate: restored, minimumSimilarity: minimum)
       TPLogger.log("Anthropic attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
@@ -378,3 +381,5 @@ extension AnthropicCorrector: ChangeExplaining {
     return ChangeExplanationPrompt.parse(output)
   }
 }
+
+extension AnthropicCorrector: RejectionReporting {}
