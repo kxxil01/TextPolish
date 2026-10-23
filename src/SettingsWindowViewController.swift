@@ -82,8 +82,11 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var learnModeCheckbox: NSButton!
     var autoTranslateCheckbox: NSButton!
     var keepRecentPolishesCheckbox: NSButton!
+    var customStyleSlotPopup: NSPopUpButton!
     var customStyleNameField: NSTextField!
     var customStyleInstructionField: NSTextField!
+    /// The Custom style the Name and How It Sounds fields edit.
+    private(set) var selectedCustomSlot: Settings.PolishStyle = .custom
     var extraInstructionField: NSTextField!
     var geminiMinSimilarityField: NSTextField!
     var openRouterMinSimilarityField: NSTextField!
@@ -309,6 +312,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     }
 
     private func createCustomStyleFields() {
+        customStyleSlotPopup = NSPopUpButton()
+        customStyleSlotPopup.addItems(withTitles: Settings.PolishStyle.customSlots.map(\.displayName))
+        customStyleSlotPopup.target = self
+        customStyleSlotPopup.action = #selector(customStyleSlotChanged(_:))
+        customStyleSlotPopup.setAccessibilityLabel("Custom style to edit")
+
         customStyleNameField = NSTextField()
         customStyleNameField.placeholderString = "Custom"
         customStyleNameField.delegate = self
@@ -834,19 +843,21 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     /// The writer's own style: a name for menus and how it should sound. Returns the y below the card.
     private func buildCustomStyleCard(in container: NSView, top: CGFloat, padding: CGFloat, contentWidth: CGFloat) -> CGFloat {
         var y = top
-        let header = SettingsUI.makeSectionHeader("Custom Style")
+        let header = SettingsUI.makeSectionHeader("Custom Styles")
         header.frame = NSRect(x: padding + 4, y: y - 16, width: contentWidth - 4, height: 16)
         container.addSubview(header)
         y -= 22
 
-        let cardHeight: CGFloat = 90 + 24
+        let cardHeight: CGFloat = 126 + 24
         let card = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - cardHeight, width: contentWidth, height: cardHeight))
         container.addSubview(card)
         let content = card.contentView!
+        addRow(to: content, label: "Style", y: 100, control: customStyleSlotPopup, controlWidth: 160, hint: "up to three of your own")
+        addSeparator(to: content, y: 95)
         addRow(to: content, label: "Name", y: 64, control: customStyleNameField, controlWidth: 160, hint: "shown in the Polish Style menu")
         addSeparator(to: content, y: 59)
         addRow(to: content, label: "How It Sounds", y: 0, control: customStyleInstructionField, controlWidth: nil, controlHeight: 54)
-        let hint = SettingsUI.makeHint("Empty hides Custom")
+        let hint = SettingsUI.makeHint("Empty hides this style")
         hint.frame = NSRect(x: 0, y: 12, width: settingsLabelWidth, height: 15)
         content.addSubview(hint)
         return y - cardHeight - 16
@@ -899,7 +910,8 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         case .shorter: return "Shorter: cut filler, keep every point"
         case .formal: return "Formal: polite and professional"
         case .friendly: return "Friendly: warm and casual"
-        case .custom: return "Custom: your own style"
+        // Titles must differ, or the popup merges the items.
+        case .custom, .custom2, .custom3: return "\(style.displayName): your own style"
         }
     }
 
@@ -908,8 +920,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         syncCustomStyleChoice()
         polishStylePopup.selectItem(at: Settings.PolishStyle.allCases.firstIndex(of: settings.polishStyle) ?? 0)
         explanationLanguagePopup.selectItem(at: Settings.ExplanationLanguage.allCases.firstIndex(of: settings.explanationLanguage) ?? 0)
-        customStyleNameField.stringValue = settings.customStyleName
-        customStyleInstructionField.stringValue = settings.customStyleInstruction ?? ""
+        loadCustomStyleFields()
         protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
         previewBeforePasteCheckbox.state = settings.previewBeforePaste ? .on : .off
         learnModeCheckbox.state = settings.learnMode ? .on : .off
@@ -1176,8 +1187,10 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             return
         }
         if field === customStyleNameField || field === customStyleInstructionField {
-            settings.customStyleName = customStyleNameField.stringValue
-            settings.customStyleInstruction = customStyleInstructionField.stringValue
+            settings.customStyles[selectedCustomSlot.rawValue] = Settings.CustomStyle(
+                name: customStyleNameField.stringValue,
+                instruction: customStyleInstructionField.stringValue
+            )
             liveSave()
             return
         }
@@ -1388,12 +1401,35 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         liveSave()
     }
 
-    /// Names the Custom choice after the writer's style, and offers it only once it has an instruction.
+    /// Names each Custom choice after the writer's style, and offers it only once it has an instruction.
     private func syncCustomStyleChoice() {
-        guard let index = Settings.PolishStyle.allCases.firstIndex(of: .custom),
-              let item = polishStylePopup.item(at: index) else { return }
-        item.title = "\(settings.customStyleName): your own style"
-        item.isHidden = !settings.hasCustomStyle
+        for (index, slot) in Settings.PolishStyle.allCases.enumerated() where slot.isCustom {
+            guard let item = polishStylePopup.item(at: index) else { continue }
+            let style = settings.customStyle(slot)
+            item.title = "\(style.name): your own style"
+            item.isHidden = style.instruction == nil
+        }
+    }
+
+    /// Fills Name and How It Sounds from the Custom style being edited, and names the slots after their styles.
+    private func loadCustomStyleFields() {
+        for (index, slot) in Settings.PolishStyle.customSlots.enumerated() {
+            customStyleSlotPopup.item(at: index)?.title = settings.customStyle(slot).name
+        }
+        let slotIndex = Settings.PolishStyle.customSlots.firstIndex(of: selectedCustomSlot) ?? 0
+        customStyleSlotPopup.selectItem(at: slotIndex)
+        let style = settings.customStyle(selectedCustomSlot)
+        customStyleNameField.stringValue = style.name
+        customStyleNameField.placeholderString = selectedCustomSlot.displayName
+        customStyleInstructionField.stringValue = style.instruction ?? ""
+    }
+
+    @objc func customStyleSlotChanged(_ sender: NSPopUpButton) {
+        let slots = Settings.PolishStyle.customSlots
+        guard settings != nil, slots.indices.contains(sender.indexOfSelectedItem) else { return }
+        // Clicking the picker ends any edit first, so the previous style is already saved.
+        selectedCustomSlot = slots[sender.indexOfSelectedItem]
+        loadCustomStyleFields()
     }
 
     @objc func polishStyleChanged(_ sender: NSPopUpButton) {

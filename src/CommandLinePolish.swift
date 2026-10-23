@@ -22,7 +22,8 @@ enum CommandLinePolish {
     var errorDescription: String? {
       switch self {
       case .usage(let message): return message
-      case .unknownStyle(let name): return "Unknown style \"\(name)\". Use natural, minimal, shorter, formal, friendly, or custom."
+      case .unknownStyle(let name):
+        return "Unknown style \"\(name)\". Use natural, minimal, shorter, formal, friendly, or one of your Custom styles."
       case .noText: return "No text to polish. Pass it as arguments or on stdin."
       }
     }
@@ -30,7 +31,7 @@ enum CommandLinePolish {
 
   static let usage = """
     Usage:
-      TextPolish polish [--style natural|minimal|shorter|formal|friendly|custom] [text]
+      TextPolish polish [--style natural|minimal|shorter|formal|friendly|<your Custom style>] [text]
       TextPolish translate [text]
 
     Without text, the text is read from stdin. The result is written to stdout.

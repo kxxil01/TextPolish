@@ -47,10 +47,13 @@ final class CustomStyleTests: XCTestCase {
     XCTAssertEqual("\(CorrectionStyle.clarify)", "clarify")
   }
 
+  private func status(_ instruction: String?) -> Settings.CustomStyle {
+    Settings.CustomStyle(name: "Status", instruction: instruction)
+  }
+
   func testSettingsCarryTheInstructionAndRoundTrip() throws {
     var settings = Settings()
-    settings.customStyleName = "Status"
-    settings.customStyleInstruction = instruction
+    settings.customStyles["custom"] = status(instruction)
     settings.polishStyle = .custom
     settings.normalizeRuntimeValues()
 
@@ -60,26 +63,49 @@ final class CustomStyleTests: XCTestCase {
     XCTAssertEqual(settings.availablePolishStyles.last, .custom)
 
     let decoded = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(settings))
-    XCTAssertEqual(decoded.customStyleName, "Status")
-    XCTAssertEqual(decoded.customStyleInstruction, instruction)
+    XCTAssertEqual(decoded.customStyle(.custom), status(instruction))
     XCTAssertEqual(decoded.polishStyle, .custom)
   }
 
-  func testClearingTheInstructionStopsUsingCustomEverywhere() {
+  func testThreeCustomStylesEachWithTheirOwnInstruction() {
     var settings = Settings()
-    settings.customStyleInstruction = instruction
+    settings.customStyles["custom2"] = Settings.CustomStyle(name: "Client", instruction: "Polite email to a client")
+    settings.customStyles["custom3"] = Settings.CustomStyle(name: "Standup", instruction: "Short bullet points")
+    settings.normalizeRuntimeValues()
+
+    XCTAssertEqual(settings.availablePolishStyles.suffix(2), [.custom2, .custom3], "Unused slots stay hidden")
+    XCTAssertEqual(settings.displayName(for: .custom2), "Client")
+    XCTAssertEqual(settings.correctionStyle(for: .custom3), .custom("Short bullet points"))
+    XCTAssertEqual(settings.displayName(for: .custom), "Custom", "An unused slot keeps its default name")
+  }
+
+  func testOlderSettingsMoveTheirCustomStyleIntoTheFirstSlot() throws {
+    let older = Data(#"{"customStyleName":"Status","customStyleInstruction":"Short and direct","polishStyle":"custom"}"#.utf8)
+
+    let settings = try JSONDecoder().decode(Settings.self, from: older)
+
+    XCTAssertEqual(settings.customStyle(.custom), Settings.CustomStyle(name: "Status", instruction: "Short and direct"))
+    XCTAssertEqual(settings.polishStyle, .custom)
+    let saved = try XCTUnwrap(String(bytes: try JSONEncoder().encode(settings), encoding: .utf8))
+    XCTAssertFalse(saved.contains("customStyleInstruction"), "Only the new format is written back")
+  }
+
+  func testClearingTheInstructionStopsUsingThatStyleEverywhere() {
+    var settings = Settings()
+    settings.customStyles["custom"] = status(instruction)
+    settings.customStyles["custom2"] = Settings.CustomStyle(name: "Client", instruction: "Polite email")
     settings.polishStyle = .custom
-    settings.appPolishStyles = ["com.hnc.Discord": .custom, "com.tinyspeck.slackmacgap": .formal]
+    settings.appPolishStyles = ["com.hnc.Discord": .custom, "com.tinyspeck.slackmacgap": .custom2]
     settings.styleHotKeys = ["custom": Settings.HotKey(keyCode: 14, modifiers: 0)]
     settings.normalizeRuntimeValues()
     XCTAssertEqual(settings.polishStyle, .custom)
 
-    settings.customStyleInstruction = "   "
+    settings.customStyles["custom"] = status("   ")
     settings.normalizeRuntimeValues()
 
-    XCTAssertNil(settings.customStyleInstruction)
+    XCTAssertNil(settings.customStyle(.custom).instruction)
     XCTAssertEqual(settings.polishStyle, .natural)
-    XCTAssertEqual(settings.appPolishStyles, ["com.tinyspeck.slackmacgap": .formal])
+    XCTAssertEqual(settings.appPolishStyles, ["com.tinyspeck.slackmacgap": .custom2], "Other Custom styles stay")
     XCTAssertTrue(settings.styleHotKeys.isEmpty)
     XCTAssertFalse(settings.availablePolishStyles.contains(.custom))
     XCTAssertEqual(settings.correctionStyle(for: .custom), .clarify)
@@ -87,12 +113,11 @@ final class CustomStyleTests: XCTestCase {
 
   func testNameAndInstructionAreTrimmedAndCapped() {
     var settings = Settings()
-    settings.customStyleName = "  "
-    settings.customStyleInstruction = String(repeating: "a", count: 600)
+    settings.customStyles["custom2"] = Settings.CustomStyle(name: "  ", instruction: String(repeating: "a", count: 600))
     settings.normalizeRuntimeValues()
 
-    XCTAssertEqual(settings.customStyleName, "Custom")
-    XCTAssertEqual(settings.customStyleInstruction?.count, 500)
+    XCTAssertEqual(settings.customStyle(.custom2).name, "Custom 2")
+    XCTAssertEqual(settings.customStyle(.custom2).instruction?.count, 500)
   }
 
   @MainActor
@@ -103,12 +128,34 @@ final class CustomStyleTests: XCTestCase {
     XCTAssertFalse(plain.debugAppPolishStyleTitles.contains("Custom"))
 
     var settings = Settings()
-    settings.customStyleName = "Status"
-    settings.customStyleInstruction = instruction
+    settings.customStyles["custom"] = status(instruction)
+    settings.customStyles["custom3"] = Settings.CustomStyle(name: "Standup", instruction: "Short bullet points")
     let custom = try makeDelegate(settings)
-    XCTAssertEqual(custom.debugVisiblePolishStyleTitles.last, "Status")
+    XCTAssertEqual(Array(custom.debugVisiblePolishStyleTitles.suffix(2)), ["Status", "Standup"])
     custom.debugShowAppPolishStyles(bundleID: "com.hnc.Discord", name: "Discord")
-    XCTAssertEqual(custom.debugAppPolishStyleTitles.last, "Status")
+    XCTAssertEqual(custom.debugAppPolishStyleTitles.last, "Standup")
+  }
+
+  @MainActor
+  func testSettingsEditEachCustomStyleSeparately() throws {
+    _ = NSApplication.shared
+    try Settings.save(Settings())
+    addTeardownBlock { try? Settings.save(Settings()) }
+    let controller = SettingsWindowController(keychainServiceOverride: "com.textpolish.tests.custom-styles")
+    let viewController = try XCTUnwrap(controller.viewController)
+    viewController.loadSettings()
+
+    viewController.customStyleSlotPopup.selectItem(at: 1)
+    viewController.customStyleSlotChanged(viewController.customStyleSlotPopup)
+    viewController.customStyleNameField.stringValue = "Client"
+    viewController.customStyleInstructionField.stringValue = "Polite email to a client"
+    viewController.controlTextDidEndEditing(
+      Notification(name: NSControl.textDidEndEditingNotification, object: viewController.customStyleInstructionField)
+    )
+
+    let saved = Settings.loadOrCreateDefault()
+    XCTAssertEqual(saved.customStyle(.custom2), Settings.CustomStyle(name: "Client", instruction: "Polite email to a client"))
+    XCTAssertNil(saved.customStyle(.custom).instruction, "The first slot is untouched")
   }
 
   @MainActor

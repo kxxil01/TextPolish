@@ -261,10 +261,9 @@ struct Settings: Codable {
   var explanationLanguage: ExplanationLanguage
   /// Optional shortcuts that Polish in one style, keyed by `PolishStyle` raw value. None by default.
   var styleHotKeys: [String: HotKey]
-  /// The Custom style's name in menus.
-  var customStyleName: String
-  /// How the Custom style should sound, in the writer's words. Custom is hidden until this is set.
-  var customStyleInstruction: String?
+  /// The writer's own styles, keyed by `PolishStyle` raw value of a Custom slot. A slot is hidden until it has
+  /// an instruction.
+  var customStyles: [String: CustomStyle]
   var enableGeminiOpenRouterFallback: Bool
   var geminiApiKey: String?
   var geminiModel: String
@@ -302,7 +301,6 @@ struct Settings: Codable {
     static let openAIBaseURL = "https://api.openai.com/v1"
     static let anthropicModel = "claude-haiku-4-5"
     static let anthropicBaseURL = "https://api.anthropic.com"
-    static let customStyleName = "Custom"
   }
 
   init(
@@ -330,8 +328,7 @@ struct Settings: Codable {
     hotKeyReply: HotKey = .replyDefault,
     explanationLanguage: ExplanationLanguage = .indonesian,
     styleHotKeys: [String: HotKey] = [:],
-    customStyleName: String = "Custom",
-    customStyleInstruction: String? = nil,
+    customStyles: [String: CustomStyle] = [:],
     enableGeminiOpenRouterFallback: Bool = false,
     geminiApiKey: String? = nil,
     geminiModel: String = "gemini-2.5-flash",
@@ -383,8 +380,7 @@ struct Settings: Codable {
     self.hotKeyReply = hotKeyReply
     self.explanationLanguage = explanationLanguage
     self.styleHotKeys = styleHotKeys
-    self.customStyleName = customStyleName
-    self.customStyleInstruction = customStyleInstruction
+    self.customStyles = customStyles
     self.enableGeminiOpenRouterFallback = enableGeminiOpenRouterFallback
     self.geminiApiKey = geminiApiKey
     self.geminiModel = geminiModel
@@ -434,8 +430,7 @@ struct Settings: Codable {
     autoTranslateIndonesian = (try? container.decodeIfPresent(Bool.self, forKey: .autoTranslateIndonesian)) ?? true
     keepRecentPolishes = (try? container.decodeIfPresent(Bool.self, forKey: .keepRecentPolishes)) ?? false
     styleHotKeys = (try? container.decodeIfPresent([String: HotKey].self, forKey: .styleHotKeys)) ?? [:]
-    customStyleName = (try? container.decodeIfPresent(String.self, forKey: .customStyleName)) ?? Defaults.customStyleName
-    customStyleInstruction = try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)
+    customStyles = Self.decodeCustomStyles(from: container)
     hotKeyPolish = (try? container.decode(HotKey.self, forKey: .hotKeyPolish)) ?? .polishDefault
     hotKeyAnalyzeTone = (try? container.decode(HotKey.self, forKey: .hotKeyAnalyzeTone)) ?? .analyzeToneDefault
     hotKeyTranslate = (try? container.decode(HotKey.self, forKey: .hotKeyTranslate)) ?? .translateDefault
@@ -496,8 +491,7 @@ struct Settings: Codable {
     try container.encode(autoTranslateIndonesian, forKey: .autoTranslateIndonesian)
     try container.encode(keepRecentPolishes, forKey: .keepRecentPolishes)
     try container.encode(styleHotKeys, forKey: .styleHotKeys)
-    try container.encode(customStyleName, forKey: .customStyleName)
-    try container.encodeIfPresent(customStyleInstruction, forKey: .customStyleInstruction)
+    try container.encode(customStyles, forKey: .customStyles)
     try container.encode(hotKeyPolish, forKey: .hotKeyPolish)
     try container.encode(hotKeyAnalyzeTone, forKey: .hotKeyAnalyzeTone)
     try container.encode(hotKeyTranslate, forKey: .hotKeyTranslate)
@@ -595,18 +589,36 @@ struct Settings: Codable {
     customProvider.normalize()
     protectedTerms = Self.normalizedTerms(protectedTerms)
     styleHotKeys = styleHotKeys.filter { PolishStyle(rawValue: $0.key) != nil }
-    normalizeCustomStyle()
+    normalizeCustomStyles()
   }
 
-  /// Caps the Custom style's text, and stops using Custom anywhere once its instruction is cleared.
-  private mutating func normalizeCustomStyle() {
-    customStyleName = String(Self.trimmed(customStyleName).prefix(30))
-    if customStyleName.isEmpty { customStyleName = Defaults.customStyleName }
-    customStyleInstruction = Self.nilIfEmpty(customStyleInstruction).map { String($0.prefix(500)) }
-    guard customStyleInstruction == nil else { return }
-    if polishStyle == .custom { polishStyle = .natural }
-    appPolishStyles = appPolishStyles.filter { $0.value != .custom }
-    styleHotKeys[PolishStyle.custom.rawValue] = nil
+  /// Caps each Custom style's text, and stops using a Custom style anywhere once its instruction is cleared.
+  private mutating func normalizeCustomStyles() {
+    var normalized: [String: CustomStyle] = [:]
+    for slot in PolishStyle.customSlots {
+      let style = customStyles[slot.rawValue] ?? CustomStyle(name: slot.displayName)
+      let name = String(Self.trimmed(style.name).prefix(30))
+      let instruction = Self.nilIfEmpty(style.instruction).map { String($0.prefix(500)) }
+      normalized[slot.rawValue] = CustomStyle(name: name.isEmpty ? slot.displayName : name, instruction: instruction)
+      guard instruction == nil else { continue }
+      if polishStyle == slot { polishStyle = .natural }
+      appPolishStyles = appPolishStyles.filter { $0.value != slot }
+      styleHotKeys[slot.rawValue] = nil
+    }
+    customStyles = normalized
+  }
+
+  /// Custom styles, moving the single Custom style of older settings files into the first slot.
+  private static func decodeCustomStyles(from container: KeyedDecodingContainer<CodingKeys>) -> [String: CustomStyle] {
+    var styles = (try? container.decodeIfPresent([String: CustomStyle].self, forKey: .customStyles)) ?? [:]
+    let firstSlot = PolishStyle.custom.rawValue
+    if styles[firstSlot] == nil,
+       let instruction = (try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)) ?? nil
+    {
+      let name = (try? container.decodeIfPresent(String.self, forKey: .customStyleName)) ?? nil
+      styles[firstSlot] = CustomStyle(name: name ?? PolishStyle.custom.displayName, instruction: instruction)
+    }
+    return styles
   }
 
   /// Splits the Settings field into terms: one per comma or line.
@@ -677,6 +689,8 @@ struct Settings: Codable {
     case autoTranslateIndonesian
     case keepRecentPolishes
     case styleHotKeys
+    case customStyles
+    // Before several Custom styles, the one Custom style was kept in these two keys; read only to migrate.
     case customStyleName
     case customStyleInstruction
     // Polish took over the Correct Selection shortcut, so it keeps that key and any customization.

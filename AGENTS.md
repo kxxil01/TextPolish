@@ -151,9 +151,8 @@ File: `~/Library/Application Support/TextPolish/settings.json` (lessons are save
 | `geminiModel` | `gemini-2.5-flash` | |
 | `anthropicModel` | `claude-haiku-4-5` | |
 | `openRouterModel` | `google/gemma-3n-e4b-it:free` | |
-| `polishStyle` | `natural` | `natural`, `minimal`, `shorter`, `formal`, `friendly`, `custom` |
-| `customStyleName` | `Custom` | The Custom style's name in menus, up to 30 characters |
-| `customStyleInstruction` | none | How the Custom style sounds, up to 500 characters; Custom is hidden until it is set |
+| `polishStyle` | `natural` | `natural`, `minimal`, `shorter`, `formal`, `friendly`, `custom`, `custom2`, `custom3` |
+| `customStyles` | `{}` | Up to three Custom styles keyed by slot (`custom`, `custom2`, `custom3`): `name` (30 characters) and `instruction` (500); a slot is hidden until it has an instruction. Older `customStyleName`/`customStyleInstruction` move into `custom` |
 | `appPolishStyles` | `{}` | Style per app, keyed by bundle ID |
 | `styleHotKeys` | `{}` | Optional shortcut per style, keyed by style |
 | `hotKeyTranslate` | `⌃⌥⌘E` | Translate to English |
