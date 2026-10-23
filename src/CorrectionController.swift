@@ -270,14 +270,14 @@ final class CorrectionController {
             + "selection=\(input.selection) wholeField=\(input.wholeField) chars=\(input.text.count)"
         )
 
-        let corrected = try await self.correctWithRecovery(input.text, style: style, corrector: corrector, state: state)
-        guard corrected != input.text else {
+        let attempt = try await self.correctOrReview(input.text, style: style, corrector: corrector, state: state)
+        guard attempt.text != input.text else {
           self.feedback.showInfo("No changes")
           self.recordSuccess(state, note: "No changes")
           return
         }
         guard let chosen = try await self.confirmInPreviewIfNeeded(
-          original: input.text, polished: corrected, style: style, state: state
+          original: input.text, polished: attempt.text, style: style, warning: attempt.warning, state: state
         ) else {
           return
         }
@@ -292,7 +292,7 @@ final class CorrectionController {
         didPaste = true
         try await self.sleepRespectingDeadline(timings.postPasteDelay, until: state.deadline)
         self.showSuccess(for: chosen.style)
-        self.recordSuccess(state)
+        self.recordSuccess(state, note: chosen.warning == nil ? nil : "Pasted a result a check had flagged")
         self.onSuccess?()
         self.onPolished?(PolishRecord(original: input.text, polished: chosen.text, processID: target.pid, style: chosen.style))
       } catch is CancellationError {
@@ -711,22 +711,51 @@ extension CorrectionController {
     }
   }
 
-  /// With Preview on, waits for Paste or Cancel, polishing the original again when the user asks.
-  /// Returns the text and style to paste, or nil when the user canceled.
+  /// A Polish result, with a warning when it is a result a check rejected and the writer must judge.
+  private struct PolishAttempt {
+    let text: String
+    let warning: String?
+  }
+
+  /// Corrects the text. When every attempt fails a check a person can judge, such as a changed number, the last
+  /// rejected result comes back with a warning for the preview instead of an error, so Polish never comes up empty.
+  private func correctOrReview(
+    _ text: String,
+    style: CorrectionStyle,
+    corrector: GrammarCorrector,
+    state: PolishRunState
+  ) async throws -> PolishAttempt {
+    do {
+      return PolishAttempt(text: try await correctWithRecovery(text, style: style, corrector: corrector, state: state), warning: nil)
+    } catch {
+      let reporters = [state.usedCorrector, corrector].compactMap { $0 as? RejectionReporting }
+      guard reviewer != nil, let rejected = reporters.lazy.compactMap(\.lastRejected).first else { throw error }
+      TPLogger.log("Polish review: showing a result the checks rejected, reason=\(rejected.reason)")
+      return PolishAttempt(text: rejected.text, warning: rejected.warning)
+    }
+  }
+
+  /// With Preview on, or when a check flagged the result, waits for Paste or Cancel, polishing the original again
+  /// when the user asks. Returns the text, style, and any warning to paste, or nil when the user canceled.
   private func confirmInPreviewIfNeeded(
     original: String,
     polished: String,
     style: CorrectionStyle,
+    warning: String?,
     state: PolishRunState
-  ) async throws -> (text: String, style: CorrectionStyle)? {
-    guard settings.previewBeforePaste, let reviewer else { return (polished, style) }
+  ) async throws -> (text: String, style: CorrectionStyle, warning: String?)? {
+    guard settings.previewBeforePaste || warning != nil, let reviewer else { return (polished, style, warning) }
     defer { reviewer.dismiss() }
-    var current = (text: polished, style: style)
+    var current = (text: polished, style: style, warning: warning)
     while true {
       TPLogger.log("Polish preview: waiting for Paste or Cancel")
       let reviewStartedAt = Date()
       let decision = await reviewer.review(
-        original: original, polished: current.text, style: current.style, choices: previewStyleChoices(for: current.style)
+        original: original,
+        polished: current.text,
+        style: current.style,
+        choices: previewStyleChoices(for: current.style),
+        warning: current.warning
       )
       // Diagnostics latency measures Polish, not how long the user read the preview.
       state.startedAt += Date().timeIntervalSince(reviewStartedAt)
@@ -742,8 +771,8 @@ extension CorrectionController {
         return nil
       case .retry(let newStyle):
         TPLogger.log("Polish preview: trying again style=\(newStyle)")
-        let text = try await correctWithRecovery(original, style: newStyle, corrector: state.usedCorrector, state: state)
-        current = (text, newStyle)
+        let attempt = try await correctOrReview(original, style: newStyle, corrector: state.usedCorrector, state: state)
+        current = (attempt.text, newStyle, attempt.warning)
       }
     }
   }

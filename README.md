@@ -36,6 +36,7 @@ It currently supports two workflows:
 - Undo Last Polish (menu bar): puts back the original text, as long as the polished text is still unchanged in that field
 - Style per app: pick a different style for the app you are in from menu bar > Polish Style. Terminals and code editors use Minimal unless you choose otherwise
 - Never Change: names, product terms, or words in another language listed in Settings > Advanced stay exactly as written
+- Never stuck: if every attempt fails one of TextPolish's checks (a changed number, too many changes, or changed line breaks), the last result opens in the preview with what was flagged, even with Preview off. Paste it if it's right, or Cancel
 - Preview before paste (optional, Settings > Advanced): see the changes highlighted, then press Return to paste or Escape to cancel. Not quite right? Click Try Again for another version, or pick another style in the panel to polish the original again without selecting it again
 - Learn mode (optional, Settings > Advanced): after each Polish, a small panel explains the main changes, such as "status progress → a progress status: adjective comes before the noun"
 - Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button. Changes Learn has explained more than once, such as "needsed → needed (3 times)", are listed first under Watch Out For

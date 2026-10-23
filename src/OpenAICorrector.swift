@@ -64,6 +64,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
   private let protectedTerms: [String]
   private let correctionLanguage: Settings.CorrectionLanguage
   private(set) var lastRetryCount: Int = 0
+  private(set) var lastRejected: RejectedCandidate?
   private var lastRateLimitRetryAfterSeconds: Double?
 
   var diagnosticsProvider: Settings.Provider { endpoint.provider }
@@ -138,6 +139,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
 
   private func correctWithChecks(_ text: String, style: CorrectionStyle) async throws -> String {
     lastRetryCount = 0
+    lastRejected = nil
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return text }
     try PromptGuardrails.validateInputLength(text, maxLength: PromptGuardrails.maxCorrectionInputLength)
@@ -187,6 +189,7 @@ final class OpenAICorrector: GrammarCorrector, TextProcessor, RetryReporting, Di
         return restored
       }
       retryReason = rejection
+      lastRejected = RejectedCandidate(text: restored, reason: rejection) ?? lastRejected
       let summary = rejectionSummary(original: text, candidate: restored, minimumSimilarity: minimum)
       TPLogger.log("\(endpoint.name) attempt \(attempt)/\(maxAttempts) rejected: \(rejection), \(summary)")
     }
@@ -459,3 +462,5 @@ extension OpenAICorrector: ChangeExplaining {
     }
   }
 }
+
+extension OpenAICorrector: RejectionReporting {}

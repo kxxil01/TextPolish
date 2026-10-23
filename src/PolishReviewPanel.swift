@@ -18,8 +18,14 @@ struct PolishStyleChoice: Equatable, Sendable {
 @MainActor
 protocol PolishReviewing: AnyObject {
   /// Shows the result and waits for Paste, Cancel, or another try. Empty `choices` hides the style picker.
-  func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
-    -> PolishReviewDecision
+  /// A `warning` says what a check flagged; Return then no longer pastes, so pasting takes a deliberate click.
+  func review(
+    original: String,
+    polished: String,
+    style: CorrectionStyle,
+    choices: [PolishStyleChoice],
+    warning: String?
+  ) async -> PolishReviewDecision
   /// Closes the panel without a choice, for example when another try fails.
   func dismiss()
 }
@@ -33,15 +39,20 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
   private var continuation: CheckedContinuation<PolishReviewDecision, Never>?
   private var currentStyle: CorrectionStyle = .clarify
   private var choices: [PolishStyleChoice] = []
+  private var warning: String?
   private var textView: NSTextView?
   private var stylePopup: NSPopUpButton?
   private var actionButtons: [NSButton] = []
   /// Cancel was pressed while another try ran; the next review returns Cancel without showing anything.
   private var canceledWhileWorking = false
 
-  func review(original: String, polished: String, style: CorrectionStyle, choices: [PolishStyleChoice]) async
-    -> PolishReviewDecision
-  {
+  func review(
+    original: String,
+    polished: String,
+    style: CorrectionStyle,
+    choices: [PolishStyleChoice],
+    warning: String? = nil
+  ) async -> PolishReviewDecision {
     resolve(.cancel)
     if canceledWhileWorking {
       dismiss()
@@ -52,6 +63,7 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
         self.continuation = continuation
         self.currentStyle = style
         self.choices = choices
+        self.warning = warning
         self.show(original: original, polished: polished)
       }
     } onCancel: {
@@ -140,7 +152,14 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
       options: [.usesLineFragmentOrigin, .usesFontLeading]
     )
     let textHeight = min(max(ceil(measured.height) + 16, 60), 320)
-    let height = padding + textHeight + 12 + buttonHeight + padding
+    let warningLabel = warning.map(Self.warningLabel)
+    let warningHeight = warningLabel.map { label in
+      ceil(label.attributedStringValue.boundingRect(
+        with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+        options: [.usesLineFragmentOrigin, .usesFontLeading]
+      ).height) + 10
+    } ?? 0
+    let height = padding + textHeight + 12 + buttonHeight + padding + warningHeight
 
     // Another try replaces the panel in the same spot.
     let previousTopLeft = panel.map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) }
@@ -178,6 +197,10 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     scrollView.documentView = textView
     content.addSubview(scrollView)
     self.textView = textView
+    if let warningLabel {
+      warningLabel.frame = NSRect(x: padding, y: height - padding - warningHeight + 6, width: textWidth, height: warningHeight - 6)
+      content.addSubview(warningLabel)
+    }
 
     addButtons(to: content, width: width, padding: padding, buttonHeight: buttonHeight)
 
@@ -215,7 +238,8 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     content.addSubview(tryAgainButton)
 
     let pasteButton = NSButton(title: "Paste", target: self, action: #selector(paste))
-    pasteButton.keyEquivalent = "\r"
+    // A flagged result is pasted only with a deliberate click.
+    pasteButton.keyEquivalent = warning == nil ? "\r" : ""
     pasteButton.frame = NSRect(x: width - padding - 96, y: padding, width: 96, height: buttonHeight)
     pasteButton.toolTip = "Return pastes, Escape cancels"
     content.addSubview(pasteButton)
@@ -228,7 +252,19 @@ final class PolishReviewPanel: NSObject, PolishReviewing, NSWindowDelegate {
     actionButtons = [tryAgainButton, pasteButton]
   }
 
+  private static func warningLabel(_ text: String) -> NSTextField {
+    let label = NSTextField(wrappingLabelWithString: text)
+    label.font = .systemFont(ofSize: 12, weight: .medium)
+    label.textColor = .systemOrange
+    label.setAccessibilityLabel("Warning")
+    return label
+  }
+
   #if DEBUG
+    var debugWarning: String? {
+      panel == nil ? nil : warning
+    }
+
     var debugIsShowing: Bool {
       panel != nil
     }
