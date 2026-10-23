@@ -13,8 +13,17 @@ extension Settings {
     case formal
     /// Warm and casual, for chat with coworkers.
     case friendly
-    /// The writer's own style, set in Settings > Advanced.
+    /// The writer's own styles, set in Settings > Advanced.
     case custom
+    case custom2
+    case custom3
+
+    /// The slots for the writer's own styles.
+    static let customSlots: [PolishStyle] = [.custom, .custom2, .custom3]
+
+    var isCustom: Bool {
+      Self.customSlots.contains(self)
+    }
 
     init(from decoder: Decoder) throws {
       let container = try decoder.singleValueContainer()
@@ -29,7 +38,7 @@ extension Settings {
       case .formal: return .formal
       case .friendly: return .friendly
       // Without the writer's instruction, Custom polishes like Natural; `Settings.correctionStyle(for:)` adds it.
-      case .custom: return .clarify
+      case .custom, .custom2, .custom3: return .clarify
       }
     }
 
@@ -41,6 +50,8 @@ extension Settings {
       case .formal: return "Formal"
       case .friendly: return "Friendly"
       case .custom: return "Custom"
+      case .custom2: return "Custom 2"
+      case .custom3: return "Custom 3"
       }
     }
   }
@@ -53,20 +64,20 @@ extension Settings {
     styleHotKeys[style.rawValue]
   }
 
-  /// Whether the Custom style has an instruction, so menus and Settings offer it.
-  var hasCustomStyle: Bool {
-    customStyleInstruction != nil
+  /// A Custom slot's name and instruction; an unused slot has its default name and no instruction.
+  func customStyle(_ slot: PolishStyle) -> CustomStyle {
+    customStyles[slot.rawValue] ?? CustomStyle(name: slot.displayName)
   }
 
-  /// The styles to offer: every built-in style, and Custom once it has an instruction.
+  /// The styles to offer: every built-in style, and each Custom style once it has an instruction.
   var availablePolishStyles: [PolishStyle] {
-    PolishStyle.allCases.filter { $0 != .custom || hasCustomStyle }
+    PolishStyle.allCases.filter { !$0.isCustom || customStyle($0).instruction != nil }
   }
 
-  /// What Polish sends for a style: Custom carries the writer's instruction.
+  /// What Polish sends for a style: a Custom style carries the writer's instruction.
   func correctionStyle(for style: PolishStyle) -> CorrectionStyle {
-    if style == .custom, let customStyleInstruction {
-      return .custom(customStyleInstruction)
+    if style.isCustom, let instruction = customStyle(style).instruction {
+      return .custom(instruction)
     }
     return style.correctionStyle
   }
@@ -77,9 +88,9 @@ extension Settings {
     autoTranslateIndonesian && correctionLanguage != .indonesian && style.rewritesWording && !style.translatesToEnglish
   }
 
-  /// A style's name in menus and Settings; Custom uses the name the writer gave it.
+  /// A style's name in menus and Settings; a Custom style uses the name the writer gave it.
   func displayName(for style: PolishStyle) -> String {
-    style == .custom ? customStyleName : style.displayName
+    style.isCustom ? customStyle(style).name : style.displayName
   }
 
   /// The style Polish uses in an app: the user's choice for it, then the built-in default, then the default style.
@@ -103,6 +114,16 @@ extension Settings {
 
   private static func prefersMinimalStyle(_ bundleIdentifier: String) -> Bool {
     minimalStyleApps.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
+  }
+}
+
+// MARK: - Custom styles
+
+extension Settings {
+  /// One of the writer's own styles: its name in menus and how it should sound.
+  struct CustomStyle: Codable, Equatable, Sendable {
+    var name: String
+    var instruction: String?
   }
 }
 

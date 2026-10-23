@@ -30,8 +30,7 @@ final class CommandLinePolishTests: XCTestCase {
   func testStyleNamesMapToCorrectionStyles() throws {
     var settings = Settings()
     settings.polishStyle = .shorter
-    settings.customStyleName = "Status"
-    settings.customStyleInstruction = "bullet points"
+    settings.customStyles["custom"] = Settings.CustomStyle(name: "Status", instruction: "bullet points")
     settings.normalizeRuntimeValues()
 
     XCTAssertEqual(try CommandLinePolish.correctionStyle(named: nil, action: .polish, settings: settings), .shorten)
