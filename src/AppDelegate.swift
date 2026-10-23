@@ -56,6 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lessonsWindow: LessonsWindow?
     private var recentLessonsItem: NSMenuItem?
     private var practiceItem: NSMenuItem?
+    private let recentPolishes = RecentPolishes()
+    private var recentPolishesItem: NSMenuItem?
+    private var recentPolishesWindow: RecentPolishesWindow?
     private var practiceWindow: PracticeWindow?
     private var polishUndoer: PolishUndoer?
     private var undoItem: NSMenuItem?
@@ -175,6 +178,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Task { @MainActor [weak self] in
                 guard let self, !self.suppressSettingsNotification else { return }
                 self.settings = newSettings
+                // Turning Recent Polishes off deletes what was kept.
+                if !newSettings.keepRecentPolishes {
+                    self.recentPolishes.clear()
+                    self.recentPolishesWindow?.reload()
+                }
                 self.refreshCorrector()
                 self.setupHotKeys()
                 self.syncHotKeyMenuItems()
@@ -227,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             onPolished: { [weak self] record in
                 self?.polishUndoer?.record(record)
+                self?.keepIfWanted(record)
                 // Every word of a translation changes, so there are no corrections to explain.
                 guard !record.style.translatesToEnglish else { return }
                 self?.explainChangesIfLearning(original: record.original, polished: record.polished)
@@ -238,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         captureFrontmostApplication()
         syncAppPolishStyleItems()
         syncRecentLessonsItem()
+        syncRecentPolishesItem()
         syncUndoItem()
         refreshCorrectionCountIfNewDay()
         refreshToneAnalysisCountIfNewDay()
@@ -336,6 +346,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "Translate to English", action: #selector(translateToEnglish),
             toolTip: "Rewrites the selected text, or the whole field, in natural English"
         )
+        let recentPolishesItem = makeMenuItem(
+            "Recent Polishes\u{2026}", action: nil, toolTip: "Your last Polishes, kept on this Mac while turned on in Settings"
+        )
+        self.recentPolishesItem = recentPolishesItem
         let explainItem = makeMenuItem(
             "Explain Message", action: #selector(explainMessage),
             toolTip: "Shows what the selected message means and how it sounds, without changing it"
@@ -362,6 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(polishStyleItem)
         menu.addItem(translateItem)
         menu.addItem(undoItem)
+        menu.addItem(recentPolishesItem)
         menu.addItem(.separator())
         menu.addItem(explainItem)
         menu.addItem(replyItem)
@@ -1116,6 +1131,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         practiceItem?.action = lessonHistory.practiceItems(limit: 1).isEmpty ? nil : #selector(showPractice)
     }
 
+    /// Keeps the Polish in Recent Polishes while the writer has it turned on.
+    private func keepIfWanted(_ record: PolishRecord) {
+        guard settings.keepRecentPolishes else { return }
+        let appName = record.processID.flatMap { NSRunningApplication(processIdentifier: $0)?.localizedName } ?? "Unknown app"
+        recentPolishes.add(RecentPolish(
+            date: Date(), appName: appName, styleName: styleName(for: record.style),
+            original: record.original, polished: record.polished
+        ))
+        recentPolishesWindow?.reload()
+    }
+
+    private func styleName(for style: CorrectionStyle) -> String {
+        switch style {
+        case .translateToEnglish: return "Translate"
+        case .reply: return "Reply"
+        default:
+            let match = settings.availablePolishStyles.first { settings.correctionStyle(for: $0) == style }
+            return match.map(settings.displayName(for:)) ?? "Polish"
+        }
+    }
+
+    /// Disabled while turned off or empty; a menu item without an action is shown disabled.
+    private func syncRecentPolishesItem() {
+        let available = settings.keepRecentPolishes && !recentPolishes.entries.isEmpty
+        recentPolishesItem?.action = available ? #selector(showRecentPolishes) : nil
+    }
+
+    @objc private func showRecentPolishes() {
+        runAfterMenuDismissed { [weak self] in
+            guard let self else { return }
+            if self.recentPolishesWindow == nil {
+                self.recentPolishesWindow = RecentPolishesWindow(store: self.recentPolishes)
+            }
+            self.recentPolishesWindow?.show()
+        }
+    }
+
     @objc private func showPractice() {
         runAfterMenuDismissed { [weak self] in
             guard let self else { return }
@@ -1316,6 +1368,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var debugPracticeEnabled: Bool {
             practiceItem?.action != nil
+        }
+
+        var debugRecentPolishes: RecentPolishes {
+            recentPolishes
+        }
+
+        var debugRecentPolishesEnabled: Bool {
+            syncRecentPolishesItem()
+            return recentPolishesItem?.action != nil
+        }
+
+        func debugKeep(_ record: PolishRecord) {
+            keepIfWanted(record)
         }
 
         func debugRecordLesson(_ lines: [String]) {

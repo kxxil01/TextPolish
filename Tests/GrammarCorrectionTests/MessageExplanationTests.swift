@@ -251,8 +251,8 @@ final class MenuGroupingTests: XCTestCase {
     let delegate = AppDelegate()
     delegate.debugFinishLaunching()
 
-    XCTAssertEqual(Array(delegate.debugMenuTitles.prefix(10)), [
-      "Polish", "Polish Style", "Translate to English", "Undo Last Polish", "---",
+    XCTAssertEqual(Array(delegate.debugMenuTitles.prefix(11)), [
+      "Polish", "Polish Style", "Translate to English", "Undo Last Polish", "Recent Polishes\u{2026}", "---",
       "Explain Message", "Reply in English", "Analyze Tone", "---", "Cancel Active Operation",
     ])
   }
