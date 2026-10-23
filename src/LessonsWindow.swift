@@ -31,12 +31,19 @@ final class LessonsWindow: NSPanel {
   }
 
   func reload() {
-    textView.textStorage?.setAttributedString(Self.formatted(history.lessons, repeated: history.repeatedMistakes()))
+    textView.textStorage?.setAttributedString(Self.formatted(
+      history.lessons, progress: history.progressSummary(), repeated: history.repeatedMistakes()
+    ))
   }
 
-  /// Repeated mistakes first, under "Watch Out For", then each lesson's time as a heading and its changes,
-  /// all in Learn panel colors.
-  static func formatted(_ lessons: [Lesson], repeated: [RepeatedMistake] = [], now: Date = Date()) -> NSAttributedString {
+  /// This week's progress, then repeated mistakes under "Watch Out For", then each lesson's time as a heading
+  /// and its changes, all in Learn panel colors.
+  static func formatted(
+    _ lessons: [Lesson],
+    progress: [String] = [],
+    repeated: [RepeatedMistake] = [],
+    now: Date = Date()
+  ) -> NSAttributedString {
     guard !lessons.isEmpty else {
       return NSAttributedString(
         string: "No lessons yet. Turn on Learn in Settings > Advanced, then Polish some text.",
@@ -48,6 +55,16 @@ final class LessonsWindow: NSPanel {
     let headingStyle = NSMutableParagraphStyle()
     headingStyle.paragraphSpacingBefore = 14
     let result = NSMutableAttributedString()
+    if !progress.isEmpty {
+      result.append(NSAttributedString(string: "This Week\n", attributes: [
+        .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+        .foregroundColor: NSColor.secondaryLabelColor,
+      ]))
+      result.append(NSAttributedString(
+        string: progress.joined(separator: "\n") + "\n",
+        attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor]
+      ))
+    }
     if !repeated.isEmpty {
       result.append(NSAttributedString(string: "Watch Out For\n", attributes: [
         .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
@@ -62,7 +79,7 @@ final class LessonsWindow: NSPanel {
         .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
         .foregroundColor: NSColor.secondaryLabelColor,
       ]
-      if index > 0 || !repeated.isEmpty {
+      if index > 0 || !repeated.isEmpty || !progress.isEmpty {
         headingAttributes[.paragraphStyle] = headingStyle
       }
       result.append(NSAttributedString(string: (index > 0 ? "\n" : "") + heading + "\n", attributes: headingAttributes))
