@@ -163,6 +163,7 @@ File: `~/Library/Application Support/TextPolish/settings.json` (lessons are save
 | `protectedTerms` | `[]` | Never Change words |
 | `previewBeforePaste` | `false` | Confirm before pasting |
 | `learnMode` | `false` | Explain the main changes after each Polish |
+| `autoTranslateIndonesian` | `true` | Polish in a rewrite style translates text that is mostly Indonesian (`LanguageDetector`, on the Mac) |
 | `correctionLanguage` | `auto` | `auto`, `en-US`, or `id-ID` |
 | `requestTimeoutSeconds` | `20` | 1 to 120 |
 | `fallbackToOpenRouterOnGeminiError` | `false` | Try the paired provider when the first fails (Gemini and OpenRouter, OpenAI and Anthropic) |

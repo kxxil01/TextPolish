@@ -80,6 +80,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var protectedTermsField: NSTextField!
     var previewBeforePasteCheckbox: NSButton!
     var learnModeCheckbox: NSButton!
+    var autoTranslateCheckbox: NSButton!
     var customStyleNameField: NSTextField!
     var customStyleInstructionField: NSTextField!
     var extraInstructionField: NSTextField!
@@ -241,16 +242,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         protectedTermsField.toolTip = "Polish never changes these words, for example names, product terms, or Indonesian words"
         protectedTermsField.delegate = self
 
-        previewBeforePasteCheckbox = NSButton(
-            checkboxWithTitle: "Show the changes and confirm before pasting",
-            target: self,
-            action: #selector(previewBeforePasteChanged(_:))
-        )
-        learnModeCheckbox = NSButton(
-            checkboxWithTitle: "Explain the main changes after each Polish",
-            target: self,
-            action: #selector(learnModeChanged(_:))
-        )
+        createAdvancedCheckboxes()
 
         createCustomStyleFields()
         createExplanationLanguagePopup()
@@ -274,6 +266,24 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         activeAttField = NSTextField()
         activeAttField.placeholderString = "2"
         activeAttField.delegate = self
+    }
+
+    private func createAdvancedCheckboxes() {
+        previewBeforePasteCheckbox = NSButton(
+            checkboxWithTitle: "Show the changes and confirm before pasting",
+            target: self,
+            action: #selector(previewBeforePasteChanged(_:))
+        )
+        learnModeCheckbox = NSButton(
+            checkboxWithTitle: "Explain the main changes after each Polish",
+            target: self,
+            action: #selector(learnModeChanged(_:))
+        )
+        autoTranslateCheckbox = NSButton(
+            checkboxWithTitle: "Polish writes Indonesian text in English",
+            target: self,
+            action: #selector(autoTranslateChanged(_:))
+        )
     }
 
     private func createExplanationLanguagePopup() {
@@ -760,11 +770,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 242 + 24
+        let generalHeight: CGFloat = 278 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
-        addRow(to: general, label: "Polish Style", y: 216, control: polishStylePopup, controlWidth: nil)
+        addRow(to: general, label: "Polish Style", y: 252, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 247)
+        addRow(to: general, label: "Translate", y: 216, control: autoTranslateCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 211)
         addRow(to: general, label: "Explain Messages In", y: 180, control: explanationLanguagePopup, controlWidth: nil)
         addSeparator(to: general, y: 175)
@@ -892,6 +904,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         protectedTermsField.stringValue = settings.protectedTerms.joined(separator: ", ")
         previewBeforePasteCheckbox.state = settings.previewBeforePaste ? .on : .off
         learnModeCheckbox.state = settings.learnMode ? .on : .off
+        autoTranslateCheckbox.state = settings.autoTranslateIndonesian ? .on : .off
 
         switch settings.correctionLanguage {
         case .auto: languagePopup.selectItem(at: 0)
@@ -1382,6 +1395,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     @objc func previewBeforePasteChanged(_ sender: NSButton) {
         guard settings != nil else { return }
         settings.previewBeforePaste = sender.state == .on
+        liveSave()
+    }
+
+    @objc func autoTranslateChanged(_ sender: NSButton) {
+        guard settings != nil else { return }
+        settings.autoTranslateIndonesian = sender.state == .on
         liveSave()
     }
 

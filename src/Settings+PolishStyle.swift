@@ -71,6 +71,12 @@ extension Settings {
     return style.correctionStyle
   }
 
+  /// Whether Polish in `style` translates text that is mostly Indonesian. Minimal, used in terminals and code
+  /// editors, never does, and neither does a writer who chose Indonesian as the correction language.
+  func translatesIndonesian(in style: CorrectionStyle) -> Bool {
+    autoTranslateIndonesian && correctionLanguage != .indonesian && style.rewritesWording && !style.translatesToEnglish
+  }
+
   /// A style's name in menus and Settings; Custom uses the name the writer gave it.
   func displayName(for style: PolishStyle) -> String {
     style == .custom ? customStyleName : style.displayName

@@ -294,6 +294,8 @@ struct Settings: Codable {
   var previewBeforePaste: Bool
   /// After a Polish, explain the main changes so the writer can learn from them.
   var learnMode: Bool
+  /// Polish writes text that is mostly Indonesian in English, as Translate to English does.
+  var autoTranslateIndonesian: Bool
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
   var hotKeyTranslate: HotKey
@@ -363,6 +365,7 @@ struct Settings: Codable {
     appPolishStyles: [String: PolishStyle] = [:],
     previewBeforePaste: Bool = false,
     learnMode: Bool = false,
+    autoTranslateIndonesian: Bool = true,
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     hotKeyTranslate: HotKey = .translateDefault,
@@ -414,6 +417,7 @@ struct Settings: Codable {
     self.appPolishStyles = appPolishStyles
     self.previewBeforePaste = previewBeforePaste
     self.learnMode = learnMode
+    self.autoTranslateIndonesian = autoTranslateIndonesian
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.hotKeyTranslate = hotKeyTranslate
@@ -469,6 +473,7 @@ struct Settings: Codable {
     appPolishStyles = (try? container.decodeIfPresent([String: PolishStyle].self, forKey: .appPolishStyles)) ?? [:]
     previewBeforePaste = (try? container.decodeIfPresent(Bool.self, forKey: .previewBeforePaste)) ?? false
     learnMode = (try? container.decodeIfPresent(Bool.self, forKey: .learnMode)) ?? false
+    autoTranslateIndonesian = (try? container.decodeIfPresent(Bool.self, forKey: .autoTranslateIndonesian)) ?? true
     styleHotKeys = (try? container.decodeIfPresent([String: HotKey].self, forKey: .styleHotKeys)) ?? [:]
     customStyleName = (try? container.decodeIfPresent(String.self, forKey: .customStyleName)) ?? Defaults.customStyleName
     customStyleInstruction = try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)
@@ -529,6 +534,7 @@ struct Settings: Codable {
     try container.encode(appPolishStyles, forKey: .appPolishStyles)
     try container.encode(previewBeforePaste, forKey: .previewBeforePaste)
     try container.encode(learnMode, forKey: .learnMode)
+    try container.encode(autoTranslateIndonesian, forKey: .autoTranslateIndonesian)
     try container.encode(styleHotKeys, forKey: .styleHotKeys)
     try container.encode(customStyleName, forKey: .customStyleName)
     try container.encodeIfPresent(customStyleInstruction, forKey: .customStyleInstruction)
@@ -708,6 +714,7 @@ struct Settings: Codable {
     case appPolishStyles
     case previewBeforePaste
     case learnMode
+    case autoTranslateIndonesian
     case styleHotKeys
     case customStyleName
     case customStyleInstruction

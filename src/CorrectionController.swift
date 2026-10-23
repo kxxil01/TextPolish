@@ -234,6 +234,7 @@ final class CorrectionController {
       }
 
       var didPaste = false
+      var style = style
       do {
         let target = self.resolveTarget(targetApplication)
         if let app = target.app, !app.isActive {
@@ -264,6 +265,9 @@ final class CorrectionController {
           self.feedback.showError("No text selected")
           self.recordFailure(state, message: "No text selected", retryCount: 0)
           return
+        }
+        if self.settings.translatesIndonesian(in: style), LanguageDetector.isMostlyIndonesian(input.text) {
+          style = .translateToEnglish
         }
         TPLogger.log(
           "Polish input: app=\(target.app?.bundleIdentifier ?? "unknown") style=\(style) "
