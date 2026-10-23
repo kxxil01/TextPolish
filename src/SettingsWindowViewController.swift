@@ -81,6 +81,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     var previewBeforePasteCheckbox: NSButton!
     var learnModeCheckbox: NSButton!
     var autoTranslateCheckbox: NSButton!
+    var keepRecentPolishesCheckbox: NSButton!
     var customStyleNameField: NSTextField!
     var customStyleInstructionField: NSTextField!
     var extraInstructionField: NSTextField!
@@ -284,6 +285,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
             target: self,
             action: #selector(autoTranslateChanged(_:))
         )
+        keepRecentPolishesCheckbox = NSButton(
+            checkboxWithTitle: "Keep my last 20 Polishes on this Mac",
+            target: self,
+            action: #selector(keepRecentPolishesChanged(_:))
+        )
+        keepRecentPolishesCheckbox.toolTip = "Turning this off deletes the Polishes kept so far"
     }
 
     private func createExplanationLanguagePopup() {
@@ -770,11 +777,13 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         container.addSubview(generalHeader)
         y -= 22
 
-        let generalHeight: CGFloat = 278 + 24
+        let generalHeight: CGFloat = 314 + 24
         let generalCard = SettingsUI.makeCard(frame: NSRect(x: padding, y: y - generalHeight, width: contentWidth, height: generalHeight))
         container.addSubview(generalCard)
         let general = generalCard.contentView!
-        addRow(to: general, label: "Polish Style", y: 252, control: polishStylePopup, controlWidth: nil)
+        addRow(to: general, label: "Polish Style", y: 288, control: polishStylePopup, controlWidth: nil)
+        addSeparator(to: general, y: 283)
+        addRow(to: general, label: "Recent Polishes", y: 252, control: keepRecentPolishesCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 247)
         addRow(to: general, label: "Translate", y: 216, control: autoTranslateCheckbox, controlWidth: nil)
         addSeparator(to: general, y: 211)
@@ -905,6 +914,7 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
         previewBeforePasteCheckbox.state = settings.previewBeforePaste ? .on : .off
         learnModeCheckbox.state = settings.learnMode ? .on : .off
         autoTranslateCheckbox.state = settings.autoTranslateIndonesian ? .on : .off
+        keepRecentPolishesCheckbox.state = settings.keepRecentPolishes ? .on : .off
 
         switch settings.correctionLanguage {
         case .auto: languagePopup.selectItem(at: 0)
@@ -1395,6 +1405,12 @@ class SettingsWindowViewController: NSViewController, NSTextFieldDelegate {
     @objc func previewBeforePasteChanged(_ sender: NSButton) {
         guard settings != nil else { return }
         settings.previewBeforePaste = sender.state == .on
+        liveSave()
+    }
+
+    @objc func keepRecentPolishesChanged(_ sender: NSButton) {
+        guard settings != nil else { return }
+        settings.keepRecentPolishes = sender.state == .on
         liveSave()
     }
 

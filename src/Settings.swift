@@ -199,52 +199,6 @@ struct Settings: Codable {
     }
   }
 
-  enum CorrectionLanguage: String, Codable, Sendable {
-    case auto = "auto"
-    case englishUS = "en-US"
-    case indonesian = "id-ID"
-
-    init(from decoder: Decoder) throws {
-      let container = try decoder.singleValueContainer()
-      let raw = try container.decode(String.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      switch raw {
-      case "en-us", "en_us", "english", "english-us", "english_us":
-        self = .englishUS
-      case "id-id", "id_id", "indonesian", "bahasa", "bahasa-indonesia", "bahasa_indonesia", "id":
-        self = .indonesian
-      default:
-        self = .auto
-      }
-    }
-
-    func encode(to encoder: Encoder) throws {
-      var container = encoder.singleValueContainer()
-      try container.encode(rawValue)
-    }
-
-    var displayName: String {
-      switch self {
-      case .auto:
-        return "Auto"
-      case .englishUS:
-        return "English (US)"
-      case .indonesian:
-        return "Indonesian"
-      }
-    }
-
-    var promptInstruction: String? {
-      switch self {
-      case .auto:
-        return nil
-      case .englishUS:
-        return "Language: English (US). Correct in English (US). Do not translate."
-      case .indonesian:
-        return "Language: Indonesian. Correct in Indonesian. Do not translate."
-      }
-    }
-  }
-
   enum Provider: String, Codable {
     case gemini
     case openRouter
@@ -296,6 +250,8 @@ struct Settings: Codable {
   var learnMode: Bool
   /// Polish writes text that is mostly Indonesian in English, as Translate to English does.
   var autoTranslateIndonesian: Bool
+  /// Keep the last Polishes on this Mac so earlier text can be found again. Off by default; off deletes them.
+  var keepRecentPolishes: Bool
   var hotKeyPolish: HotKey
   var hotKeyAnalyzeTone: HotKey
   var hotKeyTranslate: HotKey
@@ -366,6 +322,7 @@ struct Settings: Codable {
     previewBeforePaste: Bool = false,
     learnMode: Bool = false,
     autoTranslateIndonesian: Bool = true,
+    keepRecentPolishes: Bool = false,
     hotKeyPolish: HotKey = .polishDefault,
     hotKeyAnalyzeTone: HotKey = .analyzeToneDefault,
     hotKeyTranslate: HotKey = .translateDefault,
@@ -418,6 +375,7 @@ struct Settings: Codable {
     self.previewBeforePaste = previewBeforePaste
     self.learnMode = learnMode
     self.autoTranslateIndonesian = autoTranslateIndonesian
+    self.keepRecentPolishes = keepRecentPolishes
     self.hotKeyPolish = hotKeyPolish
     self.hotKeyAnalyzeTone = hotKeyAnalyzeTone
     self.hotKeyTranslate = hotKeyTranslate
@@ -474,6 +432,7 @@ struct Settings: Codable {
     previewBeforePaste = (try? container.decodeIfPresent(Bool.self, forKey: .previewBeforePaste)) ?? false
     learnMode = (try? container.decodeIfPresent(Bool.self, forKey: .learnMode)) ?? false
     autoTranslateIndonesian = (try? container.decodeIfPresent(Bool.self, forKey: .autoTranslateIndonesian)) ?? true
+    keepRecentPolishes = (try? container.decodeIfPresent(Bool.self, forKey: .keepRecentPolishes)) ?? false
     styleHotKeys = (try? container.decodeIfPresent([String: HotKey].self, forKey: .styleHotKeys)) ?? [:]
     customStyleName = (try? container.decodeIfPresent(String.self, forKey: .customStyleName)) ?? Defaults.customStyleName
     customStyleInstruction = try? container.decodeIfPresent(String.self, forKey: .customStyleInstruction)
@@ -535,6 +494,7 @@ struct Settings: Codable {
     try container.encode(previewBeforePaste, forKey: .previewBeforePaste)
     try container.encode(learnMode, forKey: .learnMode)
     try container.encode(autoTranslateIndonesian, forKey: .autoTranslateIndonesian)
+    try container.encode(keepRecentPolishes, forKey: .keepRecentPolishes)
     try container.encode(styleHotKeys, forKey: .styleHotKeys)
     try container.encode(customStyleName, forKey: .customStyleName)
     try container.encodeIfPresent(customStyleInstruction, forKey: .customStyleInstruction)
@@ -715,6 +675,7 @@ struct Settings: Codable {
     case previewBeforePaste
     case learnMode
     case autoTranslateIndonesian
+    case keepRecentPolishes
     case styleHotKeys
     case customStyleName
     case customStyleInstruction
