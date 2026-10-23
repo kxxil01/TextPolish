@@ -40,7 +40,7 @@ It currently supports two workflows:
 - Never stuck: if every attempt fails one of TextPolish's checks (a changed number, too many changes, or changed line breaks), the last result opens in the preview with what was flagged, even with Preview off. Paste it if it's right, or Cancel
 - Preview before paste (optional, Settings > Advanced): see the changes highlighted, then press Return to paste or Escape to cancel. Not quite right? Click Try Again for another version, or pick another style in the panel to polish the original again without selecting it again
 - Learn mode (optional, Settings > Advanced): after each Polish, a small panel explains the main changes, such as "status progress → a progress status: adjective comes before the noun"
-- Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button. Changes Learn has explained more than once, such as "needsed → needed (3 times)", are listed first under Watch Out For
+- Recent Lessons (menu bar): the last 20 Learn mode explanations, saved only on this Mac, with a Clear button. Changes Learn has explained more than once, such as "needsed → needed (3 times)", are listed first under Watch Out For. At the top, This Week shows how many messages Learn explained, the changes per message compared with last week, and your most repeated change
 - Usage and cost (Diagnostics): this month's requests and tokens per model, with an estimate in dollars at list prices for common models. Counted on this Mac only
 - Diagnostics > Copy Logs copies TextPolish's log lines since launch for a bug report; they never include your text
 - Protected token handling for code blocks, inline code, URLs, and mention-like tokens

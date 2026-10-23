@@ -52,13 +52,17 @@ final class LessonHistory {
 
   private(set) var lessons: [Lesson] = []
   private var mistakes: [String: RepeatedMistake] = [:]
+  private var progress = WeeklyProgress()
   private let fileURL: URL
   private let mistakesFileURL: URL
+  private let progressFileURL: URL
 
   init(fileURL: URL = LessonHistory.defaultFileURL) {
     self.fileURL = fileURL
     let name = fileURL.deletingPathExtension().lastPathComponent + "-mistakes.json"
     mistakesFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(name, isDirectory: false)
+    let progressName = fileURL.deletingPathExtension().lastPathComponent + "-weeks.json"
+    progressFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(progressName, isDirectory: false)
     if let data = try? Data(contentsOf: fileURL),
        let saved = try? JSONDecoder().decode([Lesson].self, from: data)
     {
@@ -69,6 +73,16 @@ final class LessonHistory {
     {
       mistakes = saved
     }
+    if let data = try? Data(contentsOf: progressFileURL),
+       let saved = try? JSONDecoder().decode(WeeklyProgress.self, from: data)
+    {
+      progress = saved
+    }
+  }
+
+  /// This week's progress for Recent Lessons; empty until Learn has explained something this week.
+  func progressSummary(now: Date = Date()) -> [String] {
+    progress.summary(now: now)
   }
 
   /// Changes explained at least twice, most frequent first, then most recent.
@@ -86,14 +100,17 @@ final class LessonHistory {
     lessons.insert(Lesson(date: date, lines: lines), at: 0)
     lessons = Array(lessons.prefix(Self.maxLessons))
     countMistakes(in: lines, at: date)
+    progress.record(lines.compactMap { RepeatedMistake(line: $0, at: date) }, at: date)
     save()
   }
 
   func clear() {
     lessons = []
     mistakes = [:]
+    progress = WeeklyProgress()
     try? FileManager.default.removeItem(at: fileURL)
     try? FileManager.default.removeItem(at: mistakesFileURL)
+    try? FileManager.default.removeItem(at: progressFileURL)
   }
 
   private func countMistakes(in lines: [String], at date: Date) {
@@ -119,6 +136,7 @@ final class LessonHistory {
       try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
       try JSONEncoder().encode(lessons).write(to: fileURL, options: .atomic)
       try JSONEncoder().encode(mistakes).write(to: mistakesFileURL, options: .atomic)
+      try JSONEncoder().encode(progress).write(to: progressFileURL, options: .atomic)
     } catch {
       TPLogger.log("Could not save lessons: \(error.localizedDescription)")
     }
